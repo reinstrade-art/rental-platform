@@ -1,0 +1,446 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------------------------------------------------------------------------
+// Organization is the tenancy root. Every operational row below carries an
+// organizationId and every query in app code MUST filter on the session's
+// organizationId — there is no database-level isolation (shared schema),
+// so isolation is an app-code invariant, not a schema one. See User.role
+// comment for the one exception (PLATFORM_ADMIN has no organizationId).
+// ---------------------------------------------------------------------------
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  status    String   @default("ACTIVE") // ACTIVE | SUSPENDED
+
+  // Branding for tenant/tradesman-facing documents (receipts, invoices) and
+  // portals. This system is white-label — nothing in app code names any one
+  // customer's business; every value here is data one org entered about
+  // itself, never a default baked into a template. brandColor is a hex
+  // string (e.g. "#1E3350"); a generic neutral is used until an org sets one.
+  letterheadName    String?
+  letterheadAddress String?
+  letterheadPhone   String?
+  letterheadEmail   String?
+  brandColor        String?
+
+  // How many sequential signatures a raised approval needs before it takes
+  // effect: 1 = the raiser's own signature is enough, 2 = raiser + someone
+  // ranked MANAGER or above, 3 = raiser + MANAGER-or-above + DIRECTOR (the
+  // reference implementation's fixed choice, kept as the default here but
+  // made configurable per organization rather than hard-coded).
+  approvalChainLength Int @default(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            User[]
+  properties       Property[]
+  tenants          Tenant[]
+  leases           Lease[]
+  charges          Charge[]
+  payments         Payment[]
+  vendors          Vendor[]
+  repairs          Repair[]
+  quotes           Quote[]
+  approvalRequests ApprovalRequest[]
+  invitations      Invitation[]
+  transactions     Transaction[]
+  auditLogs        AuditLog[]
+}
+
+// Roles:
+//   PLATFORM_ADMIN                    — cross-org, organizationId is NULL
+//   ADMIN, MANAGER, VIEWER            — staff, scoped to one organization
+//   TENANT                            — outside role, resolves to one Tenant record
+//   TRADESMAN, CASUAL_LABOURER        — outside role, resolves to one Vendor record
+// Membership is allow-list based wherever it's checked in code — never "not X" —
+// because that inversion was a real defect class in the reference build (HM Kariuki):
+// a new outside role would otherwise silently inherit the whole operator app the
+// moment it existed, just by not being "a tenant".
+model User {
+  id             String   @id @default(cuid())
+  organizationId String? // null only for PLATFORM_ADMIN
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  // Globally unique (not scoped to organizationId): login is by email/phone
+  // alone, before an organization is known, so two users sharing an email
+  // across two different organizations is out of scope for Phase 1 — an
+  // affected person just needs a second address. This also keeps PLATFORM_ADMIN
+  // (organizationId null) collision-free, which a per-org unique constraint
+  // would not, since SQLite treats each NULL as distinct.
+  email        String?  @unique
+  phone        String?  @unique
+  passwordHash String
+  role         String   // PLATFORM_ADMIN | ADMIN | MANAGER | VIEWER | TENANT | TRADESMAN | CASUAL_LABOURER
+
+  // Outside-role links: a session resolves to exactly one of these, never both.
+  // getSession() kills the session if role and link disagree (e.g. role TENANT
+  // but tenantId null, or role flipped to TRADESMAN while tenantId lingers).
+  tenantId String? @unique
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+  vendorId String? @unique
+  vendor   Vendor? @relation(fields: [vendorId], references: [id])
+
+  // Authority to sign an approval chain — a dimension separate from `role`.
+  // Only staff (ADMIN/MANAGER/VIEWER) may hold a seat; a VIEWER could in
+  // principle still be handed REQUESTER-level authority, but signing power
+  // is granted here explicitly, never inferred from `role`.
+  approvalLevel String? // REQUESTER | MANAGER | DIRECTOR | null
+
+  createdAt DateTime @default(now())
+
+  approvalStepsSigned ApprovalStep[]
+  approvalsRaised     ApprovalRequest[]
+  auditLogsWritten    AuditLog[]
+}
+
+// Login-failure lockout, keyed on the identifier typed at sign-in (not the IP,
+// so a lock can't be dodged by switching networks) and recorded even for
+// unknown addresses, so a lock's presence never reveals which accounts exist.
+model LoginAttempt {
+  email       String    @id
+  failedCount Int       @default(0)
+  lastFailed  DateTime
+  lockedUntil DateTime?
+}
+
+model Property {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  name    String
+  address String?
+
+  units   Unit[]
+  repairs Repair[]
+
+  createdAt DateTime @default(now())
+}
+
+model Unit {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id])
+
+  // Denormalized for cheap org-scoped queries without joining through Property.
+  organizationId String
+
+  label String // e.g. unit/house number
+  monthlyRent Float?
+
+  // The reference a payer types (e.g. a paybill account number, or the code
+  // staff match a bank/M-Pesa narration against). Unique per organization,
+  // not globally, so two different landlord customers can each choose "A1"
+  // without colliding — there is no shared paybill to disambiguate them.
+  paymentCode String?
+
+  leases  Lease[]
+  repairs Repair[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([propertyId, label])
+  @@unique([organizationId, paymentCode])
+}
+
+model Tenant {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  name  String
+  phone String?
+  email String?
+
+  leases Lease[]
+  user   User?
+
+  createdAt DateTime @default(now())
+}
+
+model Lease {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id])
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  monthlyRent Float
+  startDate   DateTime
+  endDate     DateTime?
+  status      String    @default("ACTIVE") // ACTIVE | ENDED
+
+  charges  Charge[]
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+}
+
+model Charge {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  leaseId String
+  lease   Lease  @relation(fields: [leaseId], references: [id])
+
+  type        String // RENT | UTILITY | DEPOSIT
+  description String?
+  amount      Float
+  periodMonth DateTime // UTC month-start, matches HM Kariuki's convention
+
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  leaseId String
+  lease   Lease  @relation(fields: [leaseId], references: [id])
+
+  amount    Float
+  method    String? // e.g. MPESA, CASH, BANK
+  reference String?
+  paidAt    DateTime
+
+  createdAt DateTime @default(now())
+
+  transaction Transaction?
+}
+
+model Vendor {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  name        String
+  trade       String? // e.g. plumbing, electrical
+  contactName String?
+  phone       String?
+  email       String?
+
+  // Nobody self-declares prequalified — an office decision, set here by staff,
+  // never by a signup checkbox on any future vendor-facing portal.
+  prequalified Boolean @default(false)
+  notes        String?
+
+  repairs Repair[]
+  quotes  Quote[]
+  user    User?
+
+  createdAt DateTime @default(now())
+}
+
+model Repair {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id])
+  // Nullable so common-area faults (not tied to one tenancy) are expressible.
+  unitId     String?
+  unit       Unit?    @relation(fields: [unitId], references: [id])
+
+  title       String
+  description String?
+  category    String? // e.g. plumbing, electrical, structural
+  priority    String  @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  status      String  @default("REPORTED") // REPORTED | QUOTING | APPROVED | IN_PROGRESS | DONE | CANCELLED
+
+  reportedAt  DateTime @default(now())
+  completedAt DateTime?
+
+  awardedVendorId String?
+  awardedVendor   Vendor? @relation(fields: [awardedVendorId], references: [id])
+  workOrderSentAt DateTime?
+  workOrderRef    String?
+
+  // Two separate gates, deliberately: authorising the WORK to proceed is a
+  // different decision from authorising its PRICE. Phase-1 records who
+  // approved directly; a later phase routes both through a multi-signature
+  // approval chain without changing these fields' meaning.
+  workApprovedAt DateTime?
+  workApprovedBy String?
+  costApprovedAt DateTime?
+  costApprovedBy String?
+  approvedCost   Float?
+
+  // The landlord's actual expense — not a tenant Charge unless explicitly
+  // recharged (out of scope for Phase 1's repairs module).
+  finalCost Float?
+
+  quotes Quote[]
+
+  createdAt DateTime @default(now())
+}
+
+model Quote {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  repairId String
+  repair   Repair @relation(fields: [repairId], references: [id])
+
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+
+  amount Float
+  notes  String?
+  status String @default("SUBMITTED") // SUBMITTED | ACCEPTED | REJECTED
+
+  createdAt DateTime @default(now())
+
+  @@unique([repairId, vendorId])
+}
+
+// A multi-signature approval chain. The person who raises a request supplies
+// its first signature automatically (the "REQUESTER" slot); the remaining
+// slots require someone ranked MANAGER or DIRECTOR, per the organization's
+// approvalChainLength. Nothing the request governs takes effect until the
+// chain completes — see app/lib/approvals.ts, the single place that decides
+// who may sign and what happens when the last signature lands.
+model ApprovalRequest {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // What this request governs, and which row it acts on once approved.
+  kind      String // REPAIR_WORK | REPAIR_COST | QUOTE_AWARD
+  subjectId String
+  // JSON-encoded extra data the final step needs (e.g. {"approvedCost":3500}).
+  payload   String?
+
+  status     String    @default("PENDING") // PENDING | APPROVED
+  raisedById String
+  raisedBy   User      @relation(fields: [raisedById], references: [id])
+  raisedAt   DateTime  @default(now())
+  resolvedAt DateTime?
+
+  steps ApprovalStep[]
+
+  // Only one open request per subject+kind — raising a second while one is
+  // already pending would let two chains race to apply the same change.
+  @@unique([organizationId, kind, subjectId, status])
+}
+
+// Append-only: a step is never edited or deleted, so the chain's history is
+// exactly what happened, including any OVERRIDDEN stand-in signatures.
+model ApprovalStep {
+  id        String          @id @default(cuid())
+  requestId String
+  request   ApprovalRequest @relation(fields: [requestId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  level  String // REQUESTER | MANAGER | DIRECTOR — the slot this step filled
+  // OVERRIDDEN records that no distinct eligible signer remained, so someone
+  // of sufficient rank signed a second time for this request — visibly
+  // different from a normal APPROVED step, never disguised as one.
+  action String // APPROVED | OVERRIDDEN
+
+  signedAt DateTime @default(now())
+}
+
+// Registration is closed: the only way into TENANT/TRADESMAN/CASUAL_LABOURER
+// is a code issued here by staff against an existing Tenant or Vendor record,
+// so a login always attaches to the record the office already created —
+// never a duplicate, never self-declared. Invite/already-used/wrong-code all
+// read alike at redemption time so the form can't be used to probe who has
+// been invited.
+model Invitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  role String // TENANT | TRADESMAN | CASUAL_LABOURER
+
+  // Exactly one of these is set, matching `role`.
+  tenantId String?
+  vendorId String?
+
+  // The address/number this invite was issued to — redemption must match it,
+  // so a code leaked to the wrong person can't attach to someone else's record.
+  email String?
+  phone String?
+
+  code      String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+// The single entry point for money arriving from ANY source — a manual note
+// from a bank SMS, a bulk CSV/bank-statement import, or a live paybill
+// webhook. HM Kariuki's own M-Pesa integration was blocked because its
+// ingestion path assumed one owned paybill; every source here lands in this
+// same table and goes through the same matching pass (app/lib/payments.ts),
+// so adding a real Daraja/bank feed later is a new `source` value, not a
+// redesign. Each organization may have zero, one, or several sources active
+// independently of the others.
+model Transaction {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  source String // MANUAL | CSV_IMPORT | MPESA_DARAJA
+  amount Float
+  // Whatever the source called it — a paybill account number, a bank
+  // narration, an M-Pesa code — matched against Unit.paymentCode.
+  reference   String?
+  payerName   String?
+  occurredAt  DateTime
+  // The source's own payload, kept verbatim for audit/debugging — never
+  // parsed twice differently in two different places.
+  rawPayload  String?
+
+  status String @default("UNMATCHED") // UNMATCHED | MATCHED | IGNORED
+
+  matchedLeaseId   String?
+  matchedPaymentId String?  @unique
+  matchedPayment   Payment? @relation(fields: [matchedPaymentId], references: [id])
+  matchedBy        String? // userId, null when matched automatically
+  matchedAt        DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+// Every time a platform administrator looks into or acts on a specific
+// organization's data, a row lands here — append-only, never edited or
+// deleted, and never writable by that organization's own staff. This is the
+// accountability half of "platform admins can see across organizations for
+// support": the access itself is unavoidably visible, on the same footing
+// as the org's own change history, not a silent side-channel.
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  platformAdminId String
+  platformAdmin   User   @relation(fields: [platformAdminId], references: [id])
+
+  action String // VIEW_ORG_DETAIL | SUSPEND_ORG | REACTIVATE_ORG
+  detail String?
+
+  createdAt DateTime @default(now())
+}
