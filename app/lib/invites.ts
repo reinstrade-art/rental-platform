@@ -13,10 +13,16 @@ function generateCode(): string {
   return code;
 }
 
-/** Issues an invite against an existing Tenant or Vendor record — never creates one. */
+/**
+ * Issues an invite. For TENANT/TRADESMAN/CASUAL_LABOURER it attaches to an
+ * existing Tenant or Vendor record (never creates one). For MANAGER/VIEWER
+ * — a staff invite — target is empty; there is no pre-existing row to
+ * attach to. Never ADMIN: the one bootstrap admin per org comes from
+ * platform-admin provisioning, not this flow.
+ */
 export async function createInvitation(
   organizationId: string,
-  role: "TENANT" | "TRADESMAN" | "CASUAL_LABOURER",
+  role: "MANAGER" | "VIEWER" | "TENANT" | "TRADESMAN" | "CASUAL_LABOURER",
   target: { tenantId?: string; vendorId?: string },
   identifier: { email?: string; phone?: string },
 ) {

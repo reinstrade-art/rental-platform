@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { isTenant, isTradesman } from "@/app/lib/roles";
-import { logout } from "@/app/lib/actions";
+import { logout, endImpersonationAction } from "@/app/lib/actions";
 import { prisma } from "@/app/lib/prisma";
 
 const NAV = [
@@ -14,6 +14,7 @@ const NAV = [
   { href: "/repairs", label: "Repairs" },
   { href: "/vendors", label: "Vendors" },
   { href: "/approvals", label: "Approvals" },
+  { href: "/users", label: "Team" },
   { href: "/settings", label: "Settings" },
 ];
 
@@ -46,7 +47,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <button className="text-sm text-gray-600 underline">Sign out</button>
         </form>
       </aside>
-      <main className="flex-1 px-6 py-6">{children}</main>
+      <div className="flex-1">
+        {s.impersonatedBy && (
+          <div className="flex items-center justify-between bg-amber-100 px-6 py-2 text-sm text-amber-900">
+            <span>
+              Signed in as <strong>{s.email ?? s.phone}</strong> by {s.impersonatedBy.email} for support.
+            </span>
+            <form action={endImpersonationAction}>
+              <button className="underline">Return to my account</button>
+            </form>
+          </div>
+        )}
+        <main className="px-6 py-6">{children}</main>
+      </div>
     </div>
   );
 }

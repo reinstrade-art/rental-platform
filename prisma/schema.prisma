@@ -97,11 +97,41 @@ model User {
   // is granted here explicitly, never inferred from `role`.
   approvalLevel String? // REQUESTER | MANAGER | DIRECTOR | null
 
+  // Access revoked without deleting the account (history — approvals signed,
+  // repairs reported — stays attached to a real row). Checked on every
+  // request in getSession(), same as an organization's own suspension.
+  disabledAt DateTime?
+
   createdAt DateTime @default(now())
 
   approvalStepsSigned ApprovalStep[]
   approvalsRaised     ApprovalRequest[]
   auditLogsWritten    AuditLog[]
+  sessions            Session[]
+}
+
+// One row per signed-in device, not per login — the JWT's jti points here, so
+// revoking is deleting access a signature alone can no longer prove. Without
+// this table a stolen or leaked token stays good until it expires on its own
+// schedule; with it, "sign out this device" and "sign out everywhere" are
+// both just a row update.
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent String?
+  ip        String?
+  createdAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  // Set only when a staff member opened this session on somebody else's
+  // behalf (impersonation) — never across organizations, never onto another
+  // ADMIN. See app/lib/auth.ts `impersonate()`.
+  impersonatedByUserId String?
+
+  @@index([userId])
 }
 
 // Login-failure lockout, keyed on the identifier typed at sign-in (not the IP,
@@ -223,6 +253,13 @@ model Payment {
   createdAt DateTime @default(now())
 
   transaction Transaction?
+
+  // A reference (M-Pesa code, bank transaction id) identifies one real-world
+  // transfer — recording it twice would be the same money counted twice.
+  // Scoped per organization rather than globally: SQLite allows many NULLs
+  // in a unique index, so cash payments and historical imports without a
+  // reference are unaffected.
+  @@unique([organizationId, reference])
 }
 
 model Vendor {
@@ -372,9 +409,15 @@ model Invitation {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
 
-  role String // TENANT | TRADESMAN | CASUAL_LABOURER
+  role String // MANAGER | VIEWER | TENANT | TRADESMAN | CASUAL_LABOURER
 
-  // Exactly one of these is set, matching `role`.
+  // Set only for TENANT/TRADESMAN/CASUAL_LABOURER — a staff invite (MANAGER
+  // or VIEWER) attaches to no pre-existing record, since staff aren't
+  // Tenant/Vendor rows. Never ADMIN: the one bootstrap admin per org comes
+  // from platform-admin provisioning, not this flow — least-privilege by
+  // construction, not by convention (an office invites help at VIEWER by
+  // default and the admin explicitly promotes, rather than the other way
+  // round).
   tenantId String?
   vendorId String?
 

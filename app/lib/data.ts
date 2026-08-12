@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./prisma";
+import { otherSessions } from "./auth";
 
 // Every function here takes organizationId as a required, non-optional first
 // argument and threads it into every query. This is the whole isolation
@@ -207,6 +208,17 @@ export async function getTransactions(organizationId: string) {
     orderBy: { createdAt: "desc" },
     take: 200,
   });
+}
+
+export async function getStaff(organizationId: string) {
+  return prisma.user.findMany({
+    where: { organizationId, role: { in: ["ADMIN", "MANAGER", "VIEWER"] } },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+export async function getOwnOtherSessions(userId: string) {
+  return otherSessions(userId);
 }
 
 export async function getVendorPortal(vendorId: string) {

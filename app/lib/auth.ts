@@ -1,13 +1,50 @@
 import "server-only";
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { isPlatformAdmin, isStaff, isTenant, isTradesman } from "./roles";
 
 const COOKIE = "rp_session";
+// Holds the staff member's own token while they are signed in as somebody
+// else, so "return to my account" hands back the session that was actually
+// theirs rather than just logging everyone out.
+const IMPERSONATOR_COOKIE = "rp_impersonator";
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+
+// A session's "last seen" is only worth writing this often — a stamp accurate
+// to the last few minutes tells a person which device is theirs just as well
+// as one accurate to the second, at a fraction of the writes.
+const TOUCH_INTERVAL_MS = 5 * 60 * 1000;
+
+/** A short, recognisable label for the device behind a session — never exact, just enough to tell devices apart at a glance. */
+export function deviceLabel(userAgent: string | null): string {
+  if (!userAgent) return "Unknown device";
+  const browser = /Edg\//.test(userAgent)
+    ? "Edge"
+    : /OPR\//.test(userAgent)
+      ? "Opera"
+      : /Chrome\//.test(userAgent)
+        ? "Chrome"
+        : /Firefox\//.test(userAgent)
+          ? "Firefox"
+          : /Safari\//.test(userAgent)
+            ? "Safari"
+            : "Browser";
+  const os = /Windows/.test(userAgent)
+    ? "Windows"
+    : /Android/.test(userAgent)
+      ? "Android"
+      : /iPhone|iPad|iPod/.test(userAgent)
+        ? "iOS"
+        : /Mac OS/.test(userAgent)
+          ? "Mac"
+          : /Linux/.test(userAgent)
+            ? "Linux"
+            : null;
+  return os ? `${browser} on ${os}` : browser;
+}
 
 // The signing secret must be set in production; a dev fallback keeps local
 // work friction-free without weakening a deployed instance.
@@ -32,6 +69,8 @@ export type Session = {
   tenantId: string | null;
   /** Set only on TRADESMAN/CASUAL_LABOURER logins: their own vendor record. */
   vendorId: string | null;
+  /** Set when a staff member is signed in as this account rather than the account itself. */
+  impersonatedBy: { id: string; email: string | null } | null;
 };
 
 /** An address and a phone number are told apart by the "@". */
@@ -56,13 +95,28 @@ export async function verifyCredentials(identifier: string, password: string) {
   return ok ? user : null;
 }
 
-export async function createSession(u: {
-  id: string;
-  organizationId: string | null;
-  email: string | null;
-  phone: string | null;
-  role: string;
-}) {
+/** Re-checks a password for an account already signed in. */
+export async function verifyPassword(userId: string, password: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
+  return user ? bcrypt.compare(password, user.passwordHash) : false;
+}
+
+export async function createSession(
+  u: { id: string; organizationId: string | null; email: string | null; phone: string | null; role: string },
+  /** Set only when a staff member is opening this session on somebody else's behalf. */
+  impersonatedByUserId?: string,
+) {
+  const h = await headers();
+  const userAgent = h.get("user-agent");
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const expiresAt = new Date(Date.now() + MAX_AGE * 1000);
+
+  // The row exists before the token does — its id IS the token's jti, so a
+  // token can never be minted for a session that isn't there to revoke.
+  const record = await prisma.session.create({
+    data: { userId: u.id, userAgent, ip, expiresAt, impersonatedByUserId },
+  });
+
   const token = await new SignJWT({
     organizationId: u.organizationId,
     email: u.email,
@@ -71,6 +125,7 @@ export async function createSession(u: {
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(u.id)
+    .setJti(record.id)
     .setIssuedAt()
     .setExpirationTime(`${MAX_AGE}s`)
     .sign(secretKey());
@@ -84,35 +139,182 @@ export async function createSession(u: {
   });
 }
 
+/**
+ * A staff member opening a session as somebody else in their OWN
+ * organization — for tracking down a problem that only shows up from their
+ * side, without needing their password.
+ *
+ * Never across organizations (the target must belong to the acting admin's
+ * own org) and never onto another ADMIN (two admins are peers, and one
+ * silently acting as the other is exactly the access this feature must not
+ * grant). The admin's own token is stashed in a second cookie first, so
+ * returning hands back the session that was actually theirs.
+ */
+export async function impersonate(admin: Session, targetUserId: string) {
+  if (!requireStaff(admin)) throw new Error("Not authorized.");
+
+  const target = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: { id: true, organizationId: true, email: true, phone: true, role: true, disabledAt: true },
+  });
+  if (!target || target.disabledAt) throw new Error("That account cannot be signed in to.");
+  if (target.organizationId !== admin.organizationId) throw new Error("That account is not in your organization.");
+  // Two admins are peers — one silently acting as the other is exactly the
+  // access this feature must not grant.
+  if (target.role === "ADMIN") throw new Error("Cannot sign in as another administrator.");
+
+  const ownToken = (await cookies()).get(COOKIE)?.value;
+  if (ownToken) {
+    (await cookies()).set(IMPERSONATOR_COOKIE, ownToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: MAX_AGE,
+    });
+  }
+
+  await createSession(
+    { id: target.id, organizationId: target.organizationId, email: target.email, phone: target.phone, role: target.role },
+    admin.userId,
+  );
+}
+
+/**
+ * Handing the session back. The borrowed one is revoked outright rather than
+ * merely left behind — nobody else should be able to pick it up and carry on
+ * as that person once the office has stepped away from it.
+ */
+export async function endImpersonation() {
+  const returnToken = (await cookies()).get(IMPERSONATOR_COOKIE)?.value;
+  await destroySession();
+  (await cookies()).delete(IMPERSONATOR_COOKIE);
+  if (returnToken) {
+    (await cookies()).set(COOKIE, returnToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: MAX_AGE,
+    });
+  }
+}
+
+/** The current cookie's session id, or null — read without trusting anything but the signature. */
+async function currentSessionId(): Promise<string | null> {
+  const token = (await cookies()).get(COOKIE)?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secretKey());
+    return typeof payload.jti === "string" ? payload.jti : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Signing out revokes the row, not just the cookie. Clearing the cookie alone
+ * leaves the token itself still good — anyone holding a copy of it (a synced
+ * browser profile, a shared computer, a leaked log) could keep using it until
+ * it expired on its own, weeks later.
+ */
 export async function destroySession() {
+  const sessionId = await currentSessionId();
   (await cookies()).delete(COOKIE);
+  if (sessionId) {
+    await prisma.session.updateMany({ where: { id: sessionId, revokedAt: null }, data: { revokedAt: new Date() } });
+  }
+}
+
+/** Every other device this account is signed in on — the id currently in the browser is excluded, not just recognised. */
+export async function otherSessions(userId: string) {
+  const excludeId = await currentSessionId();
+  return prisma.session.findMany({
+    where: {
+      userId,
+      revokedAt: null,
+      expiresAt: { gt: new Date() },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    orderBy: { lastSeenAt: "desc" },
+  });
+}
+
+/** Signs out one of the account's OWN other sessions. Never the caller's own current one — that is what "sign out" is for. */
+export async function revokeSession(userId: string, sessionId: string) {
+  const excludeId = await currentSessionId();
+  if (sessionId === excludeId) return;
+  await prisma.session.updateMany({ where: { id: sessionId, userId, revokedAt: null }, data: { revokedAt: new Date() } });
+}
+
+/**
+ * Every device but this one. Offered next to "change my password" as much as
+ * on its own — a new password does nothing for a device that was already
+ * signed in before it changed.
+ */
+export async function revokeOtherSessions(userId: string) {
+  const excludeId = await currentSessionId();
+  await prisma.session.updateMany({
+    where: { userId, revokedAt: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    data: { revokedAt: new Date() },
+  });
+}
+
+/** Every session on the account — for staff signing another account out entirely (e.g. disabling access). */
+export async function revokeAllSessions(userId: string) {
+  await prisma.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
 }
 
 // A valid signature only proves the token was issued by us — not that the
-// account still exists or that its role/org hasn't changed since. The user
-// row is re-read every time so a role change or org suspension takes effect
-// immediately instead of waiting for a 30-day-old cookie to expire.
+// account still exists, that this session hasn't been signed out elsewhere,
+// or that its role/org hasn't changed since. The user row and Session record
+// are read every time so a role change, account disable, org suspension, or
+// remote sign-out all take effect immediately instead of waiting for a
+// 30-day-old cookie to expire.
 //
-// Phase-1 simplification: sessions are stateless JWTs, so "sign out this
-// device remotely" / server-side revocation-on-logout is not yet possible —
-// deferred, same as it was early in the HM Kariuki reference build.
+// Wrapped in cache() so the layout and any server actions in the same request
+// share a single query rather than repeating it.
 export const getSession = cache(async (): Promise<Session | null> => {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secretKey());
+
+    // Sessions minted before this table existed carry no jti — left to
+    // expire on their own schedule rather than logging out everyone signed
+    // in the moment this shipped, but every session from here on is checked.
+    const sessionId = typeof payload.jti === "string" ? payload.jti : null;
+    let impersonatedBy: { id: string; email: string | null } | null = null;
+    if (sessionId) {
+      const record = await prisma.session.findUnique({
+        where: { id: sessionId },
+        select: { revokedAt: true, expiresAt: true, lastSeenAt: true, impersonatedByUserId: true },
+      });
+      if (!record || record.revokedAt || record.expiresAt < new Date()) return null;
+      if (Date.now() - record.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
+        // Best-effort — a missed touch just means the "last active" shown
+        // later is a few minutes stale, not that the session stops working.
+        await prisma.session.update({ where: { id: sessionId }, data: { lastSeenAt: new Date() } }).catch(() => {});
+      }
+      if (record.impersonatedByUserId) {
+        const admin = await prisma.user.findUnique({
+          where: { id: record.impersonatedByUserId },
+          select: { id: true, email: true },
+        });
+        if (admin) impersonatedBy = admin;
+      }
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: String(payload.sub) },
-      select: { id: true, organizationId: true, email: true, phone: true, role: true, tenantId: true, vendorId: true },
+      select: { id: true, organizationId: true, email: true, phone: true, role: true, tenantId: true, vendorId: true, disabledAt: true },
     });
-    if (!user) return null;
+    // No account, or access individually revoked — either way the session is dead.
+    if (!user || user.disabledAt) return null;
     // An org's suspension shuts out its staff and tenants immediately —
     // platform admins are exempt, they have no organizationId to suspend.
     if (user.organizationId) {
-      const org = await prisma.organization.findUnique({
-        where: { id: user.organizationId },
-        select: { status: true },
-      });
+      const org = await prisma.organization.findUnique({ where: { id: user.organizationId }, select: { status: true } });
       if (!org || org.status !== "ACTIVE") return null;
     }
     // A tenant/tradesman login with no linked record can read nothing — a
@@ -128,6 +330,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
       role: user.role,
       tenantId: user.tenantId,
       vendorId: user.vendorId,
+      impersonatedBy,
     };
   } catch {
     return null;
@@ -144,6 +347,11 @@ export { isPlatformAdmin, isStaff, isTenant, isTradesman } from "./roles";
 /** Refuses anyone who isn't signed in as staff (ADMIN/MANAGER/VIEWER) of an organization. */
 export function requireStaff(s: Session | null): s is Session & { organizationId: string } {
   return Boolean(s) && isStaff(s!.role) && Boolean(s!.organizationId);
+}
+
+/** Refuses anyone who isn't signed in as an organization ADMIN — for actions only the org owner may take (inviting/disabling staff, impersonation). */
+export function requireOrgAdmin(s: Session | null): s is Session & { organizationId: string } {
+  return Boolean(s) && s!.role === "ADMIN" && Boolean(s!.organizationId);
 }
 
 /** Refuses anyone who isn't signed in as the platform administrator. */

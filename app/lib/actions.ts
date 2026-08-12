@@ -8,9 +8,15 @@ import {
   hashPassword,
   needsPlatformSetup,
   requireStaff,
+  requireOrgAdmin,
   requirePlatformAdmin,
   verifyCredentials,
   getSession,
+  impersonate,
+  endImpersonation,
+  revokeSession,
+  revokeOtherSessions,
+  revokeAllSessions,
 } from "./auth";
 import { checkLock, recordFailure, clearFailures } from "./throttle";
 import { raiseApproval, signApproval } from "./approvals";
@@ -49,6 +55,7 @@ export async function login(formData: FormData) {
     if (result.locked) throw new Error(`Too many attempts. Try again in ${result.minutesLeft} minute(s).`);
     throw new Error("Incorrect email/phone or password.");
   }
+  if (user.disabledAt) throw new Error("This account's access has been disabled.");
   await clearFailures(identifier);
 
   await createSession({
@@ -462,7 +469,9 @@ export async function registerWithInvite(formData: FormData) {
     role: user.role,
   });
 
-  redirect(result.role === "TENANT" ? "/portal" : "/trade");
+  redirect(
+    result.role === "TENANT" ? "/portal" : result.role === "MANAGER" || result.role === "VIEWER" ? "/dashboard" : "/trade",
+  );
 }
 
 // --- staff: payments ingestion ---------------------------------------------
@@ -527,4 +536,91 @@ export async function ignoreTransactionAction(transactionId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
   await ignoreTransaction(s.organizationId, transactionId, s.userId);
+}
+
+// --- staff: team management -------------------------------------------
+
+/**
+ * Invites a teammate as VIEWER by default — least-privilege by construction.
+ * The admin explicitly upgrades to MANAGER via `setStaffRole` afterward,
+ * rather than every invite defaulting to broad access and someone having to
+ * remember to narrow it.
+ */
+export async function inviteStaff(formData: FormData) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can invite staff.");
+
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const role = String(formData.get("role") ?? "VIEWER");
+  if (!email) throw new Error("Email is required.");
+  if (role !== "MANAGER" && role !== "VIEWER") throw new Error("Invalid role.");
+
+  const invite = await createInvitation(s.organizationId, role, {}, { email });
+  redirect(`/invites/${invite.id}`);
+}
+
+/** Promotes/demotes between MANAGER and VIEWER. Never targets ADMIN — that seat is fixed at org creation. */
+export async function setStaffRole(userId: string, role: "MANAGER" | "VIEWER") {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can change staff roles.");
+
+  const user = await prisma.user.findFirst({ where: { id: userId, organizationId: s.organizationId } });
+  if (!user) throw new Error("Not found.");
+  if (user.role === "ADMIN") throw new Error("Cannot change the admin's role.");
+
+  await prisma.user.update({ where: { id: userId }, data: { role } });
+}
+
+/** Revokes access without deleting the account — history stays attached to a real row. Every session is signed out immediately. */
+export async function disableStaff(userId: string) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can disable staff.");
+
+  const user = await prisma.user.findFirst({ where: { id: userId, organizationId: s.organizationId } });
+  if (!user) throw new Error("Not found.");
+  if (user.role === "ADMIN") throw new Error("Cannot disable the admin.");
+
+  await prisma.user.update({ where: { id: userId }, data: { disabledAt: new Date() } });
+  await revokeAllSessions(userId);
+}
+
+export async function enableStaff(userId: string) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can restore staff access.");
+
+  const user = await prisma.user.findFirst({ where: { id: userId, organizationId: s.organizationId } });
+  if (!user) throw new Error("Not found.");
+
+  await prisma.user.update({ where: { id: userId }, data: { disabledAt: null } });
+}
+
+// --- staff: impersonation ------------------------------------------------
+
+/** Opens a session as another user in the same organization — see app/lib/auth.ts `impersonate()` for the rules. */
+export async function impersonateAction(targetUserId: string) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can sign in as someone else.");
+  await impersonate(s, targetUserId);
+  redirect("/dashboard");
+}
+
+/** Hands the session back to the admin who opened it. */
+export async function endImpersonationAction() {
+  await endImpersonation();
+  redirect("/users");
+}
+
+// --- account: session management -----------------------------------------
+
+export async function revokeSessionAction(formData: FormData) {
+  const s = await getSession();
+  if (!s) throw new Error("Not authorized.");
+  const sessionId = String(formData.get("sessionId") ?? "");
+  if (sessionId) await revokeSession(s.userId, sessionId);
+}
+
+export async function revokeOtherSessionsAction() {
+  const s = await getSession();
+  if (!s) throw new Error("Not authorized.");
+  await revokeOtherSessions(s.userId);
 }
