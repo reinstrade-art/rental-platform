@@ -135,6 +135,27 @@ export async function updateBranding(formData: FormData) {
   redirect("/settings");
 }
 
+/** Only an org admin configures the org's own Daraja credentials — this is the org's own paybill/till, not a shared platform one. */
+export async function updateMpesaSettings(formData: FormData) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can configure M-Pesa.");
+
+  const env = String(formData.get("mpesaEnv") ?? "sandbox");
+  if (env !== "sandbox" && env !== "production") throw new Error("Invalid environment.");
+
+  await prisma.organization.update({
+    where: { id: s.organizationId },
+    data: {
+      mpesaEnv: env,
+      mpesaShortcode: String(formData.get("mpesaShortcode") ?? "").trim() || null,
+      mpesaConsumerKey: String(formData.get("mpesaConsumerKey") ?? "").trim() || null,
+      mpesaConsumerSecret: String(formData.get("mpesaConsumerSecret") ?? "").trim() || null,
+      mpesaPasskey: String(formData.get("mpesaPasskey") ?? "").trim() || null,
+    },
+  });
+  redirect("/settings");
+}
+
 // --- staff: property / unit / tenant / lease / billing -------------------
 
 export async function createProperty(formData: FormData) {

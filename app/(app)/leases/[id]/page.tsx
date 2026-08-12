@@ -3,7 +3,11 @@ import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getLease, leaseBalance } from "@/app/lib/data";
 import { addCharge, recordPayment } from "@/app/lib/actions";
+import { sendMpesaPrompt } from "@/app/lib/mpesa-actions";
+import { mpesaConfigured } from "@/app/lib/mpesa";
+import { prisma } from "@/app/lib/prisma";
 import { CHARGE_TYPES } from "@/app/lib/constants";
+import { MpesaPay } from "@/app/components/mpesa-pay";
 
 function periodParam(d: Date) {
   const dt = new Date(d);
@@ -22,6 +26,15 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
   if (!lease) notFound();
 
   const balance = leaseBalance(lease);
+
+  const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } });
+  const mpesaReady = mpesaConfigured({
+    env: org.mpesaEnv,
+    shortcode: org.mpesaShortcode,
+    consumerKey: org.mpesaConsumerKey,
+    consumerSecret: org.mpesaConsumerSecret,
+    passkey: org.mpesaPasskey,
+  });
 
   return (
     <div className="flex flex-col gap-8">
@@ -137,6 +150,21 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
               Record payment
             </button>
           </form>
+
+          {mpesaReady && (
+            <div className="mt-4 border-t pt-4">
+              <h3 className="text-sm font-semibold">Send M-Pesa prompt</h3>
+              <div className="mt-2">
+                <MpesaPay
+                  action={sendMpesaPrompt}
+                  leaseId={lease.id}
+                  defaultAmount={balance > 0 ? balance : lease.monthlyRent}
+                  phone={lease.tenant.phone}
+                  editablePhone
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

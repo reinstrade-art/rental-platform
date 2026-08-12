@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { getSession, requireStaff, deviceLabel } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { getOwnOtherSessions } from "@/app/lib/data";
-import { updateBranding, revokeSessionAction, revokeOtherSessionsAction } from "@/app/lib/actions";
+import { updateBranding, updateMpesaSettings, revokeSessionAction, revokeOtherSessionsAction } from "@/app/lib/actions";
+import { mpesaConfigured } from "@/app/lib/mpesa";
 
 export default async function SettingsPage() {
   const s = await getSession();
@@ -64,6 +65,58 @@ export default async function SettingsPage() {
         </button>
       </form>
     </div>
+
+    {s.role === "ADMIN" && (
+    <div className="max-w-sm">
+      <h2 className="text-lg font-semibold">M-Pesa (STK Push)</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        Uses this organization's own Safaricom shortcode — there is no shared/platform paybill. Get these from your
+        Daraja app at developer.safaricom.co.ke.
+        {mpesaConfigured({
+          env: org.mpesaEnv,
+          shortcode: org.mpesaShortcode,
+          consumerKey: org.mpesaConsumerKey,
+          consumerSecret: org.mpesaConsumerSecret,
+          passkey: org.mpesaPasskey,
+        }) && <span className="ml-1 font-medium text-green-700">Configured.</span>}
+      </p>
+      <form action={updateMpesaSettings} className="mt-4 flex flex-col gap-3">
+        <select name="mpesaEnv" defaultValue={org.mpesaEnv ?? "sandbox"} className="rounded border px-3 py-2">
+          <option value="sandbox">Sandbox (testing)</option>
+          <option value="production">Production</option>
+        </select>
+        <input
+          name="mpesaShortcode"
+          defaultValue={org.mpesaShortcode ?? ""}
+          placeholder="Shortcode (paybill/till)"
+          className="rounded border px-3 py-2"
+        />
+        <input
+          name="mpesaConsumerKey"
+          defaultValue={org.mpesaConsumerKey ?? ""}
+          placeholder="Consumer key"
+          className="rounded border px-3 py-2"
+        />
+        <input
+          name="mpesaConsumerSecret"
+          type="password"
+          defaultValue={org.mpesaConsumerSecret ?? ""}
+          placeholder="Consumer secret"
+          className="rounded border px-3 py-2"
+        />
+        <input
+          name="mpesaPasskey"
+          type="password"
+          defaultValue={org.mpesaPasskey ?? ""}
+          placeholder="Passkey"
+          className="rounded border px-3 py-2"
+        />
+        <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+          Save
+        </button>
+      </form>
+    </div>
+    )}
 
     <div className="max-w-md">
       <div className="flex items-center justify-between">

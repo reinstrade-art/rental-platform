@@ -2,6 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireTenant } from "@/app/lib/auth";
 import { getTenantPortal, leaseBalance } from "@/app/lib/data";
+import { prisma } from "@/app/lib/prisma";
+import { mpesaConfigured } from "@/app/lib/mpesa";
+import { payMpesaSelf } from "@/app/lib/mpesa-actions";
+import { MpesaPay } from "@/app/components/mpesa-pay";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -16,7 +20,17 @@ export default async function TenantPortalPage() {
   const s = await getSession();
   if (!requireTenant(s)) redirect("/login");
 
-  const tenant = await getTenantPortal(s.tenantId);
+  const [tenant, org] = await Promise.all([
+    getTenantPortal(s.tenantId),
+    prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } }),
+  ]);
+  const mpesaReady = mpesaConfigured({
+    env: org.mpesaEnv,
+    shortcode: org.mpesaShortcode,
+    consumerKey: org.mpesaConsumerKey,
+    consumerSecret: org.mpesaConsumerSecret,
+    passkey: org.mpesaPasskey,
+  });
 
   return (
     <div className="flex flex-col gap-8">
@@ -101,6 +115,20 @@ export default async function TenantPortalPage() {
                 </table>
               </div>
             </div>
+
+            {mpesaReady && lease.status === "ACTIVE" && (
+              <div className="mt-4 max-w-xs border-t pt-4">
+                <h3 className="text-sm font-semibold">Pay via M-Pesa</h3>
+                <div className="mt-2">
+                  <MpesaPay
+                    action={payMpesaSelf}
+                    defaultAmount={balance > 0 ? balance : lease.monthlyRent}
+                    phone={tenant.phone}
+                    buttonLabel="Pay now"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         );
       })}

@@ -1,9 +1,11 @@
 import "server-only";
 import { prisma } from "./prisma";
 
+const MPESA_SOURCES = new Set(["MPESA_DARAJA", "MPESA_STK"]);
+
 export type IngestInput = {
   organizationId: string;
-  source: "MANUAL" | "CSV_IMPORT" | "MPESA_DARAJA";
+  source: "MANUAL" | "CSV_IMPORT" | "MPESA_DARAJA" | "MPESA_STK";
   amount: number;
   reference?: string | null;
   payerName?: string | null;
@@ -85,7 +87,7 @@ export async function matchTransaction(
         organizationId,
         leaseId,
         amount: transaction.amount,
-        method: transaction.source === "MPESA_DARAJA" ? "MPESA" : transaction.source,
+        method: MPESA_SOURCES.has(transaction.source) ? "MPESA" : transaction.source,
         reference: transaction.reference,
         paidAt: transaction.occurredAt,
       },
