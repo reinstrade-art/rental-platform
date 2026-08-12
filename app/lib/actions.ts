@@ -476,9 +476,10 @@ export async function registerWithInvite(formData: FormData) {
   const code = String(formData.get("code") ?? "");
   const identifier = String(formData.get("identifier") ?? "");
   const password = String(formData.get("password") ?? "");
+  const consented = formData.get("consent") === "on";
   if (!code || !identifier || !password) throw new Error("Code, email/phone, and password are all required.");
 
-  const result = await redeemInvitation(code, identifier, password);
+  const result = await redeemInvitation(code, identifier, password, consented);
   if (!result.ok) throw new Error(result.error);
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: result.userId } });

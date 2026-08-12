@@ -46,6 +46,9 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
           {money(lease.monthlyRent)}/month · {lease.status} · Balance:{" "}
           <span className={balance > 0 ? "text-red-600 font-medium" : ""}>{money(balance)}</span>
         </p>
+        <Link href={`/api/statement/${lease.id}`} target="_blank" className="mt-1 inline-block text-xs underline text-gray-600">
+          Full statement
+        </Link>
       </div>
 
       <div className="grid gap-8 md:grid-cols-2">

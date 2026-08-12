@@ -49,6 +49,9 @@ export default async function TenantPortalPage() {
                 <div className="text-xs text-gray-500">
                   {money(lease.monthlyRent)}/month · {lease.status}
                 </div>
+                <Link href={`/api/statement/${lease.id}`} target="_blank" className="text-xs underline text-gray-600">
+                  Full statement
+                </Link>
               </div>
               <div className={`text-right ${balance > 0 ? "text-red-600" : "text-green-700"}`}>
                 <div className="text-xs text-gray-500">Balance</div>

@@ -120,6 +120,14 @@ model User {
   // request in getSession(), same as an organization's own suspension.
   disabledAt DateTime?
 
+  // Recorded at registration for outside roles (TENANT/TRADESMAN/CASUAL_LABOURER).
+  // consentVersion pins WHICH wording of the notice was agreed to — bump
+  // CONSENT_VERSION in app/lib/consent.ts whenever the wording changes what
+  // someone is agreeing to, since consent to an earlier notice is not
+  // consent to a later one.
+  consentedAt    DateTime?
+  consentVersion String?
+
   createdAt DateTime @default(now())
 
   approvalStepsSigned ApprovalStep[]

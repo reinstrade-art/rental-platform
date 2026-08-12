@@ -2,6 +2,7 @@ import "server-only";
 import crypto from "crypto";
 import { prisma } from "./prisma";
 import { hashPassword } from "./auth";
+import { CONSENT_VERSION } from "./consent";
 
 const INVITE_DAYS = 7;
 
@@ -57,6 +58,7 @@ export async function redeemInvitation(
   code: string,
   identifier: string,
   password: string,
+  consented: boolean,
 ): Promise<RedeemResult> {
   const invite = await prisma.invitation.findUnique({ where: { code: code.trim().toUpperCase() } });
   const generic = { ok: false as const, error: "That invitation code is invalid or has expired." };
@@ -69,6 +71,7 @@ export async function redeemInvitation(
   if (!matchesEmail && !matchesPhone) return generic;
 
   if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
+  if (!consented) return { ok: false, error: "You must agree to the data notice to register." };
 
   const user = await prisma.$transaction(async (tx) => {
     const created = await tx.user.create({
@@ -80,6 +83,8 @@ export async function redeemInvitation(
         role: invite.role,
         tenantId: invite.tenantId,
         vendorId: invite.vendorId,
+        consentedAt: new Date(),
+        consentVersion: CONSENT_VERSION,
       },
     });
     await tx.invitation.update({ where: { id: invite.id }, data: { usedAt: new Date() } });
