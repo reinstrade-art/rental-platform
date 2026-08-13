@@ -12,7 +12,7 @@ const PREVIEW_ORG = {
 export default function RegisterPage() {
   return (
     <main className="flex min-h-screen justify-center bg-ink px-4 py-10">
-      <div className="h-fit w-full max-w-sm rounded-lg border border-ink-soft bg-lily p-8 shadow-xl">
+      <div className="h-fit w-full max-w-sm rounded-lg border border-ink-soft border-t-2 border-t-gold bg-lily p-8 shadow-xl">
         <h1 className="text-xl font-semibold text-ink">Register</h1>
         <p className="mt-1 text-sm text-silver-dark">
           Enter the invitation code your office gave you, along with the email or phone number it was issued to.

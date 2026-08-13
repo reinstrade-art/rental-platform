@@ -3,7 +3,7 @@ import { login } from "@/app/lib/actions";
 export default async function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-ink px-4">
-      <div className="w-full max-w-sm rounded-lg border border-ink-soft bg-lily p-8 shadow-xl">
+      <div className="w-full max-w-sm rounded-lg border border-ink-soft border-t-2 border-t-gold bg-lily p-8 shadow-xl">
         <h1 className="text-xl font-semibold text-ink">Sign in</h1>
         <form action={login} className="mt-6 flex flex-col gap-3">
           <input

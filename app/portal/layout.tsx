@@ -10,9 +10,9 @@ export default async function PortalLayout({ children }: { children: React.React
   return (
     <div className="min-h-screen">
       <header className="flex items-center justify-between bg-ink px-6 py-3 text-lily">
-        <div className="font-semibold tracking-tight">My Tenancy</div>
+        <div className="border-l-2 border-gold pl-2 font-semibold tracking-tight">My Tenancy</div>
         <form action={logout}>
-          <button className="text-sm text-silver underline hover:text-lily">Sign out</button>
+          <button className="text-sm text-silver underline hover:text-gold">Sign out</button>
         </form>
       </header>
       <main className="px-6 py-6">{children}</main>

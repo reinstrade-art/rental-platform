@@ -13,6 +13,7 @@
   --color-silver-light: #e8e9ec; /* pale silver — subtle fills, table stripes */
   --color-silver-dark: #6b7078; /* deep silver — muted/secondary text on light */
   --color-lily: #faf9f6; /* lily white — page background, text on dark */
+  --color-gold: #e8b93f; /* one warm accent — focus states, hover highlights, small touches only, never large fills */
 
   --background: var(--color-lily);
   --foreground: var(--color-ink);
@@ -27,6 +28,7 @@
   --color-silver-light: var(--color-silver-light);
   --color-silver-dark: var(--color-silver-dark);
   --color-lily: var(--color-lily);
+  --color-gold: var(--color-gold);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -48,5 +50,16 @@ body {
   ::before,
   ::after {
     border-color: var(--color-silver);
+  }
+
+  /* The one warm touch, applied consistently rather than per-element: every
+     interactive control brightens the same way on keyboard/mouse focus. */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
   }
 }

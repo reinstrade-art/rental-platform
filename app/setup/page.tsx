@@ -7,7 +7,7 @@ export default async function SetupPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-ink px-4">
-      <div className="w-full max-w-sm rounded-lg border border-ink-soft bg-lily p-8 shadow-xl">
+      <div className="w-full max-w-sm rounded-lg border border-ink-soft border-t-2 border-t-gold bg-lily p-8 shadow-xl">
         <h1 className="text-xl font-semibold text-ink">Set up the Platform</h1>
         <p className="mt-1 text-sm text-silver-dark">
           Nobody has signed up yet. This first account becomes the Platform Administrator —
