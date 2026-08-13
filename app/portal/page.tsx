@@ -6,6 +6,8 @@ import { prisma } from "@/app/lib/prisma";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 import { payMpesaSelf } from "@/app/lib/mpesa-actions";
 import { MpesaPay } from "@/app/components/mpesa-pay";
+import { signLease } from "@/app/lib/actions";
+import { SignaturePad } from "@/app/components/signature-pad";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -49,9 +51,14 @@ export default async function TenantPortalPage() {
                 <div className="text-xs text-gray-500">
                   {money(lease.monthlyRent)}/month · {lease.status}
                 </div>
-                <Link href={`/api/statement/${lease.id}`} target="_blank" className="text-xs underline text-gray-600">
-                  Full statement
-                </Link>
+                <div className="flex gap-3">
+                  <Link href={`/api/statement/${lease.id}`} target="_blank" className="text-xs underline text-gray-600">
+                    Full statement
+                  </Link>
+                  <Link href={`/api/agreement/${lease.id}`} target="_blank" className="text-xs underline text-gray-600">
+                    Tenancy agreement
+                  </Link>
+                </div>
               </div>
               <div className={`text-right ${balance > 0 ? "text-red-600" : "text-green-700"}`}>
                 <div className="text-xs text-gray-500">Balance</div>
@@ -132,6 +139,36 @@ export default async function TenantPortalPage() {
                 </div>
               </div>
             )}
+
+            <div className="mt-4 max-w-sm border-t pt-4">
+              <h3 className="text-sm font-semibold">Tenancy agreement</h3>
+              {lease.signedAt ? (
+                <p className="mt-1 text-xs text-green-700">
+                  Signed {new Date(lease.signedAt).toLocaleDateString()} as {lease.signedByName}.
+                </p>
+              ) : (
+                <form action={signLease.bind(null, lease.id)} className="mt-2 flex flex-col gap-2">
+                  <p className="text-xs text-gray-500">
+                    Read the full{" "}
+                    <Link href={`/api/agreement/${lease.id}`} target="_blank" className="underline">
+                      tenancy agreement
+                    </Link>{" "}
+                    before signing.
+                  </p>
+                  <input
+                    name="signedByName"
+                    required
+                    defaultValue={tenant.name}
+                    placeholder="Your full name"
+                    className="rounded border px-3 py-2 text-sm"
+                  />
+                  <SignaturePad name="signatureImage" />
+                  <button type="submit" className="rounded bg-black px-3 py-2 text-sm text-white">
+                    Sign agreement
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
         );
       })}

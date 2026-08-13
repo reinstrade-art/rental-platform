@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "./prisma";
+import { headers } from "next/headers";
 import {
   createSession,
   destroySession,
@@ -10,6 +11,7 @@ import {
   requireStaff,
   requireOrgAdmin,
   requirePlatformAdmin,
+  requireTenant,
   verifyCredentials,
   getSession,
   impersonate,
@@ -131,6 +133,22 @@ export async function updateBranding(formData: FormData) {
       letterheadEmail: String(formData.get("letterheadEmail") ?? "").trim() || null,
       brandColor: brandColor || null,
     },
+  });
+  redirect("/settings");
+}
+
+/**
+ * The organization's own tenancy-agreement terms, printed into every lease
+ * PDF verbatim. Deliberately free text, not a set of clauses this app
+ * drafts — see the comment on Organization.leaseTermsTemplate.
+ */
+export async function updateLeaseTerms(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  await prisma.organization.update({
+    where: { id: s.organizationId },
+    data: { leaseTermsTemplate: String(formData.get("leaseTermsTemplate") ?? "").trim() || null },
   });
   redirect("/settings");
 }
@@ -645,4 +663,43 @@ export async function revokeOtherSessionsAction() {
   const s = await getSession();
   if (!s) throw new Error("Not authorized.");
   await revokeOtherSessions(s.userId);
+}
+
+// --- tenant: sign lease ----------------------------------------------------
+
+/**
+ * Records the tenant's own e-signature against their own lease. Only ever
+ * their own — leaseId comes from the form, but the where-clause below
+ * filters on the session's tenantId too, so a tampered leaseId just
+ * matches nothing rather than reaching someone else's tenancy.
+ */
+export async function signLease(leaseId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireTenant(s)) throw new Error("Not authorized.");
+
+  const signatureImage = String(formData.get("signatureImage") ?? "");
+  const signedByName = String(formData.get("signedByName") ?? "").trim();
+  if (!signatureImage.startsWith("data:image/png;base64,")) throw new Error("Please draw your signature first.");
+  if (!signedByName) throw new Error("Enter the name you're signing as.");
+
+  const lease = await prisma.lease.findFirst({
+    where: { id: leaseId, organizationId: s.organizationId, tenantId: s.tenantId },
+  });
+  if (!lease) throw new Error("Lease not found.");
+  if (lease.signedAt) throw new Error("This lease has already been signed.");
+
+  const h = await headers();
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const userAgent = h.get("user-agent");
+
+  await prisma.lease.update({
+    where: { id: leaseId },
+    data: {
+      signatureImage,
+      signedAt: new Date(),
+      signedByName,
+      signedIp: ip,
+      signedUserAgent: userAgent,
+    },
+  });
 }

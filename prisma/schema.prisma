@@ -33,6 +33,15 @@ model Organization {
   letterheadEmail   String?
   brandColor        String?
 
+  // Free text the org writes itself and that prints into every tenancy
+  // agreement PDF. Deliberately NOT a fixed set of legal clauses baked into
+  // the platform — lease terms vary by jurisdiction and by landlord, and
+  // drafting one universal tenancy agreement for arbitrary businesses isn't
+  // something app code should attempt. Null renders as an explicit
+  // placeholder rather than silently blank, so a lease is never generated
+  // looking like it has no terms when really nobody has filled them in yet.
+  leaseTermsTemplate String?
+
   // How many sequential signatures a raised approval needs before it takes
   // effect: 1 = the raiser's own signature is enough, 2 = raiser + someone
   // ranked MANAGER or above, 3 = raiser + MANAGER-or-above + DIRECTOR (the
@@ -240,6 +249,16 @@ model Lease {
   startDate   DateTime
   endDate     DateTime?
   status      String    @default("ACTIVE") // ACTIVE | ENDED
+
+  // E-signature: set once the tenant signs from their own portal login.
+  // signatureImage is a data: URL (PNG) drawn on a canvas, not a typed name —
+  // it embeds directly into the agreement PDF. signedIp/signedUserAgent are
+  // captured at signing time as the closest thing this has to a witness.
+  signatureImage  String?
+  signedAt        DateTime?
+  signedByName    String?
+  signedIp        String?
+  signedUserAgent String?
 
   charges  Charge[]
   payments Payment[]

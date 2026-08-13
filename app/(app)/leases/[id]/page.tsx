@@ -46,9 +46,19 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
           {money(lease.monthlyRent)}/month · {lease.status} · Balance:{" "}
           <span className={balance > 0 ? "text-red-600 font-medium" : ""}>{money(balance)}</span>
         </p>
-        <Link href={`/api/statement/${lease.id}`} target="_blank" className="mt-1 inline-block text-xs underline text-gray-600">
-          Full statement
-        </Link>
+        <div className="mt-1 flex items-center gap-3">
+          <Link href={`/api/statement/${lease.id}`} target="_blank" className="text-xs underline text-gray-600">
+            Full statement
+          </Link>
+          <Link href={`/api/agreement/${lease.id}`} target="_blank" className="text-xs underline text-gray-600">
+            Tenancy agreement
+          </Link>
+          <span className="text-xs text-gray-500">
+            {lease.signedAt
+              ? `Signed ${new Date(lease.signedAt).toLocaleDateString()} by ${lease.signedByName}`
+              : "Not yet signed"}
+          </span>
+        </div>
       </div>
 
       <div className="grid gap-8 md:grid-cols-2">

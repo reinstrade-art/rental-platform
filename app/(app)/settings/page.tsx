@@ -2,7 +2,13 @@ import { redirect } from "next/navigation";
 import { getSession, requireStaff, deviceLabel } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { getOwnOtherSessions } from "@/app/lib/data";
-import { updateBranding, updateMpesaSettings, revokeSessionAction, revokeOtherSessionsAction } from "@/app/lib/actions";
+import {
+  updateBranding,
+  updateLeaseTerms,
+  updateMpesaSettings,
+  revokeSessionAction,
+  revokeOtherSessionsAction,
+} from "@/app/lib/actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 
 export default async function SettingsPage() {
@@ -60,6 +66,26 @@ export default async function SettingsPage() {
           same template, not a shared default.
         </p>
 
+        <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+          Save
+        </button>
+      </form>
+    </div>
+
+    <div className="max-w-lg">
+      <h2 className="text-lg font-semibold">Lease terms</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        Printed verbatim into every tenancy agreement PDF. This is your own legal text — tenancy terms vary by
+        jurisdiction and by landlord, so nothing here is drafted for you. Have it reviewed before use.
+      </p>
+      <form action={updateLeaseTerms} className="mt-4 flex flex-col gap-3">
+        <textarea
+          name="leaseTermsTemplate"
+          defaultValue={org.leaseTermsTemplate ?? ""}
+          rows={10}
+          placeholder="Enter your tenancy terms here..."
+          className="rounded border px-3 py-2 font-mono text-xs"
+        />
         <button type="submit" className="rounded bg-black px-3 py-2 text-white">
           Save
         </button>
