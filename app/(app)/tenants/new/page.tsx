@@ -8,7 +8,7 @@ export default function NewTenantPage() {
         <input name="name" required placeholder="Full name" className="rounded border px-3 py-2" />
         <input name="phone" placeholder="Phone (optional)" className="rounded border px-3 py-2" />
         <input name="email" type="email" placeholder="Email (optional)" className="rounded border px-3 py-2" />
-        <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+        <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
           Add tenant
         </button>
       </form>

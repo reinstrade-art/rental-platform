@@ -41,39 +41,39 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">{org.name}</h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-silver-dark">
             Status: {org.status} · Created {new Date(org.createdAt).toLocaleDateString()}
           </p>
         </div>
-        <Link href="/platform/audit" className="text-sm underline text-gray-600">
+        <Link href="/platform/audit" className="text-sm underline text-silver-dark">
           View audit log
         </Link>
       </div>
 
-      <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+      <div className="rounded border border-silver bg-silver-light p-3 text-sm font-medium text-ink">
         You are viewing this organization's data as the Platform Administrator, for support purposes. This visit
         has been recorded in the audit log.
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="rounded border p-4">
-          <div className="text-xs text-gray-500">Staff users</div>
+          <div className="text-xs text-silver-dark">Staff users</div>
           <div className="mt-1 text-xl font-semibold">{org.users.length}</div>
         </div>
         <div className="rounded border p-4">
-          <div className="text-xs text-gray-500">Properties / Units</div>
+          <div className="text-xs text-silver-dark">Properties / Units</div>
           <div className="mt-1 text-xl font-semibold">
             {org.properties.length} / {org.properties.reduce((s, p) => s + p.units.length, 0)}
           </div>
         </div>
         <div className="rounded border p-4">
-          <div className="text-xs text-gray-500">Tenants / Leases</div>
+          <div className="text-xs text-silver-dark">Tenants / Leases</div>
           <div className="mt-1 text-xl font-semibold">
             {org.tenants.length} / {org.leases.length}
           </div>
         </div>
         <div className="rounded border p-4">
-          <div className="text-xs text-gray-500">Billed / Received (all-time)</div>
+          <div className="text-xs text-silver-dark">Billed / Received (all-time)</div>
           <div className="mt-1 text-xl font-semibold">
             {money(charges._sum.amount ?? 0)} / {money(payments._sum.amount ?? 0)}
           </div>
@@ -84,7 +84,7 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
         <h2 className="font-semibold">Leases</h2>
         <table className="mt-2 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-gray-500">
+            <tr className="border-b text-left text-silver-dark">
               <th className="py-1">Tenant</th>
               <th className="py-1">Unit</th>
               <th className="py-1">Monthly rent</th>
@@ -104,7 +104,7 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
             ))}
             {org.leases.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-4 text-gray-500">
+                <td colSpan={4} className="py-4 text-silver-dark">
                   No leases yet.
                 </td>
               </tr>

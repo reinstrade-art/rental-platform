@@ -67,7 +67,7 @@ export function MpesaPay({
   return (
     <form action={formAction} className="flex flex-col gap-2">
       {leaseId && <input type="hidden" name="leaseId" value={leaseId} />}
-      <label className="text-xs text-gray-500">
+      <label className="text-xs text-silver-dark">
         Amount
         <input
           name="amount"
@@ -80,7 +80,7 @@ export function MpesaPay({
         />
       </label>
       {editablePhone ? (
-        <label className="text-xs text-gray-500">
+        <label className="text-xs text-silver-dark">
           Phone to send the prompt to
           <input
             name="phone"
@@ -91,12 +91,12 @@ export function MpesaPay({
           />
         </label>
       ) : (
-        phone && <p className="text-xs text-gray-500">Sent to {phone}.</p>
+        phone && <p className="text-xs text-silver-dark">Sent to {phone}.</p>
       )}
 
       {state?.error && <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
       {waiting && (
-        <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="rounded border border-silver bg-silver-light px-3 py-2 text-sm text-ink">
           Prompt sent — check the phone for the M-Pesa PIN prompt. Waiting for confirmation…
         </p>
       )}
@@ -112,7 +112,7 @@ export function MpesaPay({
         </p>
       )}
       {timedOut && (
-        <p className="rounded border bg-gray-50 px-3 py-2 text-sm text-gray-600">
+        <p className="rounded border bg-silver-light px-3 py-2 text-sm text-silver-dark">
           Still no word back — if it went through, it will show on the statement shortly.
         </p>
       )}
@@ -120,7 +120,7 @@ export function MpesaPay({
       <button
         type="submit"
         disabled={pending || Boolean(waiting)}
-        className="rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-60"
+        className="rounded bg-ink px-3 py-2 text-sm text-lily disabled:opacity-60"
       >
         {pending ? "Sending…" : waiting ? "Waiting…" : buttonLabel}
       </button>

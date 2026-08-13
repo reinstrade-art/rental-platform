@@ -13,13 +13,13 @@ export default async function PlatformPage() {
       <section>
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold">Organizations</h1>
-          <Link href="/platform/audit" className="text-sm underline text-gray-600">
+          <Link href="/platform/audit" className="text-sm underline text-silver-dark">
             Audit log
           </Link>
         </div>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-gray-500">
+            <tr className="border-b text-left text-silver-dark">
               <th className="py-2">Name</th>
               <th className="py-2">Status</th>
               <th className="py-2">Properties</th>
@@ -48,7 +48,7 @@ export default async function PlatformPage() {
                       o.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
                     )}
                   >
-                    <button className="text-xs underline text-gray-600">
+                    <button className="text-xs underline text-silver-dark">
                       {o.status === "ACTIVE" ? "Suspend" : "Reactivate"}
                     </button>
                   </form>
@@ -57,7 +57,7 @@ export default async function PlatformPage() {
             ))}
             {orgs.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-4 text-gray-500">
+                <td colSpan={6} className="py-4 text-silver-dark">
                   No organizations yet.
                 </td>
               </tr>
@@ -85,7 +85,7 @@ export default async function PlatformPage() {
             placeholder="Org admin password (8+ chars)"
             className="rounded border px-3 py-2"
           />
-          <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+          <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
             Create organization
           </button>
         </form>

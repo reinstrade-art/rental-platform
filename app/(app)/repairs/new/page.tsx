@@ -41,7 +41,7 @@ export default async function NewRepairPage() {
             </option>
           ))}
         </select>
-        <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+        <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
           Report repair
         </button>
       </form>

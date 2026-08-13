@@ -7,7 +7,7 @@ const PRIORITY_COLOR: Record<string, string> = {
   URGENT: "text-red-600",
   HIGH: "text-orange-600",
   NORMAL: "",
-  LOW: "text-gray-500",
+  LOW: "text-silver-dark",
 };
 
 export default async function RepairsPage() {
@@ -19,13 +19,13 @@ export default async function RepairsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Repairs</h1>
-        <Link href="/repairs/new" className="rounded bg-black px-3 py-1.5 text-sm text-white">
+        <Link href="/repairs/new" className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
           Report repair
         </Link>
       </div>
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b text-left text-gray-500">
+          <tr className="border-b text-left text-silver-dark">
             <th className="py-2">Title</th>
             <th className="py-2">Property / Unit</th>
             <th className="py-2">Priority</th>
@@ -52,7 +52,7 @@ export default async function RepairsPage() {
           ))}
           {repairs.length === 0 && (
             <tr>
-              <td colSpan={5} className="py-4 text-gray-500">
+              <td colSpan={5} className="py-4 text-silver-dark">
                 No repairs reported yet.
               </td>
             </tr>

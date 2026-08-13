@@ -12,13 +12,13 @@ export default async function PropertiesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Properties</h1>
-        <Link href="/properties/new" className="rounded bg-black px-3 py-1.5 text-sm text-white">
+        <Link href="/properties/new" className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
           Add property
         </Link>
       </div>
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b text-left text-gray-500">
+          <tr className="border-b text-left text-silver-dark">
             <th className="py-2">Name</th>
             <th className="py-2">Address</th>
             <th className="py-2">Units</th>
@@ -38,7 +38,7 @@ export default async function PropertiesPage() {
           ))}
           {properties.length === 0 && (
             <tr>
-              <td colSpan={3} className="py-4 text-gray-500">
+              <td colSpan={3} className="py-4 text-silver-dark">
                 No properties yet.
               </td>
             </tr>

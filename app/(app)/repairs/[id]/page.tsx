@@ -19,7 +19,7 @@ function money(n: number | null | undefined) {
 function PendingNote({ request }: { request: { steps: unknown[] } | null }) {
   if (!request) return null;
   return (
-    <p className="mt-1 text-xs text-gray-500">
+    <p className="mt-1 text-xs text-silver-dark">
       Pending — {request.steps.length} signature(s) so far.{" "}
       <Link href="/approvals" className="underline">
         Sign on the Approvals page
@@ -48,7 +48,7 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-lg font-semibold">{repair.title}</h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-silver-dark">
           {repair.property.name}
           {repair.unit ? ` / ${repair.unit.label}` : " (common area)"} · {repair.priority} · {repair.status}
         </p>
@@ -59,18 +59,18 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
       {!repair.workOrderSentAt ? (
         <div className="max-w-sm">
           <h2 className="font-semibold">Send work order</h2>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-silver-dark">
             Marks this repair as open for quotes. {prequalifiedVendors.length} prequalified vendor(s) available.
           </p>
           <form action={sendWorkOrder.bind(null, repair.id)} className="mt-2 flex flex-col gap-2">
             <input name="workOrderRef" placeholder="Work order reference (optional)" className="rounded border px-3 py-2" />
-            <button type="submit" className="rounded bg-black px-3 py-2 text-sm text-white">
+            <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
               Send work order
             </button>
           </form>
         </div>
       ) : (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-silver-dark">
           Work order sent {new Date(repair.workOrderSentAt).toLocaleDateString()}
           {repair.workOrderRef ? ` (ref ${repair.workOrderRef})` : ""}.
         </p>
@@ -81,7 +81,7 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
         <h2 className="font-semibold">Quotes</h2>
         <table className="mt-2 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-gray-500">
+            <tr className="border-b text-left text-silver-dark">
               <th className="py-1">Vendor</th>
               <th className="py-1">Amount</th>
               <th className="py-1">Status</th>
@@ -105,7 +105,7 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
             ))}
             {repair.quotes.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-2 text-gray-500">
+                <td colSpan={4} className="py-2 text-silver-dark">
                   No quotes yet.
                 </td>
               </tr>
@@ -127,7 +127,7 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
             </select>
             <input name="amount" type="number" step="0.01" required placeholder="Quoted amount" className="rounded border px-3 py-2" />
             <input name="notes" placeholder="Notes (optional)" className="rounded border px-3 py-2" />
-            <button type="submit" className="rounded bg-black px-3 py-2 text-sm text-white">
+            <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
               Submit quote
             </button>
           </form>
@@ -138,7 +138,7 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
       {repair.awardedVendorId && (
         <div className="max-w-sm">
           <h2 className="font-semibold">Approvals</h2>
-          <p className="text-sm text-gray-500">Awarded to {repair.awardedVendor?.name}.</p>
+          <p className="text-sm text-silver-dark">Awarded to {repair.awardedVendor?.name}.</p>
 
           <div className="mt-3 flex flex-col gap-4">
             <div>
@@ -148,7 +148,7 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
               </p>
               {!repair.workApprovedAt && !workRequest && (
                 <form action={approveWork.bind(null, repair.id)} className="mt-1">
-                  <button className="rounded bg-black px-3 py-1.5 text-sm text-white">Approve work</button>
+                  <button className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">Approve work</button>
                 </form>
               )}
               {!repair.workApprovedAt && workRequest && <PendingNote request={workRequest} />}
@@ -171,7 +171,7 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
                     placeholder="Approved cost"
                     className="w-40 rounded border px-3 py-2"
                   />
-                  <button className="rounded bg-black px-3 py-1.5 text-sm text-white">Approve cost</button>
+                  <button className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">Approve cost</button>
                 </form>
               )}
               {!repair.costApprovedAt && costRequest && <PendingNote request={costRequest} />}
@@ -189,7 +189,7 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
                     placeholder="Final cost"
                     className="w-40 rounded border px-3 py-2"
                   />
-                  <button className="rounded bg-black px-3 py-1.5 text-sm text-white">Mark done</button>
+                  <button className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">Mark done</button>
                 </form>
               </div>
             )}

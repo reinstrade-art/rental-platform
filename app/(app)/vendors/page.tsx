@@ -13,13 +13,13 @@ export default async function VendorsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Vendors / Tradesmen</h1>
-        <Link href="/vendors/new" className="rounded bg-black px-3 py-1.5 text-sm text-white">
+        <Link href="/vendors/new" className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
           Add vendor
         </Link>
       </div>
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b text-left text-gray-500">
+          <tr className="border-b text-left text-silver-dark">
             <th className="py-2">Name</th>
             <th className="py-2">Trade</th>
             <th className="py-2">Contact</th>
@@ -35,7 +35,7 @@ export default async function VendorsPage() {
               <td className="py-2">{[v.contactName, v.phone, v.email].filter(Boolean).join(" · ") || "—"}</td>
               <td className="py-2">
                 <form action={setVendorPrequalified.bind(null, v.id, !v.prequalified)}>
-                  <button className={`text-xs underline ${v.prequalified ? "text-green-700" : "text-gray-500"}`}>
+                  <button className={`text-xs underline ${v.prequalified ? "text-green-700" : "text-silver-dark"}`}>
                     {v.prequalified ? "Yes — revoke" : "No — prequalify"}
                   </button>
                 </form>
@@ -59,7 +59,7 @@ export default async function VendorsPage() {
           ))}
           {vendors.length === 0 && (
             <tr>
-              <td colSpan={5} className="py-4 text-gray-500">
+              <td colSpan={5} className="py-4 text-silver-dark">
                 No vendors yet.
               </td>
             </tr>

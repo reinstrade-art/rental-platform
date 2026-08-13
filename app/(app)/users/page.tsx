@@ -16,7 +16,7 @@ export default async function UsersPage() {
         <h1 className="text-lg font-semibold">Team</h1>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-gray-500">
+            <tr className="border-b text-left text-silver-dark">
               <th className="py-2">Email</th>
               <th className="py-2">Role</th>
               <th className="py-2">Status</th>
@@ -70,14 +70,14 @@ export default async function UsersPage() {
       {isAdmin && (
         <div className="max-w-sm">
           <h2 className="text-lg font-semibold">Invite a teammate</h2>
-          <p className="text-xs text-gray-500">New invites default to VIEWER — promote to MANAGER afterward if needed.</p>
+          <p className="text-xs text-silver-dark">New invites default to VIEWER — promote to MANAGER afterward if needed.</p>
           <form action={inviteStaff} className="mt-3 flex flex-col gap-3">
             <input name="email" type="email" required placeholder="Email" className="rounded border px-3 py-2" />
             <select name="role" defaultValue="VIEWER" className="rounded border px-3 py-2">
               <option value="VIEWER">Viewer</option>
               <option value="MANAGER">Manager</option>
             </select>
-            <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+            <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
               Send invite
             </button>
           </form>

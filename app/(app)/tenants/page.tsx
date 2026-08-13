@@ -13,13 +13,13 @@ export default async function TenantsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Tenants</h1>
-        <Link href="/tenants/new" className="rounded bg-black px-3 py-1.5 text-sm text-white">
+        <Link href="/tenants/new" className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
           Add tenant
         </Link>
       </div>
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b text-left text-gray-500">
+          <tr className="border-b text-left text-silver-dark">
             <th className="py-2">Name</th>
             <th className="py-2">Phone</th>
             <th className="py-2">Email</th>
@@ -51,7 +51,7 @@ export default async function TenantsPage() {
           ))}
           {tenants.length === 0 && (
             <tr>
-              <td colSpan={5} className="py-4 text-gray-500">
+              <td colSpan={5} className="py-4 text-silver-dark">
                 No tenants yet.
               </td>
             </tr>

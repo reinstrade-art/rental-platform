@@ -14,7 +14,7 @@ export default function NewVendorPage() {
           <input name="prequalified" type="checkbox" />
           Prequalified (office has vetted this vendor)
         </label>
-        <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+        <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
           Add vendor
         </button>
       </form>

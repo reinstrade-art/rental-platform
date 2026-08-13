@@ -34,7 +34,7 @@ export default async function DashboardPage() {
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
           {tiles.map((t) => (
             <div key={t.label} className="rounded border p-4">
-              <div className="text-xs text-gray-500">{t.label}</div>
+              <div className="text-xs text-silver-dark">{t.label}</div>
               <div className="mt-1 text-xl font-semibold">{t.value}</div>
             </div>
           ))}
@@ -45,7 +45,7 @@ export default async function DashboardPage() {
         <h2 className="text-lg font-semibold">By property</h2>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-gray-500">
+            <tr className="border-b text-left text-silver-dark">
               <th className="py-2">Property</th>
               <th className="py-2">Units</th>
               <th className="py-2">Occupied</th>
@@ -65,7 +65,7 @@ export default async function DashboardPage() {
             ))}
             {rollups.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-4 text-gray-500">
+                <td colSpan={5} className="py-4 text-silver-dark">
                   No properties yet.
                 </td>
               </tr>

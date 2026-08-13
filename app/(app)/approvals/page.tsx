@@ -19,7 +19,7 @@ export default async function ApprovalsPage() {
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-lg font-semibold">Approvals</h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-silver-dark">
           Chain length for this organization: {requests[0]?.organization.approvalChainLength ?? "—"} signature(s).
           Requests apply the moment the last signature lands.
         </p>
@@ -37,11 +37,11 @@ export default async function ApprovalsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-medium">{KIND_LABEL[r.kind] ?? r.kind}</div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-silver-dark">
                     Raised by {r.raisedBy.email ?? r.raisedBy.phone} on {new Date(r.raisedAt).toLocaleDateString()}
                   </div>
                 </div>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-silver-dark">
                   {r.steps.length} / {chainLength} signed
                 </div>
               </div>
@@ -59,13 +59,13 @@ export default async function ApprovalsPage() {
 
               {canSign && (
                 <form action={signApprovalAction.bind(null, r.id)} className="mt-3">
-                  <button className="rounded bg-black px-3 py-1.5 text-sm text-white">Sign as {nextLevel}</button>
+                  <button className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">Sign as {nextLevel}</button>
                 </form>
               )}
             </div>
           );
         })}
-        {requests.length === 0 && <p className="text-sm text-gray-500">No pending approvals.</p>}
+        {requests.length === 0 && <p className="text-sm text-silver-dark">No pending approvals.</p>}
       </div>
     </div>
   );

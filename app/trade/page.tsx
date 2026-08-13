@@ -18,7 +18,7 @@ export default async function TradePortalPage() {
         <h1 className="text-lg font-semibold">My awarded jobs</h1>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-gray-500">
+            <tr className="border-b text-left text-silver-dark">
               <th className="py-2">Job</th>
               <th className="py-2">Location</th>
               <th className="py-2">Status</th>
@@ -39,7 +39,7 @@ export default async function TradePortalPage() {
             ))}
             {awardedRepairs.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-4 text-gray-500">
+                <td colSpan={4} className="py-4 text-silver-dark">
                   No jobs awarded to you yet.
                 </td>
               </tr>
@@ -52,7 +52,7 @@ export default async function TradePortalPage() {
         <h2 className="text-lg font-semibold">My quotes</h2>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-gray-500">
+            <tr className="border-b text-left text-silver-dark">
               <th className="py-2">Job</th>
               <th className="py-2">Amount</th>
               <th className="py-2">Status</th>
@@ -71,7 +71,7 @@ export default async function TradePortalPage() {
             ))}
             {quotes.length === 0 && (
               <tr>
-                <td colSpan={3} className="py-4 text-gray-500">
+                <td colSpan={3} className="py-4 text-silver-dark">
                   No quotes submitted yet.
                 </td>
               </tr>

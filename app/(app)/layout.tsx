@@ -34,22 +34,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <aside className="w-56 shrink-0 border-r px-4 py-6">
-        <div className="mb-6 font-semibold">{org?.name ?? "Organization"}</div>
+      <aside className="w-56 shrink-0 bg-ink px-4 py-6 text-lily">
+        <div className="mb-6 font-semibold tracking-tight">{org?.name ?? "Organization"}</div>
         <nav className="flex flex-col gap-1">
           {NAV.map((item) => (
-            <Link key={item.href} href={item.href} className="rounded px-2 py-1.5 text-sm hover:bg-gray-100">
+            <Link
+              key={item.href}
+              href={item.href}
+              className="rounded px-2 py-1.5 text-sm text-lily/85 transition-colors hover:bg-ink-soft hover:text-lily"
+            >
               {item.label}
             </Link>
           ))}
         </nav>
         <form action={logout} className="mt-6">
-          <button className="text-sm text-gray-600 underline">Sign out</button>
+          <button className="text-sm text-silver underline hover:text-lily">Sign out</button>
         </form>
       </aside>
       <div className="flex-1">
         {s.impersonatedBy && (
-          <div className="flex items-center justify-between bg-amber-100 px-6 py-2 text-sm text-amber-900">
+          <div className="flex items-center justify-between border-b border-silver bg-silver-light px-6 py-2 text-sm text-ink">
             <span>
               Signed in as <strong>{s.email ?? s.phone}</strong> by {s.impersonatedBy.email} for support.
             </span>

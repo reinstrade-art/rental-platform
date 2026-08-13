@@ -42,18 +42,18 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
         <h1 className="text-lg font-semibold">
           {lease.tenant.name} — {lease.unit.property.name} / {lease.unit.label}
         </h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-silver-dark">
           {money(lease.monthlyRent)}/month · {lease.status} · Balance:{" "}
           <span className={balance > 0 ? "text-red-600 font-medium" : ""}>{money(balance)}</span>
         </p>
         <div className="mt-1 flex items-center gap-3">
-          <Link href={`/api/statement/${lease.id}`} target="_blank" className="text-xs underline text-gray-600">
+          <Link href={`/api/statement/${lease.id}`} target="_blank" className="text-xs underline text-silver-dark">
             Full statement
           </Link>
-          <Link href={`/api/agreement/${lease.id}`} target="_blank" className="text-xs underline text-gray-600">
+          <Link href={`/api/agreement/${lease.id}`} target="_blank" className="text-xs underline text-silver-dark">
             Tenancy agreement
           </Link>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-silver-dark">
             {lease.signedAt
               ? `Signed ${new Date(lease.signedAt).toLocaleDateString()} by ${lease.signedByName}`
               : "Not yet signed"}
@@ -66,7 +66,7 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
           <h2 className="font-semibold">Charges</h2>
           <table className="mt-2 w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b text-left text-gray-500">
+              <tr className="border-b text-left text-silver-dark">
                 <th className="py-1">Period</th>
                 <th className="py-1">Type</th>
                 <th className="py-1">Amount</th>
@@ -84,7 +84,7 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
               ))}
               {lease.charges.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-2 text-gray-500">
+                  <td colSpan={4} className="py-2 text-silver-dark">
                     No charges yet.
                   </td>
                 </tr>
@@ -97,7 +97,7 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
               key={p}
               href={`/api/invoice/${lease.id}?period=${p}`}
               target="_blank"
-              className="mr-3 text-xs underline text-gray-600"
+              className="mr-3 text-xs underline text-silver-dark"
             >
               Invoice {p}
             </Link>
@@ -114,7 +114,7 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
             <input name="periodMonth" type="month" required className="rounded border px-3 py-2" />
             <input name="amount" type="number" step="0.01" required placeholder="Amount" className="rounded border px-3 py-2" />
             <input name="description" placeholder="Description (optional)" className="rounded border px-3 py-2" />
-            <button type="submit" className="rounded bg-black px-3 py-2 text-white text-sm">
+            <button type="submit" className="rounded bg-ink px-3 py-2 text-lily text-sm">
               Add charge
             </button>
           </form>
@@ -124,7 +124,7 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
           <h2 className="font-semibold">Payments</h2>
           <table className="mt-2 w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b text-left text-gray-500">
+              <tr className="border-b text-left text-silver-dark">
                 <th className="py-1">Date</th>
                 <th className="py-1">Method</th>
                 <th className="py-1">Amount</th>
@@ -138,7 +138,7 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
                   <td className="py-1">{p.method ?? "—"}</td>
                   <td className="py-1">{money(p.amount)}</td>
                   <td className="py-1">
-                    <Link href={`/api/receipt/${p.id}`} target="_blank" className="text-xs underline text-gray-600">
+                    <Link href={`/api/receipt/${p.id}`} target="_blank" className="text-xs underline text-silver-dark">
                       Receipt
                     </Link>
                   </td>
@@ -146,7 +146,7 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
               ))}
               {lease.payments.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-2 text-gray-500">
+                  <td colSpan={4} className="py-2 text-silver-dark">
                     No payments yet.
                   </td>
                 </tr>
@@ -159,7 +159,7 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
             <input name="amount" type="number" step="0.01" required placeholder="Amount" className="rounded border px-3 py-2" />
             <input name="method" placeholder="Method (e.g. M-Pesa, Cash)" className="rounded border px-3 py-2" />
             <input name="reference" placeholder="Reference (optional)" className="rounded border px-3 py-2" />
-            <button type="submit" className="rounded bg-black px-3 py-2 text-white text-sm">
+            <button type="submit" className="rounded bg-ink px-3 py-2 text-lily text-sm">
               Record payment
             </button>
           </form>

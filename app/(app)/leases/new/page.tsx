@@ -45,7 +45,7 @@ export default async function NewLeasePage() {
           className="rounded border px-3 py-2"
         />
         <input name="startDate" type="date" required className="rounded border px-3 py-2" />
-        <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+        <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
           Add lease
         </button>
       </form>

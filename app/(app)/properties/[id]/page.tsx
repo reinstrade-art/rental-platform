@@ -14,14 +14,14 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-lg font-semibold">{property.name}</h1>
-        <p className="text-sm text-gray-500">{property.address ?? "No address on file"}</p>
+        <p className="text-sm text-silver-dark">{property.address ?? "No address on file"}</p>
       </div>
 
       <div>
         <h2 className="text-lg font-semibold">Units</h2>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-gray-500">
+            <tr className="border-b text-left text-silver-dark">
               <th className="py-2">Label</th>
               <th className="py-2">Monthly rent</th>
               <th className="py-2">Status</th>
@@ -52,14 +52,14 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
             })}
             {property.units.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-4 text-gray-500">
+                <td colSpan={4} className="py-4 text-silver-dark">
                   No units yet.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-silver-dark">
           A unit's payment code is matched against incoming transaction references (M-Pesa, bank, manual) to
           auto-record rent payments — see Payments.
         </p>
@@ -76,7 +76,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
             placeholder="Monthly rent (optional)"
             className="rounded border px-3 py-2"
           />
-          <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+          <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
             Add unit
           </button>
         </form>

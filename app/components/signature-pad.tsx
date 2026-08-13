@@ -77,8 +77,8 @@ export function SignaturePad({ name }: { name: string }) {
         onPointerLeave={end}
       />
       <div className="mt-1.5 flex items-center justify-between">
-        <p className="text-xs text-gray-500">Sign above with your mouse or finger.</p>
-        <button type="button" onClick={clear} className="text-xs text-gray-500 underline hover:text-gray-800">
+        <p className="text-xs text-silver-dark">Sign above with your mouse or finger.</p>
+        <button type="button" onClick={clear} className="text-xs text-silver-dark underline hover:text-ink">
           Clear
         </button>
       </div>

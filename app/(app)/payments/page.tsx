@@ -10,7 +10,7 @@ function money(n: number) {
 const STATUS_COLOR: Record<string, string> = {
   UNMATCHED: "text-orange-600",
   MATCHED: "text-green-700",
-  IGNORED: "text-gray-400",
+  IGNORED: "text-silver-dark",
 };
 
 export default async function PaymentsPage() {
@@ -24,7 +24,7 @@ export default async function PaymentsPage() {
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-lg font-semibold">Payments ingestion</h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-silver-dark">
           Every transaction — however it arrives — lands here first and either auto-matches by a unit's payment
           code or waits for a manual match. Nothing is guessed silently.
         </p>
@@ -33,13 +33,13 @@ export default async function PaymentsPage() {
       <div className="grid gap-8 md:grid-cols-2">
         <div className="max-w-sm">
           <h2 className="font-semibold">Log a transaction manually</h2>
-          <p className="text-xs text-gray-500">E.g. from a bank SMS or M-Pesa message you read yourself.</p>
+          <p className="text-xs text-silver-dark">E.g. from a bank SMS or M-Pesa message you read yourself.</p>
           <form action={addManualTransaction} className="mt-3 flex flex-col gap-2">
             <input name="occurredAt" type="date" required className="rounded border px-3 py-2" />
             <input name="amount" type="number" step="0.01" required placeholder="Amount" className="rounded border px-3 py-2" />
             <input name="reference" placeholder="Reference / account number" className="rounded border px-3 py-2" />
             <input name="payerName" placeholder="Payer name (optional)" className="rounded border px-3 py-2" />
-            <button type="submit" className="rounded bg-black px-3 py-2 text-sm text-white">
+            <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
               Add transaction
             </button>
           </form>
@@ -47,10 +47,10 @@ export default async function PaymentsPage() {
 
         <div className="max-w-sm">
           <h2 className="font-semibold">Import a CSV</h2>
-          <p className="text-xs text-gray-500">One row per transaction: date,amount,reference,payer</p>
+          <p className="text-xs text-silver-dark">One row per transaction: date,amount,reference,payer</p>
           <form action={importTransactionsCsv} className="mt-3 flex flex-col gap-2" encType="multipart/form-data">
             <input name="file" type="file" accept=".csv,text/csv" required className="rounded border px-3 py-2 text-sm" />
-            <button type="submit" className="rounded bg-black px-3 py-2 text-sm text-white">
+            <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
               Import
             </button>
           </form>
@@ -61,7 +61,7 @@ export default async function PaymentsPage() {
         <h2 className="font-semibold">Unmatched ({unmatched.length})</h2>
         <table className="mt-2 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-gray-500">
+            <tr className="border-b text-left text-silver-dark">
               <th className="py-1">Date</th>
               <th className="py-1">Amount</th>
               <th className="py-1">Reference</th>
@@ -94,14 +94,14 @@ export default async function PaymentsPage() {
                 </td>
                 <td className="py-1">
                   <form action={ignoreTransactionAction.bind(null, t.id)}>
-                    <button className="text-xs underline text-gray-500">Ignore</button>
+                    <button className="text-xs underline text-silver-dark">Ignore</button>
                   </form>
                 </td>
               </tr>
             ))}
             {unmatched.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-4 text-gray-500">
+                <td colSpan={7} className="py-4 text-silver-dark">
                   Nothing waiting on a match.
                 </td>
               </tr>
@@ -114,7 +114,7 @@ export default async function PaymentsPage() {
         <h2 className="font-semibold">All transactions</h2>
         <table className="mt-2 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-gray-500">
+            <tr className="border-b text-left text-silver-dark">
               <th className="py-1">Date</th>
               <th className="py-1">Amount</th>
               <th className="py-1">Reference</th>
@@ -137,7 +137,7 @@ export default async function PaymentsPage() {
             ))}
             {transactions.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-4 text-gray-500">
+                <td colSpan={5} className="py-4 text-silver-dark">
                   No transactions yet.
                 </td>
               </tr>

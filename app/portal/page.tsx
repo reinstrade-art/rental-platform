@@ -48,20 +48,20 @@ export default async function TenantPortalPage() {
                 <div className="font-medium">
                   {lease.unit.property.name} / {lease.unit.label}
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-silver-dark">
                   {money(lease.monthlyRent)}/month · {lease.status}
                 </div>
                 <div className="flex gap-3">
-                  <Link href={`/api/statement/${lease.id}`} target="_blank" className="text-xs underline text-gray-600">
+                  <Link href={`/api/statement/${lease.id}`} target="_blank" className="text-xs underline text-silver-dark">
                     Full statement
                   </Link>
-                  <Link href={`/api/agreement/${lease.id}`} target="_blank" className="text-xs underline text-gray-600">
+                  <Link href={`/api/agreement/${lease.id}`} target="_blank" className="text-xs underline text-silver-dark">
                     Tenancy agreement
                   </Link>
                 </div>
               </div>
               <div className={`text-right ${balance > 0 ? "text-red-600" : "text-green-700"}`}>
-                <div className="text-xs text-gray-500">Balance</div>
+                <div className="text-xs text-silver-dark">Balance</div>
                 <div className="text-lg font-semibold">{money(balance)}</div>
               </div>
             </div>
@@ -82,7 +82,7 @@ export default async function TenantPortalPage() {
                     ))}
                     {lease.charges.length === 0 && (
                       <tr>
-                        <td className="py-1 text-gray-500">No charges yet.</td>
+                        <td className="py-1 text-silver-dark">No charges yet.</td>
                       </tr>
                     )}
                   </tbody>
@@ -93,7 +93,7 @@ export default async function TenantPortalPage() {
                       key={p}
                       href={`/api/invoice/${lease.id}?period=${p}`}
                       target="_blank"
-                      className="text-xs underline text-gray-600"
+                      className="text-xs underline text-silver-dark"
                     >
                       Invoice {p}
                     </Link>
@@ -110,7 +110,7 @@ export default async function TenantPortalPage() {
                         <td className="py-1">{p.method ?? "—"}</td>
                         <td className="py-1 text-right">{money(p.amount)}</td>
                         <td className="py-1 text-right">
-                          <Link href={`/api/receipt/${p.id}`} target="_blank" className="text-xs underline text-gray-600">
+                          <Link href={`/api/receipt/${p.id}`} target="_blank" className="text-xs underline text-silver-dark">
                             Receipt
                           </Link>
                         </td>
@@ -118,7 +118,7 @@ export default async function TenantPortalPage() {
                     ))}
                     {lease.payments.length === 0 && (
                       <tr>
-                        <td className="py-1 text-gray-500">No payments yet.</td>
+                        <td className="py-1 text-silver-dark">No payments yet.</td>
                       </tr>
                     )}
                   </tbody>
@@ -148,7 +148,7 @@ export default async function TenantPortalPage() {
                 </p>
               ) : (
                 <form action={signLease.bind(null, lease.id)} className="mt-2 flex flex-col gap-2">
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-silver-dark">
                     Read the full{" "}
                     <Link href={`/api/agreement/${lease.id}`} target="_blank" className="underline">
                       tenancy agreement
@@ -163,7 +163,7 @@ export default async function TenantPortalPage() {
                     className="rounded border px-3 py-2 text-sm"
                   />
                   <SignaturePad name="signatureImage" />
-                  <button type="submit" className="rounded bg-black px-3 py-2 text-sm text-white">
+                  <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
                     Sign agreement
                   </button>
                 </form>
@@ -172,7 +172,7 @@ export default async function TenantPortalPage() {
           </div>
         );
       })}
-      {tenant.leases.length === 0 && <p className="text-sm text-gray-500">No tenancy on file yet.</p>}
+      {tenant.leases.length === 0 && <p className="text-sm text-silver-dark">No tenancy on file yet.</p>}
     </div>
   );
 }

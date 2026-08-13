@@ -22,7 +22,7 @@ export default async function SettingsPage() {
     <div className="flex flex-col gap-10">
     <div className="max-w-sm">
       <h1 className="text-lg font-semibold">Document branding</h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-silver-dark">
         Shown on the letterhead of receipts and invoices sent to tenants and tradesmen. Falls back to your
         organization name if left blank.
       </p>
@@ -53,7 +53,7 @@ export default async function SettingsPage() {
         />
 
         <label className="mt-2 flex items-center gap-3 text-sm">
-          <span className="text-gray-600">Brand color</span>
+          <span className="text-silver-dark">Brand color</span>
           <input
             type="color"
             name="brandColor"
@@ -61,12 +61,12 @@ export default async function SettingsPage() {
             className="h-9 w-14 cursor-pointer rounded border"
           />
         </label>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-silver-dark">
           Used for the band/rail color on receipts and invoices — every organization gets its own look from the
           same template, not a shared default.
         </p>
 
-        <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+        <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
           Save
         </button>
       </form>
@@ -74,7 +74,7 @@ export default async function SettingsPage() {
 
     <div className="max-w-lg">
       <h2 className="text-lg font-semibold">Lease terms</h2>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-silver-dark">
         Printed verbatim into every tenancy agreement PDF. This is your own legal text — tenancy terms vary by
         jurisdiction and by landlord, so nothing here is drafted for you. Have it reviewed before use.
       </p>
@@ -86,7 +86,7 @@ export default async function SettingsPage() {
           placeholder="Enter your tenancy terms here..."
           className="rounded border px-3 py-2 font-mono text-xs"
         />
-        <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+        <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
           Save
         </button>
       </form>
@@ -95,7 +95,7 @@ export default async function SettingsPage() {
     {s.role === "ADMIN" && (
     <div className="max-w-sm">
       <h2 className="text-lg font-semibold">M-Pesa (STK Push)</h2>
-      <p className="mt-1 text-sm text-gray-500">
+      <p className="mt-1 text-sm text-silver-dark">
         Uses this organization's own Safaricom shortcode — there is no shared/platform paybill. Get these from your
         Daraja app at developer.safaricom.co.ke.
         {mpesaConfigured({
@@ -137,7 +137,7 @@ export default async function SettingsPage() {
           placeholder="Passkey"
           className="rounded border px-3 py-2"
         />
-        <button type="submit" className="rounded bg-black px-3 py-2 text-white">
+        <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
           Save
         </button>
       </form>
@@ -154,14 +154,14 @@ export default async function SettingsPage() {
         )}
       </div>
       {sessions.length === 0 ? (
-        <p className="mt-2 text-xs text-gray-500">Nothing else — this is the only place you're signed in.</p>
+        <p className="mt-2 text-xs text-silver-dark">Nothing else — this is the only place you're signed in.</p>
       ) : (
         <ul className="mt-2 flex flex-col gap-2">
           {sessions.map((sess) => (
             <li key={sess.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
               <div>
                 <div>{deviceLabel(sess.userAgent)}</div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-silver-dark">
                   Signed in {new Date(sess.createdAt).toLocaleDateString()} · last active{" "}
                   {new Date(sess.lastSeenAt).toLocaleDateString()}
                   {sess.ip ? ` · ${sess.ip}` : ""}
