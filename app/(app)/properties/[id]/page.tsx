@@ -21,7 +21,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
         <h2 className="text-lg font-semibold">Units</h2>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-silver-dark">
+            <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
               <th className="py-2">Label</th>
               <th className="py-2">Monthly rent</th>
               <th className="py-2">Status</th>

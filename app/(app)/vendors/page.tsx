@@ -19,7 +19,7 @@ export default async function VendorsPage() {
       </div>
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b text-left text-silver-dark">
+          <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
             <th className="py-2">Name</th>
             <th className="py-2">Trade</th>
             <th className="py-2">Contact</th>

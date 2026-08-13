@@ -9,11 +9,26 @@
 :root {
   --color-ink: #17181a; /* matte black — primary surfaces, primary buttons */
   --color-ink-soft: #26282b; /* lifted matte black — hover states on dark surfaces */
-  --color-silver: #aeb4bd; /* mid silver — borders, secondary icons */
-  --color-silver-light: #e8e9ec; /* pale silver — subtle fills, table stripes */
-  --color-silver-dark: #6b7078; /* deep silver — muted/secondary text on light */
+  --color-silver: #c3c8d1; /* cooler, brighter silver — reads as metal rather than flat gray */
+  --color-silver-light: #eef0f3; /* pale silver — subtle fills, table stripes */
+  --color-silver-dark: #767c86; /* deep silver — muted/secondary text on light */
   --color-lily: #faf9f6; /* lily white — page background, text on dark */
   --color-gold: #e8b93f; /* one warm accent — focus states, hover highlights, small touches only, never large fills */
+
+  /* Brushed-metal sheen: light-dark-light bands simulate reflected light
+     across a curved metal surface. Used only on flat, non-rounded strips
+     (table header bands, shell top edges) — border-image and gradients
+     don't respect border-radius, so this is deliberately kept off rounded
+     cards/buttons rather than faked there. */
+  --gradient-metal: linear-gradient(
+    100deg,
+    #eef0f3 0%,
+    #cfd3d9 20%,
+    #9aa0ab 42%,
+    #dde1e6 58%,
+    #b3b9c2 76%,
+    #eef0f3 100%
+  );
 
   --background: var(--color-lily);
   --foreground: var(--color-ink);
@@ -61,5 +76,13 @@ body {
   textarea:focus-visible {
     outline: 2px solid var(--color-gold);
     outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Brushed-metal surface — table header bands, thin edges on the dark
+     shells. Not applied to rounded elements; see --gradient-metal above. */
+  .bg-metal {
+    background-image: var(--gradient-metal);
   }
 }

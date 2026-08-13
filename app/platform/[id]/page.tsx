@@ -84,7 +84,7 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
         <h2 className="font-semibold">Leases</h2>
         <table className="mt-2 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-silver-dark">
+            <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
               <th className="py-1">Tenant</th>
               <th className="py-1">Unit</th>
               <th className="py-1">Monthly rent</th>

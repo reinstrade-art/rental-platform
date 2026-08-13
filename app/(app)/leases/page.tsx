@@ -33,7 +33,7 @@ export default async function LeasesPage() {
       </div>
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b text-left text-silver-dark">
+          <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
             <th className="py-2">Tenant</th>
             <th className="py-2">Unit</th>
             <th className="py-2">Monthly rent</th>

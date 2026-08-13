@@ -61,7 +61,7 @@ export default async function PaymentsPage() {
         <h2 className="font-semibold">Unmatched ({unmatched.length})</h2>
         <table className="mt-2 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-silver-dark">
+            <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
               <th className="py-1">Date</th>
               <th className="py-1">Amount</th>
               <th className="py-1">Reference</th>
@@ -114,7 +114,7 @@ export default async function PaymentsPage() {
         <h2 className="font-semibold">All transactions</h2>
         <table className="mt-2 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-silver-dark">
+            <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
               <th className="py-1">Date</th>
               <th className="py-1">Amount</th>
               <th className="py-1">Reference</th>

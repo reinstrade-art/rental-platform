@@ -34,24 +34,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <aside className="w-56 shrink-0 bg-ink px-4 py-6 text-lily">
-        <div className="mb-6 border-l-2 border-gold pl-2 font-semibold tracking-tight">
-          {org?.name ?? "Organization"}
+      <aside className="flex w-56 shrink-0 flex-col bg-ink text-lily">
+        <div className="h-1 shrink-0 bg-metal" />
+        <div className="flex-1 px-4 py-6">
+          <div className="mb-6 border-l-2 border-gold pl-2 font-semibold tracking-tight">
+            {org?.name ?? "Organization"}
+          </div>
+          <nav className="flex flex-col gap-1">
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded px-2 py-1.5 text-sm text-lily/85 transition-colors hover:bg-ink-soft hover:text-gold"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          <form action={logout} className="mt-6">
+            <button className="text-sm text-silver underline hover:text-gold">Sign out</button>
+          </form>
         </div>
-        <nav className="flex flex-col gap-1">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded px-2 py-1.5 text-sm text-lily/85 transition-colors hover:bg-ink-soft hover:text-gold"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        <form action={logout} className="mt-6">
-          <button className="text-sm text-silver underline hover:text-gold">Sign out</button>
-        </form>
       </aside>
       <div className="flex-1">
         {s.impersonatedBy && (

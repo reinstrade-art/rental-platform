@@ -18,7 +18,7 @@ export default async function TradePortalPage() {
         <h1 className="text-lg font-semibold">My awarded jobs</h1>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-silver-dark">
+            <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
               <th className="py-2">Job</th>
               <th className="py-2">Location</th>
               <th className="py-2">Status</th>
@@ -52,7 +52,7 @@ export default async function TradePortalPage() {
         <h2 className="text-lg font-semibold">My quotes</h2>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-silver-dark">
+            <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
               <th className="py-2">Job</th>
               <th className="py-2">Amount</th>
               <th className="py-2">Status</th>

@@ -25,7 +25,7 @@ export default async function RepairsPage() {
       </div>
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b text-left text-silver-dark">
+          <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
             <th className="py-2">Title</th>
             <th className="py-2">Property / Unit</th>
             <th className="py-2">Priority</th>

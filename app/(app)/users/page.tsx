@@ -16,7 +16,7 @@ export default async function UsersPage() {
         <h1 className="text-lg font-semibold">Team</h1>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b text-left text-silver-dark">
+            <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
               <th className="py-2">Email</th>
               <th className="py-2">Role</th>
               <th className="py-2">Status</th>
