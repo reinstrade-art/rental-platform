@@ -11,7 +11,8 @@ const PREVIEW_ORG = {
 
 export default function RegisterPage() {
   return (
-    <main className="flex min-h-screen justify-center bg-ink px-4 py-10">
+    <main className="flex min-h-screen flex-col items-center gap-6 bg-ink px-4 py-10">
+      <img src="/logo.svg" alt="Reins Estate Management Realty" className="w-48 shrink-0" />
       <div className="h-fit w-full max-w-sm rounded-lg border border-ink-soft border-t-2 border-t-gold bg-lily p-8 shadow-xl">
         <h1 className="text-xl font-semibold text-ink">Register</h1>
         <p className="mt-1 text-sm text-silver-dark">

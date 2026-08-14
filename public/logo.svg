@@ -1,0 +1,103 @@
+<svg width="800" height="920" viewBox="0 0 800 920" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Reins Estate Management Realty logo</title>
+  <desc>A gold gradient skyline icon on a black background, with the wordmark "Reins Estate Management Realty" and the tagline "Management Solid".</desc>
+  <defs>
+    <linearGradient id="goldFace" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FCEEB0"/>
+      <stop offset="30%" stop-color="#E8C25E"/>
+      <stop offset="55%" stop-color="#C89B3C"/>
+      <stop offset="80%" stop-color="#F0D488"/>
+      <stop offset="100%" stop-color="#B8892E"/>
+    </linearGradient>
+    <linearGradient id="goldFaceDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C89B3C"/>
+      <stop offset="100%" stop-color="#8C6A24"/>
+    </linearGradient>
+    <linearGradient id="goldText" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F5DE8C"/>
+      <stop offset="50%" stop-color="#D8AC4E"/>
+      <stop offset="100%" stop-color="#F5DE8C"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="800" height="920" fill="#0A0A0A"/>
+
+  <g>
+    <polygon points="250,430 250,300 285,265 320,300 320,430" fill="url(#goldFaceDark)"/>
+    <rect x="258" y="320" width="10" height="14" fill="#3a2c10"/>
+    <rect x="278" y="320" width="10" height="14" fill="#3a2c10"/>
+    <rect x="298" y="320" width="10" height="14" fill="#3a2c10"/>
+    <rect x="258" y="350" width="10" height="14" fill="#3a2c10"/>
+    <rect x="278" y="350" width="10" height="14" fill="#3a2c10"/>
+    <rect x="298" y="350" width="10" height="14" fill="#3a2c10"/>
+    <rect x="258" y="380" width="10" height="14" fill="#3a2c10"/>
+    <rect x="278" y="380" width="10" height="14" fill="#3a2c10"/>
+    <rect x="298" y="380" width="10" height="14" fill="#3a2c10"/>
+
+    <polygon points="320,430 320,220 365,175 410,220 410,430" fill="url(#goldFace)"/>
+    <rect x="332" y="240" width="12" height="16" fill="#4a3410"/>
+    <rect x="356" y="240" width="12" height="16" fill="#4a3410"/>
+    <rect x="380" y="240" width="12" height="16" fill="#4a3410"/>
+    <rect x="332" y="275" width="12" height="16" fill="#4a3410"/>
+    <rect x="356" y="275" width="12" height="16" fill="#4a3410"/>
+    <rect x="380" y="275" width="12" height="16" fill="#4a3410"/>
+    <rect x="332" y="310" width="12" height="16" fill="#4a3410"/>
+    <rect x="356" y="310" width="12" height="16" fill="#4a3410"/>
+    <rect x="380" y="310" width="12" height="16" fill="#4a3410"/>
+    <rect x="332" y="345" width="12" height="16" fill="#4a3410"/>
+    <rect x="356" y="345" width="12" height="16" fill="#4a3410"/>
+    <rect x="380" y="345" width="12" height="16" fill="#4a3410"/>
+    <rect x="332" y="380" width="12" height="16" fill="#4a3410"/>
+    <rect x="356" y="380" width="12" height="16" fill="#4a3410"/>
+    <rect x="380" y="380" width="12" height="16" fill="#4a3410"/>
+
+    <polygon points="410,430 410,150 400,150 455,95 510,150 500,150 500,430" fill="url(#goldFace)"/>
+    <rect x="425" y="175" width="13" height="18" fill="#4a3410"/>
+    <rect x="452" y="175" width="13" height="18" fill="#4a3410"/>
+    <rect x="479" y="175" width="13" height="18" fill="#4a3410"/>
+    <rect x="425" y="215" width="13" height="18" fill="#4a3410"/>
+    <rect x="452" y="215" width="13" height="18" fill="#4a3410"/>
+    <rect x="479" y="215" width="13" height="18" fill="#4a3410"/>
+    <rect x="425" y="255" width="13" height="18" fill="#4a3410"/>
+    <rect x="452" y="255" width="13" height="18" fill="#4a3410"/>
+    <rect x="479" y="255" width="13" height="18" fill="#4a3410"/>
+    <rect x="425" y="295" width="13" height="18" fill="#4a3410"/>
+    <rect x="452" y="295" width="13" height="18" fill="#4a3410"/>
+    <rect x="479" y="295" width="13" height="18" fill="#4a3410"/>
+    <rect x="425" y="335" width="13" height="18" fill="#4a3410"/>
+    <rect x="452" y="335" width="13" height="18" fill="#4a3410"/>
+    <rect x="479" y="335" width="13" height="18" fill="#4a3410"/>
+    <rect x="425" y="375" width="13" height="18" fill="#4a3410"/>
+    <rect x="452" y="375" width="13" height="18" fill="#4a3410"/>
+    <rect x="479" y="375" width="13" height="18" fill="#4a3410"/>
+
+    <polygon points="500,430 500,240 545,200 590,240 590,430" fill="url(#goldFace)"/>
+    <rect x="512" y="258" width="11" height="15" fill="#4a3410"/>
+    <rect x="535" y="258" width="11" height="15" fill="#4a3410"/>
+    <rect x="558" y="258" width="11" height="15" fill="#4a3410"/>
+    <rect x="512" y="292" width="11" height="15" fill="#4a3410"/>
+    <rect x="535" y="292" width="11" height="15" fill="#4a3410"/>
+    <rect x="558" y="292" width="11" height="15" fill="#4a3410"/>
+    <rect x="512" y="326" width="11" height="15" fill="#4a3410"/>
+    <rect x="535" y="326" width="11" height="15" fill="#4a3410"/>
+    <rect x="558" y="326" width="11" height="15" fill="#4a3410"/>
+    <rect x="512" y="360" width="11" height="15" fill="#4a3410"/>
+    <rect x="535" y="360" width="11" height="15" fill="#4a3410"/>
+    <rect x="558" y="360" width="11" height="15" fill="#4a3410"/>
+
+    <polygon points="590,430 590,310 615,280 640,310 640,430" fill="url(#goldFaceDark)"/>
+    <rect x="600" y="325" width="10" height="13" fill="#3a2c10"/>
+    <rect x="620" y="325" width="10" height="13" fill="#3a2c10"/>
+    <rect x="600" y="355" width="10" height="13" fill="#3a2c10"/>
+    <rect x="620" y="355" width="10" height="13" fill="#3a2c10"/>
+
+    <rect x="245" y="428" width="400" height="7" fill="#E8C25E"/>
+  </g>
+
+  <text x="400" y="530" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="46" font-weight="700" letter-spacing="3" fill="url(#goldText)">REINS ESTATE</text>
+  <text x="400" y="580" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="30" font-weight="700" letter-spacing="4" fill="url(#goldText)">MANAGEMENT REALTY</text>
+
+  <line x1="290" y1="625" x2="345" y2="625" stroke="#D8AC4E" stroke-width="1.5"/>
+  <text x="400" y="632" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="18" letter-spacing="6" fill="#D8AC4E">MANAGEMENT SOLID</text>
+  <line x1="455" y1="625" x2="510" y2="625" stroke="#D8AC4E" stroke-width="1.5"/>
+</svg>
