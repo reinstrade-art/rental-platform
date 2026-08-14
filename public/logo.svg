@@ -1,6 +1,6 @@
-<svg width="800" height="920" viewBox="0 0 800 920" xmlns="http://www.w3.org/2000/svg" role="img">
-  <title>Reins Estate Management Realty logo</title>
-  <desc>A gold gradient skyline icon on a black background, with the wordmark "Reins Estate Management Realty" and the tagline "Management Solid".</desc>
+<svg width="800" height="640" viewBox="0 0 800 640" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Reins Realty logo</title>
+  <desc>A gold gradient skyline icon on a black background, with the wordmark "Reins Realty" and the tagline "Management Solid".</desc>
   <defs>
     <linearGradient id="goldFace" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#FCEEB0"/>
@@ -20,7 +20,7 @@
     </linearGradient>
   </defs>
 
-  <rect x="0" y="0" width="800" height="920" fill="#0A0A0A"/>
+  <rect x="0" y="0" width="800" height="640" fill="#0A0A0A"/>
 
   <g>
     <polygon points="250,430 250,300 285,265 320,300 320,430" fill="url(#goldFaceDark)"/>
@@ -94,10 +94,9 @@
     <rect x="245" y="428" width="400" height="7" fill="#E8C25E"/>
   </g>
 
-  <text x="400" y="530" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="46" font-weight="700" letter-spacing="3" fill="url(#goldText)">REINS ESTATE</text>
-  <text x="400" y="580" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="30" font-weight="700" letter-spacing="4" fill="url(#goldText)">MANAGEMENT REALTY</text>
+  <text x="400" y="528" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="58" font-weight="700" letter-spacing="4" fill="url(#goldText)">REINS REALTY</text>
 
-  <line x1="290" y1="625" x2="345" y2="625" stroke="#D8AC4E" stroke-width="1.5"/>
-  <text x="400" y="632" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="18" letter-spacing="6" fill="#D8AC4E">MANAGEMENT SOLID</text>
-  <line x1="455" y1="625" x2="510" y2="625" stroke="#D8AC4E" stroke-width="1.5"/>
+  <line x1="270" y1="580" x2="325" y2="580" stroke="#D8AC4E" stroke-width="1.5"/>
+  <text x="400" y="587" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="18" letter-spacing="6" fill="#D8AC4E">MANAGEMENT SOLID</text>
+  <line x1="475" y1="580" x2="530" y2="580" stroke="#D8AC4E" stroke-width="1.5"/>
 </svg>

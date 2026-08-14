@@ -7,7 +7,7 @@ export default async function SetupPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-ink px-4">
-      <img src="/logo.svg" alt="Reins Estate Management Realty" className="w-48" />
+      <img src="/logo.svg" alt="Reins Realty" className="w-48" />
       <div className="w-full max-w-sm rounded-lg border border-ink-soft border-t-2 border-t-gold bg-lily p-8 shadow-xl">
         <h1 className="text-xl font-semibold text-ink">Set up the Platform</h1>
         <p className="mt-1 text-sm text-silver-dark">
