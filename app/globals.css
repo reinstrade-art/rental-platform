@@ -48,8 +48,23 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/*
+ * The watermark: the user's own reference photo (dark interior, city
+ * skyline through the window), fixed behind every page. On the lily-white
+ * content pages it's almost entirely covered by a near-opaque lily tint
+ * (94%) — enough to read as texture, not enough to fight with financial
+ * data in tables. On the matte-black shells (sidebar/headers/auth) it's
+ * blended in at higher visibility since dark-on-dark doesn't hurt legibility
+ * there. Same image, two opacities, one `background-blend-mode: multiply`
+ * so the photo always sits *under* the palette rather than washing it out.
+ */
 body {
-  background: var(--background);
+  background-color: var(--background);
+  background-image: linear-gradient(rgba(250, 249, 246, 0.94), rgba(250, 249, 246, 0.94)), url("/bg-watermark.jpg");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
@@ -84,5 +99,18 @@ body {
      shells. Not applied to rounded elements; see --gradient-metal above. */
   .bg-metal {
     background-image: var(--gradient-metal);
+  }
+
+  /* The watermark photo at higher visibility, for large matte-black
+     surfaces only (sidebar, headers, auth backgrounds) — never on buttons
+     or small elements, where a photo texture would just read as noise.
+     A lighter ink tint (78%, vs. the body's 94% lily tint) lets more of
+     the photo show through since dark-on-dark doesn't threaten legibility
+     the way it would on a page full of numbers. */
+  .bg-ink-photo {
+    background-color: var(--color-ink);
+    background-image: linear-gradient(rgba(10, 10, 10, 0.78), rgba(10, 10, 10, 0.78)), url("/bg-watermark.jpg");
+    background-size: cover;
+    background-position: center;
   }
 }

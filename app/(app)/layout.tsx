@@ -34,7 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-56 shrink-0 flex-col bg-ink text-lily">
+      <aside className="flex w-56 shrink-0 flex-col bg-ink-photo text-lily">
         <div className="h-1 shrink-0 bg-metal" />
         <div className="flex-1 px-4 py-6">
           <div className="mb-6 border-l-2 border-gold pl-2 font-semibold tracking-tight">

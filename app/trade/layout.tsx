@@ -9,7 +9,7 @@ export default async function TradeLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen">
-      <header className="bg-ink text-lily">
+      <header className="bg-ink-photo text-lily">
         <div className="h-1 bg-metal" />
         <div className="flex items-center justify-between px-6 py-3">
           <div className="border-l-2 border-gold pl-2 font-semibold tracking-tight">My Jobs</div>
