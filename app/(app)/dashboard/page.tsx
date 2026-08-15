@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getDashboard, getPropertyRollups, getRepairSummary } from "@/app/lib/data";
 import { redirect } from "next/navigation";
@@ -17,14 +18,14 @@ export default async function DashboardPage() {
   ]);
 
   const tiles = [
-    { label: "Properties", value: dash.propertyCount },
-    { label: "Units", value: `${dash.occupiedUnits} / ${dash.unitCount} occupied` },
-    { label: "Active leases", value: dash.activeLeaseCount },
-    { label: "Billed this month", value: money(dash.billedThisMonth) },
-    { label: "Received this month", value: money(dash.receivedThisMonth) },
-    { label: "Arrears (all leases)", value: money(dash.grossArrears) },
-    { label: "Repairs pending", value: `${repairs.pendingCount} (${money(repairs.pendingCost)})` },
-    { label: "Repairs done", value: `${repairs.doneCount} (${money(repairs.doneCost)})` },
+    { label: "Properties", value: dash.propertyCount, href: "/properties" },
+    { label: "Units", value: `${dash.occupiedUnits} / ${dash.unitCount} occupied`, href: "/properties" },
+    { label: "Active leases", value: dash.activeLeaseCount, href: "/leases" },
+    { label: "Billed this month", value: money(dash.billedThisMonth), href: "/leases" },
+    { label: "Received this month", value: money(dash.receivedThisMonth), href: "/payments" },
+    { label: "Arrears (all leases)", value: money(dash.grossArrears), href: "/leases" },
+    { label: "Repairs pending", value: `${repairs.pendingCount} (${money(repairs.pendingCost)})`, href: "/repairs" },
+    { label: "Repairs done", value: `${repairs.doneCount} (${money(repairs.doneCost)})`, href: "/repairs" },
   ];
 
   return (
@@ -33,10 +34,14 @@ export default async function DashboardPage() {
         <h1 className="text-lg font-semibold">Dashboard</h1>
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
           {tiles.map((t) => (
-            <div key={t.label} className="rounded border p-4">
+            <Link
+              key={t.label}
+              href={t.href}
+              className="rounded border p-4 transition-colors hover:border-t-2 hover:border-t-gold hover:bg-silver-light"
+            >
               <div className="text-xs text-silver-dark">{t.label}</div>
               <div className="mt-1 text-xl font-semibold">{t.value}</div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>
@@ -55,8 +60,12 @@ export default async function DashboardPage() {
           </thead>
           <tbody>
             {rollups.map((p) => (
-              <tr key={p.id} className="border-b">
-                <td className="py-2">{p.name}</td>
+              <tr key={p.id} className="border-b hover:bg-silver-light">
+                <td className="py-2">
+                  <Link href={`/properties/${p.id}`} className="underline">
+                    {p.name}
+                  </Link>
+                </td>
                 <td className="py-2">{p.unitCount}</td>
                 <td className="py-2">{p.occupied}</td>
                 <td className="py-2">{money(p.billed)}</td>

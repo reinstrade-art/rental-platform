@@ -25,6 +25,7 @@ import { raiseApproval, signApproval } from "./approvals";
 import { createInvitation, redeemInvitation } from "./invites";
 import { ingestTransaction, matchTransaction, ignoreTransaction, parseTransactionsCsv } from "./payments";
 import { logPlatformAccess } from "./audit";
+import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll } from "./import";
 
 // --- auth --------------------------------------------------------------
 
@@ -188,6 +189,53 @@ export async function createProperty(formData: FormData) {
   redirect("/properties");
 }
 
+export async function updateProperty(propertyId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
+  if (!property) throw new Error("Property not found.");
+
+  const name = String(formData.get("name") ?? "").trim();
+  const address = String(formData.get("address") ?? "").trim() || null;
+  if (!name) throw new Error("Property name is required.");
+
+  await prisma.property.update({ where: { id: propertyId }, data: { name, address } });
+  redirect("/properties");
+}
+
+/** Blocked while units remain, since deleting the row would otherwise fail the FK to Unit — the office removes units first, deliberately, rather than the delete silently cascading away leases/charges/payments underneath them. */
+export async function deleteProperty(propertyId: string) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const property = await prisma.property.findFirst({
+    where: { id: propertyId, organizationId: s.organizationId },
+    include: { units: true },
+  });
+  if (!property) throw new Error("Property not found.");
+  if (property.units.length > 0) throw new Error("Remove this property's units before deleting it.");
+
+  await prisma.property.delete({ where: { id: propertyId } });
+  redirect("/properties");
+}
+
+/** One row per property: name,address — header row optional. */
+export async function importPropertiesCsv(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) throw new Error("Choose a CSV file.");
+  const rows = parsePropertiesCsv(await file.text());
+  if (rows.length === 0) throw new Error("No valid rows found — expected name,address per line.");
+
+  for (const row of rows) {
+    await prisma.property.create({ data: { organizationId: s.organizationId, name: row.name, address: row.address } });
+  }
+  redirect("/properties");
+}
+
 export async function createUnit(propertyId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
@@ -220,6 +268,60 @@ export async function createTenant(formData: FormData) {
   redirect("/tenants");
 }
 
+export async function updateTenant(tenantId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const tenant = await prisma.tenant.findFirst({ where: { id: tenantId, organizationId: s.organizationId } });
+  if (!tenant) throw new Error("Tenant not found.");
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) throw new Error("Tenant name is required.");
+
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: {
+      name,
+      phone: String(formData.get("phone") ?? "").trim() || null,
+      email: String(formData.get("email") ?? "").trim() || null,
+    },
+  });
+  redirect("/tenants");
+}
+
+/** Blocked while leases or portal access remain attached — both are FKs to this row, so the office clears them first rather than the delete cascading history away. */
+export async function deleteTenant(tenantId: string) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const tenant = await prisma.tenant.findFirst({
+    where: { id: tenantId, organizationId: s.organizationId },
+    include: { leases: true, user: true },
+  });
+  if (!tenant) throw new Error("Tenant not found.");
+  if (tenant.leases.length > 0) throw new Error("Remove this tenant's leases before deleting them.");
+  if (tenant.user) throw new Error("This tenant has portal access — disable it before deleting.");
+
+  await prisma.tenant.delete({ where: { id: tenantId } });
+  redirect("/tenants");
+}
+
+/** One row per tenant: name,phone,email — header row optional. */
+export async function importTenantsCsv(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) throw new Error("Choose a CSV file.");
+  const rows = parseTenantsCsv(await file.text());
+  if (rows.length === 0) throw new Error("No valid rows found — expected name,phone,email per line.");
+
+  for (const row of rows) {
+    await prisma.tenant.create({ data: { organizationId: s.organizationId, name: row.name, phone: row.phone, email: row.email } });
+  }
+  redirect("/tenants");
+}
+
 export async function createLease(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
@@ -241,6 +343,72 @@ export async function createLease(formData: FormData) {
   await prisma.lease.create({
     data: { organizationId: s.organizationId, unitId, tenantId, monthlyRent, startDate, status: "ACTIVE" },
   });
+  redirect("/leases");
+}
+
+export async function updateLease(leaseId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const lease = await prisma.lease.findFirst({ where: { id: leaseId, organizationId: s.organizationId } });
+  if (!lease) throw new Error("Lease not found.");
+
+  const monthlyRent = Number(formData.get("monthlyRent") ?? 0);
+  const startDate = new Date(String(formData.get("startDate") ?? ""));
+  const endDateRaw = String(formData.get("endDate") ?? "").trim();
+  const endDate = endDateRaw ? new Date(endDateRaw) : null;
+  const status = String(formData.get("status") ?? lease.status);
+  if (!monthlyRent || isNaN(startDate.getTime())) throw new Error("Monthly rent and a valid start date are required.");
+  if (endDateRaw && isNaN((endDate as Date).getTime())) throw new Error("Invalid end date.");
+  if (status !== "ACTIVE" && status !== "ENDED") throw new Error("Invalid status.");
+
+  await prisma.lease.update({ where: { id: leaseId }, data: { monthlyRent, startDate, endDate, status } });
+  redirect("/leases");
+}
+
+/** Blocked once charges or payments exist — deleting would erase real financial history, so ending the lease (status ENDED) is the correct action at that point instead. */
+export async function deleteLease(leaseId: string) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const lease = await prisma.lease.findFirst({
+    where: { id: leaseId, organizationId: s.organizationId },
+    include: { charges: true, payments: true },
+  });
+  if (!lease) throw new Error("Lease not found.");
+  if (lease.charges.length > 0 || lease.payments.length > 0) {
+    throw new Error("This lease has charges or payments on record — end it instead of deleting, to keep the financial history.");
+  }
+
+  await prisma.lease.delete({ where: { id: leaseId } });
+  redirect("/leases");
+}
+
+/**
+ * Imports a rent roll (Unit #, Tenant, Month, Year, Expected Rent, Billed
+ * Rent, RENT Paid) against one selected property, creating/updating units,
+ * tenants, and leases and recording each period's charge/payment — the same
+ * shape a landlord's own spreadsheet already uses, so no manual re-entry of
+ * data that's already been captured once.
+ */
+export async function importRentRoll(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const propertyId = String(formData.get("propertyId") ?? "");
+  const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
+  if (!property) throw new Error("Select a property to import into.");
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) throw new Error("Choose a CSV file.");
+  const rows = parseRentRollCsv(await file.text());
+  if (rows.length === 0) {
+    throw new Error(
+      "No valid rows found — expected a header row with columns like Unit #, Tenant, Month, Year, Expected Rent, Billed Rent, RENT Paid.",
+    );
+  }
+
+  await ingestRentRoll(s.organizationId, propertyId, rows);
   redirect("/leases");
 }
 

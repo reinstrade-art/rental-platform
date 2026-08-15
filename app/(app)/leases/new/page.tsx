@@ -2,10 +2,16 @@ import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { createLease } from "@/app/lib/actions";
+import { LeaseUnitSelect } from "@/app/components/lease-unit-select";
 
-export default async function NewLeasePage() {
+export default async function NewLeasePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tenantId?: string; unitId?: string }>;
+}) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  const { tenantId, unitId } = await searchParams;
 
   const [units, tenants] = await Promise.all([
     prisma.unit.findMany({
@@ -20,15 +26,16 @@ export default async function NewLeasePage() {
     <div className="max-w-sm">
       <h1 className="text-lg font-semibold">Add lease</h1>
       <form action={createLease} className="mt-4 flex flex-col gap-3">
-        <select name="unitId" required className="rounded border px-3 py-2">
-          <option value="">Select unit</option>
-          {units.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.property.name} / {u.label}
-            </option>
-          ))}
-        </select>
-        <select name="tenantId" required className="rounded border px-3 py-2">
+        <LeaseUnitSelect
+          units={units.map((u) => ({
+            id: u.id,
+            label: u.label,
+            propertyName: u.property.name,
+            monthlyRent: u.monthlyRent,
+          }))}
+          defaultUnitId={unitId}
+        />
+        <select name="tenantId" required defaultValue={tenantId ?? ""} className="rounded border px-3 py-2">
           <option value="">Select tenant</option>
           {tenants.map((t) => (
             <option key={t.id} value={t.id}>
@@ -36,14 +43,6 @@ export default async function NewLeasePage() {
             </option>
           ))}
         </select>
-        <input
-          name="monthlyRent"
-          type="number"
-          step="0.01"
-          required
-          placeholder="Monthly rent"
-          className="rounded border px-3 py-2"
-        />
         <input name="startDate" type="date" required className="rounded border px-3 py-2" />
         <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
           Add lease

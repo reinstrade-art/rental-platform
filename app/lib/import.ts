@@ -1,0 +1,235 @@
+import "server-only";
+import { prisma } from "./prisma";
+
+// Shared CSV plumbing for every bulk importer below. Handles quoted fields
+// (so amounts like `" 4,000 "` survive) since the naive `split(",")` used by
+// the payments importer breaks on exactly that shape.
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ",") {
+      out.push(cur);
+      cur = "";
+    } else {
+      cur += c;
+    }
+  }
+  out.push(cur);
+  return out.map((c) => c.trim());
+}
+
+function splitCsvRows(csv: string): string[][] {
+  return csv
+    .split(/\r?\n/)
+    .filter((r) => r.trim().length > 0)
+    .map(parseCsvLine);
+}
+
+/** Turns "4,000", " 4,000 ", "-", "" into a number — the shapes a hand-kept rent-roll spreadsheet actually uses. */
+function money(raw: string | undefined): number {
+  if (!raw) return 0;
+  const cleaned = raw.replace(/[^0-9.-]/g, "");
+  const n = Number(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
+function headerIndex(header: string[], ...names: string[]): number {
+  const lower = header.map((h) => h.toLowerCase().trim());
+  for (const name of names) {
+    const idx = lower.indexOf(name.toLowerCase());
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
+// --- properties -------------------------------------------------------
+
+export type PropertyRow = { name: string; address: string | null };
+
+/** One row per property: name,address — header row optional. */
+export function parsePropertiesCsv(csv: string): PropertyRow[] {
+  const out: PropertyRow[] = [];
+  for (const [name, address] of splitCsvRows(csv)) {
+    if (!name || name.toLowerCase() === "name") continue;
+    out.push({ name, address: address || null });
+  }
+  return out;
+}
+
+// --- tenants ------------------------------------------------------------
+
+export type TenantRow = { name: string; phone: string | null; email: string | null };
+
+/** One row per tenant: name,phone,email — header row optional. */
+export function parseTenantsCsv(csv: string): TenantRow[] {
+  const out: TenantRow[] = [];
+  for (const [name, phone, email] of splitCsvRows(csv)) {
+    if (!name || name.toLowerCase() === "name") continue;
+    out.push({ name, phone: phone || null, email: email || null });
+  }
+  return out;
+}
+
+// --- rent roll (properties + units + tenants + leases + charges + payments) --
+
+const MONTHS: Record<string, number> = {
+  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+};
+
+export type RentRollRow = {
+  unitLabel: string;
+  tenantName: string | null; // null = vacant, no tenant/lease created for the row
+  periodMonth: Date; // UTC month-start
+  expectedRent: number;
+  billedRent: number;
+  rentPaid: number;
+};
+
+/**
+ * Parses the "rent roll" shape a landlord's own spreadsheet already uses —
+ * one row per unit per month: Unit #, Tenant, Month, Year, Expected Rent,
+ * Billed Rent, RENT Paid (Arrears/Resultant Balance are derivable and
+ * ignored on import). Column order is read from the header row by name, not
+ * position, so a spreadsheet's own column order doesn't need to change.
+ */
+export function parseRentRollCsv(csv: string): RentRollRow[] {
+  const rows = splitCsvRows(csv);
+  if (rows.length < 2) return [];
+  const header = rows[0];
+
+  const unitIdx = headerIndex(header, "unit #", "unit", "unit number", "unit label");
+  const tenantIdx = headerIndex(header, "tenant", "tenant name");
+  if (unitIdx === -1 || tenantIdx === -1) return [];
+
+  const monthIdx = headerIndex(header, "month");
+  const yearIdx = headerIndex(header, "year");
+  const expectedIdx = headerIndex(header, "expected rent", "monthly rent", "rent");
+  const billedIdx = headerIndex(header, "billed rent");
+  const paidIdx = headerIndex(header, "rent paid", "paid");
+
+  const now = new Date();
+  const out: RentRollRow[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const cols = rows[i];
+    const unitLabel = cols[unitIdx];
+    if (!unitLabel) continue;
+
+    const tenantRaw = (cols[tenantIdx] ?? "").replace(/\s+/g, " ").trim();
+    const tenantName = tenantRaw && !/^vacant$/i.test(tenantRaw) ? tenantRaw : null;
+
+    const monthName = monthIdx !== -1 ? cols[monthIdx]?.toLowerCase() : "";
+    const monthNum = monthName && monthName in MONTHS ? MONTHS[monthName] : now.getUTCMonth();
+    const year = yearIdx !== -1 ? Number(cols[yearIdx]) || now.getUTCFullYear() : now.getUTCFullYear();
+
+    out.push({
+      unitLabel,
+      tenantName,
+      periodMonth: new Date(Date.UTC(year, monthNum, 1)),
+      expectedRent: expectedIdx !== -1 ? money(cols[expectedIdx]) : 0,
+      billedRent: billedIdx !== -1 ? money(cols[billedIdx]) : 0,
+      rentPaid: paidIdx !== -1 ? money(cols[paidIdx]) : 0,
+    });
+  }
+  return out;
+}
+
+export type RentRollSummary = { units: number; tenants: number; leases: number; charges: number; payments: number };
+
+/**
+ * Applies parsed rent-roll rows to one property: creates/updates each Unit,
+ * finds-or-creates each Tenant by name, finds-or-creates the Unit+Tenant
+ * Lease, and records the period's Charge/Payment if not already on file —
+ * so re-importing the same file (e.g. an updated month) never double-counts
+ * a charge or payment already recorded for that lease and period.
+ */
+export async function ingestRentRoll(
+  organizationId: string,
+  propertyId: string,
+  rows: RentRollRow[],
+): Promise<RentRollSummary> {
+  const summary: RentRollSummary = { units: 0, tenants: 0, leases: 0, charges: 0, payments: 0 };
+
+  const tenants = await prisma.tenant.findMany({ where: { organizationId } });
+  const tenantByName = new Map(tenants.map((t) => [t.name.trim().toLowerCase(), t]));
+
+  for (const row of rows) {
+    const unit = await prisma.unit.upsert({
+      where: { propertyId_label: { propertyId, label: row.unitLabel } },
+      update: row.expectedRent ? { monthlyRent: row.expectedRent } : {},
+      create: { organizationId, propertyId, label: row.unitLabel, monthlyRent: row.expectedRent || null },
+    });
+    summary.units++;
+
+    if (!row.tenantName) continue;
+
+    const key = row.tenantName.toLowerCase();
+    let tenant = tenantByName.get(key);
+    if (!tenant) {
+      tenant = await prisma.tenant.create({ data: { organizationId, name: row.tenantName } });
+      tenantByName.set(key, tenant);
+      summary.tenants++;
+    }
+
+    let lease = await prisma.lease.findFirst({
+      where: { organizationId, unitId: unit.id, tenantId: tenant.id },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!lease) {
+      lease = await prisma.lease.create({
+        data: {
+          organizationId,
+          unitId: unit.id,
+          tenantId: tenant.id,
+          monthlyRent: row.expectedRent || 0,
+          startDate: row.periodMonth,
+          status: "ACTIVE",
+        },
+      });
+      summary.leases++;
+    }
+
+    const billed = row.billedRent || row.expectedRent;
+    if (billed) {
+      const existingCharge = await prisma.charge.findFirst({
+        where: { leaseId: lease.id, periodMonth: row.periodMonth, type: "RENT" },
+      });
+      if (!existingCharge) {
+        await prisma.charge.create({
+          data: { organizationId, leaseId: lease.id, type: "RENT", amount: billed, periodMonth: row.periodMonth },
+        });
+        summary.charges++;
+      }
+    }
+
+    if (row.rentPaid) {
+      const existingPayment = await prisma.payment.findFirst({
+        where: { leaseId: lease.id, amount: row.rentPaid, paidAt: row.periodMonth },
+      });
+      if (!existingPayment) {
+        await prisma.payment.create({
+          data: { organizationId, leaseId: lease.id, amount: row.rentPaid, method: "IMPORT", paidAt: row.periodMonth },
+        });
+        summary.payments++;
+      }
+    }
+  }
+
+  return summary;
+}
