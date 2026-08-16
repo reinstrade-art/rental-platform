@@ -75,5 +75,6 @@ export const FEATURE_TIER: Record<string, OrgTier> = {
   EVICTIONS: "ADVANCED",
   ARREARS_ALERTS: "ADVANCED",
   RECURRING_JOBS: "FULL",
+  REPORTS: "FULL",
 };
 export type Feature = keyof typeof FEATURE_TIER;
