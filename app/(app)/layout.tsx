@@ -4,6 +4,7 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { isTenant, isTradesman } from "@/app/lib/roles";
 import { logout, endImpersonationAction } from "@/app/lib/actions";
 import { prisma } from "@/app/lib/prisma";
+import { licenseState } from "@/app/lib/licensing";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
@@ -33,6 +34,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   const org = await prisma.organization.findUnique({ where: { id: s.organizationId } });
+  // Reaching this layout already proves the license is active — getSession()
+  // blocks login otherwise — so this is purely an advance warning, shown
+  // only in the final week of a trial or a paid license, not a gate itself.
+  const license = org ? licenseState(org) : null;
+  const showLicenseWarning = license && license.state !== "EXPIRED" && license.daysLeft !== null && license.daysLeft <= 7;
 
   return (
     <div className="flex min-h-screen">
@@ -67,6 +73,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <form action={endImpersonationAction}>
               <button className="underline">Return to my account</button>
             </form>
+          </div>
+        )}
+        {showLicenseWarning && (
+          <div className="border-b border-orange-300 bg-orange-50 px-6 py-2 text-sm font-medium text-orange-800">
+            {license!.state === "TRIAL"
+              ? `Your trial ends in ${license!.daysLeft} day${license!.daysLeft === 1 ? "" : "s"}. Contact us to license this account and avoid losing access.`
+              : `Your license expires in ${license!.daysLeft} day${license!.daysLeft === 1 ? "" : "s"}. Renew to avoid losing access.`}
           </div>
         )}
         <main className="px-6 py-6">{children}</main>

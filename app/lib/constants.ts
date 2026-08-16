@@ -46,3 +46,10 @@ export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
 export const PAYMENT_METHODS = ["MPESA", "CASH", "BANK", "CHEQUE"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const LICENSE_PAYMENT_METHODS = ["MPESA_STK", "BANK", "CASH", "OTHER"] as const;
+export type LicensePaymentMethod = (typeof LICENSE_PAYMENT_METHODS)[number];
+
+// Every new organization gets this many days free from creation before it
+// needs a recorded license payment to keep working — see app/lib/licensing.ts.
+export const TRIAL_DAYS = 30;

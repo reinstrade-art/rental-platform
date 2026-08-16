@@ -6,6 +6,8 @@ const ACTION_LABEL: Record<string, string> = {
   VIEW_ORG_DETAIL: "Viewed organization data",
   SUSPEND_ORG: "Suspended organization",
   REACTIVATE_ORG: "Reactivated organization",
+  RECORD_LICENSE_PAYMENT: "Recorded a license payment",
+  SEND_LICENSE_STK: "Sent a license M-Pesa prompt",
 };
 
 export default async function PlatformAuditPage() {

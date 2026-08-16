@@ -29,6 +29,7 @@ import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll }
 import { GROUNDS_LIST, joinGrounds, validNoticeDeadline } from "./eviction";
 import { applyBilling } from "./billing";
 import { postRepairExpense } from "./expenses";
+import { newTrialEndsAt, extendLicense, sendLicenseStkPush } from "./licensing";
 
 // --- auth --------------------------------------------------------------
 
@@ -94,7 +95,7 @@ export async function createOrganization(formData: FormData) {
   }
 
   await prisma.$transaction(async (tx) => {
-    const org = await tx.organization.create({ data: { name } });
+    const org = await tx.organization.create({ data: { name, trialEndsAt: newTrialEndsAt() } });
     await tx.user.create({
       data: {
         organizationId: org.id,
@@ -116,6 +117,55 @@ export async function setOrganizationStatus(organizationId: string, status: "ACT
   if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
   await prisma.organization.update({ where: { id: organizationId }, data: { status } });
   await logPlatformAccess(s.userId, organizationId, status === "SUSPENDED" ? "SUSPEND_ORG" : "REACTIVATE_ORG");
+}
+
+/** Sets what a customer is actually being charged — a platform admin's own negotiated figure, not a fixed platform-wide price. */
+export async function updateLicenseFee(organizationId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+
+  const licenseFeeKes = Number(formData.get("licenseFeeKes") ?? 0) || null;
+  await prisma.organization.update({ where: { id: organizationId }, data: { licenseFeeKes } });
+}
+
+/** A platform admin recording a license payment received outside M-Pesa (bank transfer, cash) — extends the license immediately. */
+export async function recordLicensePayment(organizationId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+
+  const amount = Number(formData.get("amount") ?? 0);
+  const method = String(formData.get("method") ?? "BANK");
+  const reference = String(formData.get("reference") ?? "").trim() || null;
+  const periodDays = Number(formData.get("periodDays") ?? 30) || 30;
+  if (!amount || amount <= 0) throw new Error("Enter a positive amount.");
+
+  await extendLicense(organizationId, { amount, method, reference, periodDays, recordedBy: s.userId });
+  await logPlatformAccess(s.userId, organizationId, "RECORD_LICENSE_PAYMENT", `KES ${amount} via ${method}`);
+  redirect("/platform");
+}
+
+/** A platform admin billing a customer for their license over the platform's own M-Pesa shortcode. */
+export async function sendLicenseStkAction(organizationId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+
+  const phone = String(formData.get("phone") ?? "").trim();
+  const amount = Number(formData.get("amount") ?? 0);
+  const periodDays = Number(formData.get("periodDays") ?? 30) || 30;
+  if (!phone) throw new Error("Enter a phone number to send the prompt to.");
+  if (!amount || amount <= 0) throw new Error("Enter a positive amount.");
+
+  const h = await headers();
+  const host = h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+  const callbackUrl = process.env.NEXT_PUBLIC_APP_URL
+    ? `${process.env.NEXT_PUBLIC_APP_URL}/api/mpesa/license-callback`
+    : `${proto}://${host}/api/mpesa/license-callback`;
+
+  const result = await sendLicenseStkPush(organizationId, phone, amount, periodDays, s.userId, callbackUrl);
+  if (!result.ok) throw new Error(result.reason);
+  await logPlatformAccess(s.userId, organizationId, "SEND_LICENSE_STK", `KES ${amount} to ${phone}`);
+  redirect("/platform");
 }
 
 /** Staff set their own organization's document letterhead — never another org's. */
@@ -953,8 +1003,18 @@ export async function registerWithInvite(formData: FormData) {
   const consented = formData.get("consent") === "on";
   if (!code || !identifier || !password) throw new Error("Code, email/phone, and password are all required.");
 
+  // Same lockout machinery as login, keyed on the code itself rather than an
+  // identifier — a wrong-guess run against one code locks out further
+  // guesses at that code specifically, without touching anyone else's.
+  const lock = await checkLock(`invite:${code}`);
+  if (lock.locked) throw new Error(`Too many attempts. Try again in ${lock.minutesLeft} minute(s).`);
+
   const result = await redeemInvitation(code, identifier, password, consented);
-  if (!result.ok) throw new Error(result.error);
+  if (!result.ok) {
+    await recordFailure(`invite:${code}`);
+    throw new Error(result.error);
+  }
+  await clearFailures(`invite:${code}`);
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: result.userId } });
   await createSession({

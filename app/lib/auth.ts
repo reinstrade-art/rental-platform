@@ -5,6 +5,7 @@ import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { isPlatformAdmin, isStaff, isTenant, isTradesman } from "./roles";
+import { isLicenseActive } from "./licensing";
 
 const COOKIE = "rp_session";
 // Holds the staff member's own token while they are signed in as somebody
@@ -314,8 +315,15 @@ export const getSession = cache(async (): Promise<Session | null> => {
     // An org's suspension shuts out its staff and tenants immediately —
     // platform admins are exempt, they have no organizationId to suspend.
     if (user.organizationId) {
-      const org = await prisma.organization.findUnique({ where: { id: user.organizationId }, select: { status: true } });
-      if (!org || org.status !== "ACTIVE") return null;
+      const org = await prisma.organization.findUnique({
+        where: { id: user.organizationId },
+        select: { status: true, trialEndsAt: true, licenseExpiresAt: true },
+      });
+      // Two independent gates: a platform admin's manual suspension, and the
+      // billing lifecycle (trial or paid license). Either being unfavorable
+      // shuts out every login in the organization, staff and tenants alike —
+      // see app/lib/licensing.ts for why this isn't split further.
+      if (!org || org.status !== "ACTIVE" || !isLicenseActive(org)) return null;
     }
     // A tenant/tradesman login with no linked record can read nothing — a
     // role change (or the link being cleared) kills the session outright

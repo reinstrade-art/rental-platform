@@ -20,7 +20,26 @@ datasource db {
 model Organization {
   id        String   @id @default(cuid())
   name      String
-  status    String   @default("ACTIVE") // ACTIVE | SUSPENDED
+  status    String   @default("ACTIVE") // ACTIVE | SUSPENDED — a platform admin's own manual switch, independent of licensing below.
+
+  // The platform's own licensing lifecycle for this customer — a second,
+  // independent axis from `status` above. `status` is a platform admin's
+  // manual override (e.g. a ToS violation); this is the billing state, and
+  // getSession() blocks login on EITHER being unfavorable, never conflating
+  // the two into one field. See app/lib/licensing.ts for the state machine.
+  //
+  // trialEndsAt is set once, at creation (createOrganization), to now + the
+  // platform's trial window — never extended automatically. licenseExpiresAt
+  // starts null and is pushed forward only by a recorded LicensePayment;
+  // an org counts as licensed for as long as either date is still in the
+  // future, so a trial customer who pays early doesn't lose days, and a paid
+  // customer's trial window (already elapsed) is simply irrelevant.
+  trialEndsAt      DateTime?
+  licenseExpiresAt DateTime?
+  // What this customer is actually being charged — set by a platform admin,
+  // not a fixed platform-wide price, since real pricing varies by portfolio
+  // size and by what was actually negotiated.
+  licenseFeeKes    Float?
 
   // Branding for tenant/tradesman-facing documents (receipts, invoices) and
   // portals. This system is white-label — nothing in app code names any one
@@ -85,6 +104,40 @@ model Organization {
   auditLogs        AuditLog[]
   mpesaRequests    MpesaRequest[]
   evictions        Eviction[]
+  licensePayments  LicensePayment[]
+}
+
+// One row per license payment — whether recorded by hand (bank transfer,
+// cash) or raised as an M-Pesa STK Push against the PLATFORM's own
+// shortcode (never an org's own — this is the org paying the platform, the
+// mirror image of Organization.mpesaShortcode which is the org collecting
+// rent). Only a SUCCESS row ever extends Organization.licenseExpiresAt —
+// see recordLicensePayment / the STK callback in app/lib/licensing.ts — so
+// a failed or abandoned prompt can never be mistaken for a paid license.
+model LicensePayment {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  amount     Float
+  method     String // MPESA_STK | BANK | CASH | OTHER
+  reference  String?
+  periodDays Int    @default(30)
+
+  status String @default("SUCCESS") // PENDING | SUCCESS | FAILED — PENDING only while an STK prompt is in flight
+
+  merchantRequestId  String?
+  checkoutRequestId  String? @unique
+  resultCode         Int?
+  resultDesc         String?
+  mpesaReceiptNumber String?
+
+  // Platform-admin userId who recorded this (or triggered the STK prompt).
+  recordedBy String
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId])
 }
 
 // Roles:

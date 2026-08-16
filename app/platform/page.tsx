@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { prisma } from "@/app/lib/prisma";
 import { createOrganization, setOrganizationStatus } from "@/app/lib/actions";
+import { licenseState } from "@/app/lib/licensing";
+
+const STATE_COLOR: Record<string, string> = {
+  TRIAL: "text-orange-600",
+  LICENSED: "text-green-700",
+  EXPIRED: "text-red-600",
+};
 
 export default async function PlatformPage() {
   const orgs = await prisma.organization.findMany({
@@ -22,6 +29,7 @@ export default async function PlatformPage() {
             <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
               <th className="py-2">Name</th>
               <th className="py-2">Status</th>
+              <th className="py-2">License</th>
               <th className="py-2">Properties</th>
               <th className="py-2">Tenants</th>
               <th className="py-2">Users</th>
@@ -29,7 +37,9 @@ export default async function PlatformPage() {
             </tr>
           </thead>
           <tbody>
-            {orgs.map((o) => (
+            {orgs.map((o) => {
+              const license = licenseState(o);
+              return (
               <tr key={o.id} className="border-b">
                 <td className="py-2">
                   <Link href={`/platform/${o.id}`} className="underline">
@@ -37,6 +47,10 @@ export default async function PlatformPage() {
                   </Link>
                 </td>
                 <td className="py-2">{o.status}</td>
+                <td className={`py-2 ${STATE_COLOR[license.state]}`}>
+                  {license.state}
+                  {license.daysLeft !== null && license.state !== "EXPIRED" ? ` (${license.daysLeft}d)` : ""}
+                </td>
                 <td className="py-2">{o._count.properties}</td>
                 <td className="py-2">{o._count.tenants}</td>
                 <td className="py-2">{o._count.users}</td>
@@ -54,10 +68,11 @@ export default async function PlatformPage() {
                   </form>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {orgs.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-4 text-silver-dark">
+                <td colSpan={7} className="py-4 text-silver-dark">
                   No organizations yet.
                 </td>
               </tr>
