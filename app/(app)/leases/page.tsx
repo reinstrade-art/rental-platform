@@ -32,9 +32,14 @@ export default async function LeasesPage() {
     <div className="flex flex-col gap-8">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Leases</h1>
-        <Link href="/leases/new" className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
-          Add lease
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/leases/billing-run" className="rounded border px-3 py-1.5 text-sm transition-colors hover:bg-silver-light">
+            Monthly billing run
+          </Link>
+          <Link href="/leases/new" className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
+            Add lease
+          </Link>
+        </div>
       </div>
       <table className="w-full border-collapse text-sm">
         <thead>

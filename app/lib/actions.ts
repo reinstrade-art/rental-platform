@@ -27,6 +27,7 @@ import { ingestTransaction, matchTransaction, ignoreTransaction, parseTransactio
 import { logPlatformAccess } from "./audit";
 import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll } from "./import";
 import { GROUNDS_LIST, joinGrounds, validNoticeDeadline } from "./eviction";
+import { applyBilling } from "./billing";
 
 // --- auth --------------------------------------------------------------
 
@@ -452,6 +453,24 @@ export async function recordPayment(leaseId: string, formData: FormData) {
     data: { organizationId: s.organizationId, leaseId, amount, method, reference, paidAt },
   });
   redirect(`/leases/${leaseId}`);
+}
+
+/**
+ * Raises an approved month's rent charges across every active lease still
+ * missing one — see app/lib/billing.ts for the rules. The period is
+ * recomputed from scratch inside applyBilling rather than trusted from the
+ * form, so nothing can be raised that the current state of the leases
+ * doesn't actually call for.
+ */
+export async function runMonthlyBilling(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const period = String(formData.get("period") ?? "");
+  if (!/^\d{4}-\d{2}$/.test(period)) throw new Error("Select a valid month.");
+
+  const result = await applyBilling(s.organizationId, period);
+  redirect(`/leases/billing-run?period=${period}&billed=ok&leases=${result.leases}&charges=${result.charges}`);
 }
 
 // --- staff: evictions ------------------------------------------------------
