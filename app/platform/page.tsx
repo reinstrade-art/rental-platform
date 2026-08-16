@@ -10,10 +10,7 @@ const STATE_COLOR: Record<string, string> = {
 };
 
 export default async function PlatformPage() {
-  const orgs = await prisma.organization.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { _count: { select: { properties: true, tenants: true, users: true } } },
-  });
+  const orgs = await prisma.organization.findMany({ orderBy: { createdAt: "desc" } });
 
   return (
     <div className="flex flex-col gap-8">
@@ -24,15 +21,13 @@ export default async function PlatformPage() {
             Audit log
           </Link>
         </div>
+        <p className="mt-1 text-sm text-silver-dark">Click a holding company to see its properties, and a property to see its leases.</p>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
               <th className="py-2">Name</th>
               <th className="py-2">Status</th>
               <th className="py-2">License</th>
-              <th className="py-2">Properties</th>
-              <th className="py-2">Tenants</th>
-              <th className="py-2">Users</th>
               <th className="py-2"></th>
             </tr>
           </thead>
@@ -51,9 +46,6 @@ export default async function PlatformPage() {
                   {license.state}
                   {license.daysLeft !== null && license.state !== "EXPIRED" ? ` (${license.daysLeft}d)` : ""}
                 </td>
-                <td className="py-2">{o._count.properties}</td>
-                <td className="py-2">{o._count.tenants}</td>
-                <td className="py-2">{o._count.users}</td>
                 <td className="py-2">
                   <form
                     action={setOrganizationStatus.bind(
@@ -72,7 +64,7 @@ export default async function PlatformPage() {
             })}
             {orgs.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-4 text-silver-dark">
+                <td colSpan={4} className="py-4 text-silver-dark">
                   No organizations yet.
                 </td>
               </tr>

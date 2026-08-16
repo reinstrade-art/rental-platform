@@ -167,31 +167,35 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
       </div>
 
       <div>
-        <h2 className="font-semibold">Leases</h2>
+        <h2 className="font-semibold">Properties</h2>
+        <p className="text-xs text-silver-dark">Click a property to see its leases.</p>
         <table className="mt-2 w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
-              <th className="py-1">Tenant</th>
-              <th className="py-1">Unit</th>
-              <th className="py-1">Monthly rent</th>
-              <th className="py-1">Status</th>
+              <th className="py-1">Property</th>
+              <th className="py-1">Units</th>
+              <th className="py-1">Occupied</th>
             </tr>
           </thead>
           <tbody>
-            {org.leases.map((l) => (
-              <tr key={l.id} className="border-b">
-                <td className="py-1">{l.tenant.name}</td>
-                <td className="py-1">
-                  {l.unit.property.name} / {l.unit.label}
-                </td>
-                <td className="py-1">{money(l.monthlyRent)}</td>
-                <td className="py-1">{l.status}</td>
-              </tr>
-            ))}
-            {org.leases.length === 0 && (
+            {org.properties.map((p) => {
+              const occupied = p.units.filter((u) => org.leases.some((l) => l.unitId === u.id && l.status === "ACTIVE")).length;
+              return (
+                <tr key={p.id} className="border-b">
+                  <td className="py-1">
+                    <Link href={`/platform/${org.id}/properties/${p.id}`} className="underline">
+                      {p.name}
+                    </Link>
+                  </td>
+                  <td className="py-1">{p.units.length}</td>
+                  <td className="py-1">{occupied}</td>
+                </tr>
+              );
+            })}
+            {org.properties.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-4 text-silver-dark">
-                  No leases yet.
+                <td colSpan={3} className="py-4 text-silver-dark">
+                  No properties yet.
                 </td>
               </tr>
             )}
