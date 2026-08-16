@@ -53,3 +53,26 @@ export type LicensePaymentMethod = (typeof LICENSE_PAYMENT_METHODS)[number];
 // Every new organization gets this many days free from creation before it
 // needs a recorded license payment to keep working — see app/lib/licensing.ts.
 export const TRIAL_DAYS = 30;
+
+// Ascending — index is used as the rank when comparing tiers, so a higher
+// index always means "includes everything below it plus more" (see
+// tierAtLeast/requireFeature in app/lib/tier.ts).
+export const ORG_TIERS = ["BASIC", "INTERMEDIATE", "ADVANCED", "FULL"] as const;
+export type OrgTier = (typeof ORG_TIERS)[number];
+
+// Which package a module first appears in. Nothing here is a hidden
+// capability — it's the same commercial packaging quoted to customers, just
+// enforced in code instead of being an honor system. A feature not listed
+// here is BASIC (available to everyone) by construction, via the ?? fallback
+// in tierAtLeast — so a newly-added module defaults to open, never silently
+// walled off because someone forgot to register it.
+export const FEATURE_TIER: Record<string, OrgTier> = {
+  CSV_IMPORT: "INTERMEDIATE",
+  BILLING_RUN: "INTERMEDIATE",
+  MULTI_STAFF: "INTERMEDIATE",
+  REPAIRS: "ADVANCED",
+  EXPENSES: "ADVANCED",
+  EVICTIONS: "ADVANCED",
+  RECURRING_JOBS: "FULL",
+};
+export type Feature = keyof typeof FEATURE_TIER;

@@ -6,6 +6,7 @@ import { getCashflowTrend, totalByCategory } from "@/app/lib/expenses";
 import { createExpense, deleteExpense } from "@/app/lib/actions";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "@/app/lib/constants";
 import { DeleteButton } from "@/app/components/delete-button";
+import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -23,6 +24,7 @@ function label(s: string) {
 export default async function ExpensesPage() {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  if (!hasFeature(await getOrgTier(s.organizationId), "EXPENSES")) redirect("/dashboard");
 
   const [trend, expenses, properties] = await Promise.all([
     getCashflowTrend(s.organizationId, 6),

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { previewBilling } from "@/app/lib/billing";
 import { runMonthlyBilling } from "@/app/lib/actions";
+import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -20,6 +21,7 @@ export default async function BillingRunPage({
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  if (!hasFeature(await getOrgTier(s.organizationId), "BILLING_RUN")) redirect("/dashboard");
 
   const sp = await searchParams;
   const period = /^\d{4}-\d{2}$/.test(sp.period ?? "") ? sp.period! : new Date().toISOString().slice(0, 7);

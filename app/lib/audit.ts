@@ -1,7 +1,13 @@
 import "server-only";
 import { prisma } from "./prisma";
 
-export type AuditAction = "VIEW_ORG_DETAIL" | "SUSPEND_ORG" | "REACTIVATE_ORG" | "RECORD_LICENSE_PAYMENT" | "SEND_LICENSE_STK";
+export type AuditAction =
+  | "VIEW_ORG_DETAIL"
+  | "SUSPEND_ORG"
+  | "REACTIVATE_ORG"
+  | "RECORD_LICENSE_PAYMENT"
+  | "SEND_LICENSE_STK"
+  | "SET_ORG_TIER";
 
 /**
  * The only place a row is ever written to AuditLog. Called from the page

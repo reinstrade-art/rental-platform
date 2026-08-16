@@ -1,6 +1,13 @@
+import { redirect } from "next/navigation";
+import { getSession, requireStaff } from "@/app/lib/auth";
 import { createVendor } from "@/app/lib/actions";
+import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
-export default function NewVendorPage() {
+export default async function NewVendorPage() {
+  const s = await getSession();
+  if (!requireStaff(s)) redirect("/login");
+  if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/dashboard");
+
   return (
     <div className="max-w-sm">
       <h1 className="text-lg font-semibold">Add vendor</h1>

@@ -41,6 +41,14 @@ model Organization {
   // size and by what was actually negotiated.
   licenseFeeKes    Float?
 
+  // Which commercial package this customer is on — BASIC | INTERMEDIATE |
+  // ADVANCED | FULL, ascending. Gates entire modules (see TIER_FEATURES in
+  // app/lib/constants.ts and requireFeature in app/lib/tier.ts), independent
+  // of the trial/license billing state above: a customer can be fully
+  // licensed and still only see what their package includes. Set by a
+  // platform admin from the org detail page, never chosen by the customer.
+  tier String @default("BASIC")
+
   // Branding for tenant/tradesman-facing documents (receipts, invoices) and
   // portals. This system is white-label — nothing in app code names any one
   // customer's business; every value here is data one org entered about
@@ -105,6 +113,7 @@ model Organization {
   mpesaRequests    MpesaRequest[]
   evictions        Eviction[]
   licensePayments  LicensePayment[]
+  recurringJobs    RecurringJob[]
 }
 
 // One row per license payment — whether recorded by hand (bank transfer,
@@ -242,9 +251,10 @@ model Property {
   name    String
   address String?
 
-  units    Unit[]
-  repairs  Repair[]
-  expenses Expense[]
+  units         Unit[]
+  repairs       Repair[]
+  expenses      Expense[]
+  recurringJobs RecurringJob[]
 
   createdAt DateTime @default(now())
 }
@@ -487,9 +497,10 @@ model Vendor {
   prequalified Boolean @default(false)
   notes        String?
 
-  repairs Repair[]
-  quotes  Quote[]
-  user    User?
+  repairs       Repair[]
+  quotes        Quote[]
+  user          User?
+  recurringJobs RecurringJob[]
 
   createdAt DateTime @default(now())
 }
@@ -540,6 +551,37 @@ model Repair {
   expense Expense?
 
   createdAt DateTime @default(now())
+}
+
+// A vendor job whose frequency and cost are already known — cleaning being
+// the first of these — so it doesn't need reporting, quoting or approving
+// every time it falls due. The daily cron (app/api/cron/daily) creates it
+// as an already-DONE Repair at nextDueAt, posts its cost to Expenses via the
+// same postRepairExpense path a human-completed repair uses, and advances
+// nextDueAt by frequencyDays — no approval loop, since the cost was already
+// agreed when the job was set up.
+model RecurringJob {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id])
+  vendorId   String?
+  vendor     Vendor?  @relation(fields: [vendorId], references: [id])
+
+  title         String
+  category      String @default("CLEANING")
+  cost          Float
+  frequencyDays Int    @default(30)
+  nextDueAt     DateTime
+  active        Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([nextDueAt])
 }
 
 model Quote {

@@ -5,6 +5,7 @@ import { getLeases, leaseBalance } from "@/app/lib/data";
 import { prisma } from "@/app/lib/prisma";
 import { deleteLease, importRentRoll } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
+import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -13,6 +14,9 @@ function money(n: number) {
 export default async function LeasesPage() {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  const tier = await getOrgTier(s.organizationId);
+  const canImport = hasFeature(tier, "CSV_IMPORT");
+  const canBillingRun = hasFeature(tier, "BILLING_RUN");
   const [leases, properties] = await Promise.all([
     getLeases(s.organizationId),
     prisma.property.findMany({ where: { organizationId: s.organizationId }, orderBy: { name: "asc" } }),
@@ -33,9 +37,11 @@ export default async function LeasesPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Leases</h1>
         <div className="flex items-center gap-3">
-          <Link href="/leases/billing-run" className="rounded border px-3 py-1.5 text-sm transition-colors hover:bg-silver-light">
-            Monthly billing run
-          </Link>
+          {canBillingRun && (
+            <Link href="/leases/billing-run" className="rounded border px-3 py-1.5 text-sm transition-colors hover:bg-silver-light">
+              Monthly billing run
+            </Link>
+          )}
           <Link href="/leases/new" className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
             Add lease
           </Link>
@@ -86,29 +92,31 @@ export default async function LeasesPage() {
         </tbody>
       </table>
 
-      <div className="max-w-sm">
-        <h2 className="font-semibold">Import a rent roll</h2>
-        <p className="text-xs text-silver-dark">
-          Select the property this file belongs to, then upload a CSV with a header row like: Unit #, Tenant, Month,
-          Year, Expected Rent, Billed Rent, RENT Paid. Units, tenants, and leases are created or matched
-          automatically, and each period's charge/payment is recorded — a &quot;VACANT&quot; tenant just creates the
-          unit.
-        </p>
-        <form action={importRentRoll} className="mt-3 flex flex-col gap-2" encType="multipart/form-data">
-          <select name="propertyId" required className="rounded border px-3 py-2 text-sm">
-            <option value="">Select property</option>
-            {properties.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <input name="file" type="file" accept=".csv,text/csv" required className="rounded border px-3 py-2 text-sm" />
-          <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
-            Import
-          </button>
-        </form>
-      </div>
+      {canImport && (
+        <div className="max-w-sm">
+          <h2 className="font-semibold">Import a rent roll</h2>
+          <p className="text-xs text-silver-dark">
+            Select the property this file belongs to, then upload a CSV with a header row like: Unit #, Tenant, Month,
+            Year, Expected Rent, Billed Rent, RENT Paid. Units, tenants, and leases are created or matched
+            automatically, and each period's charge/payment is recorded — a &quot;VACANT&quot; tenant just creates the
+            unit.
+          </p>
+          <form action={importRentRoll} className="mt-3 flex flex-col gap-2" encType="multipart/form-data">
+            <select name="propertyId" required className="rounded border px-3 py-2 text-sm">
+              <option value="">Select property</option>
+              {properties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <input name="file" type="file" accept=".csv,text/csv" required className="rounded border px-3 py-2 text-sm" />
+            <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
+              Import
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

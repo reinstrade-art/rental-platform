@@ -3,10 +3,12 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { getProperties } from "@/app/lib/data";
 import { createRepair } from "@/app/lib/actions";
 import { REPAIR_PRIORITIES } from "@/app/lib/constants";
+import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
 export default async function NewRepairPage() {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/dashboard");
   const properties = await getProperties(s.organizationId);
 
   return (

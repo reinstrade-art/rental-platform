@@ -8,6 +8,7 @@ const ACTION_LABEL: Record<string, string> = {
   REACTIVATE_ORG: "Reactivated organization",
   RECORD_LICENSE_PAYMENT: "Recorded a license payment",
   SEND_LICENSE_STK: "Sent a license M-Pesa prompt",
+  SET_ORG_TIER: "Changed the organization's package",
 };
 
 export default async function PlatformAuditPage() {

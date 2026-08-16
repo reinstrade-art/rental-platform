@@ -1,6 +1,6 @@
 "use client";
 
-export function DeleteButton({ confirmText }: { confirmText: string }) {
+export function DeleteButton({ confirmText, label = "Delete" }: { confirmText: string; label?: string }) {
   return (
     <button
       type="submit"
@@ -9,7 +9,7 @@ export function DeleteButton({ confirmText }: { confirmText: string }) {
         if (!confirm(confirmText)) e.preventDefault();
       }}
     >
-      Delete
+      {label}
     </button>
   );
 }

@@ -5,17 +5,18 @@ import { isTenant, isTradesman } from "@/app/lib/roles";
 import { logout, endImpersonationAction } from "@/app/lib/actions";
 import { prisma } from "@/app/lib/prisma";
 import { licenseState } from "@/app/lib/licensing";
+import { hasFeature, type Feature } from "@/app/lib/tier";
 
-const NAV = [
+const NAV: { href: string; label: string; feature?: Feature }[] = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/properties", label: "Properties" },
   { href: "/tenants", label: "Tenants" },
   { href: "/leases", label: "Leases" },
-  { href: "/evictions", label: "Evictions" },
+  { href: "/evictions", label: "Evictions", feature: "EVICTIONS" },
   { href: "/payments", label: "Payments" },
-  { href: "/expenses", label: "Expenses" },
-  { href: "/repairs", label: "Repairs" },
-  { href: "/vendors", label: "Vendors" },
+  { href: "/expenses", label: "Expenses", feature: "EXPENSES" },
+  { href: "/repairs", label: "Repairs", feature: "REPAIRS" },
+  { href: "/vendors", label: "Vendors", feature: "REPAIRS" },
   { href: "/approvals", label: "Approvals" },
   { href: "/users", label: "Team" },
   { href: "/settings", label: "Settings" },
@@ -39,6 +40,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // only in the final week of a trial or a paid license, not a gate itself.
   const license = org ? licenseState(org) : null;
   const showLicenseWarning = license && license.state !== "EXPIRED" && license.daysLeft !== null && license.daysLeft <= 7;
+  const tier = org?.tier ?? "BASIC";
+  const nav = NAV.filter((item) => !item.feature || hasFeature(tier, item.feature));
 
   return (
     <div className="flex min-h-screen">
@@ -49,7 +52,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {org?.name ?? "Organization"}
           </div>
           <nav className="flex flex-col gap-1">
-            {NAV.map((item) => (
+            {nav.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

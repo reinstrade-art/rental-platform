@@ -3,10 +3,12 @@ import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getEvictions } from "@/app/lib/data";
 import { GROUNDS, STATUS_LABEL, OPEN_STATUSES, splitGrounds } from "@/app/lib/eviction";
+import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
 export default async function EvictionsPage() {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  if (!hasFeature(await getOrgTier(s.organizationId), "EVICTIONS")) redirect("/dashboard");
   const evictions = await getEvictions(s.organizationId);
 
   const open = evictions.filter((e) => OPEN_STATUSES.includes(e.status));

@@ -4,11 +4,13 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { getTenants } from "@/app/lib/data";
 import { inviteTenant, deleteTenant, importTenantsCsv } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
+import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
 export default async function TenantsPage() {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   const tenants = await getTenants(s.organizationId);
+  const canImport = hasFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
 
   return (
     <div className="flex flex-col gap-8">
@@ -74,16 +76,18 @@ export default async function TenantsPage() {
         </tbody>
       </table>
 
-      <div className="max-w-sm">
-        <h2 className="font-semibold">Import a CSV</h2>
-        <p className="text-xs text-silver-dark">One row per tenant: name,phone,email</p>
-        <form action={importTenantsCsv} className="mt-3 flex flex-col gap-2" encType="multipart/form-data">
-          <input name="file" type="file" accept=".csv,text/csv" required className="rounded border px-3 py-2 text-sm" />
-          <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
-            Import
-          </button>
-        </form>
-      </div>
+      {canImport && (
+        <div className="max-w-sm">
+          <h2 className="font-semibold">Import a CSV</h2>
+          <p className="text-xs text-silver-dark">One row per tenant: name,phone,email</p>
+          <form action={importTenantsCsv} className="mt-3 flex flex-col gap-2" encType="multipart/form-data">
+            <input name="file" type="file" accept=".csv,text/csv" required className="rounded border px-3 py-2 text-sm" />
+            <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
+              Import
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

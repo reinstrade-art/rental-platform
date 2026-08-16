@@ -5,7 +5,8 @@ import { prisma } from "@/app/lib/prisma";
 import { logPlatformAccess } from "@/app/lib/audit";
 import { licenseState, platformMpesaConfigured } from "@/app/lib/licensing";
 import { LICENSE_PAYMENT_METHODS } from "@/app/lib/constants";
-import { updateLicenseFee, recordLicensePayment, sendLicenseStkAction } from "@/app/lib/actions";
+import { updateLicenseFee, recordLicensePayment, sendLicenseStkAction, updateOrgTier } from "@/app/lib/actions";
+import { ORG_TIERS } from "@/app/lib/constants";
 
 const STATE_COLOR: Record<string, string> = {
   TRIAL: "text-orange-600",
@@ -64,6 +65,23 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
       <div className="rounded border border-silver bg-silver-light p-3 text-sm font-medium text-ink">
         You are viewing this organization's data as the Platform Administrator, for support purposes. This visit
         has been recorded in the audit log.
+      </div>
+
+      <div>
+        <h2 className="font-semibold">Package</h2>
+        <p className="text-xs text-silver-dark">
+          Which modules this customer can see and use — independent of licensing below. Current: <strong>{org.tier}</strong>.
+        </p>
+        <form action={updateOrgTier.bind(null, org.id)} className="mt-2 flex items-center gap-2">
+          <select name="tier" defaultValue={org.tier} className="rounded border px-3 py-2 text-sm">
+            {ORG_TIERS.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <button className="rounded border px-3 py-2 text-sm transition-colors hover:bg-silver-light">Save package</button>
+        </form>
       </div>
 
       <div>

@@ -11,6 +11,7 @@ import {
   approveCost,
   markRepairDone,
 } from "@/app/lib/actions";
+import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
 function money(n: number | null | undefined) {
   return n == null ? "—" : n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -32,6 +33,7 @@ function PendingNote({ request }: { request: { steps: unknown[] } | null }) {
 export default async function RepairDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/dashboard");
   const { id } = await params;
   const [repair, vendors] = await Promise.all([getRepair(s.organizationId, id), getVendors(s.organizationId)]);
   if (!repair) notFound();

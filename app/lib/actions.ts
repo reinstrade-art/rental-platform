@@ -30,6 +30,8 @@ import { GROUNDS_LIST, joinGrounds, validNoticeDeadline } from "./eviction";
 import { applyBilling } from "./billing";
 import { postRepairExpense } from "./expenses";
 import { newTrialEndsAt, extendLicense, sendLicenseStkPush } from "./licensing";
+import { requireFeature, getOrgTier, staffSeatLimit } from "./tier";
+import { ORG_TIERS } from "./constants";
 
 // --- auth --------------------------------------------------------------
 
@@ -117,6 +119,19 @@ export async function setOrganizationStatus(organizationId: string, status: "ACT
   if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
   await prisma.organization.update({ where: { id: organizationId }, data: { status } });
   await logPlatformAccess(s.userId, organizationId, status === "SUSPENDED" ? "SUSPEND_ORG" : "REACTIVATE_ORG");
+}
+
+/** Sets which commercial package a customer is on — see FEATURE_TIER in app/lib/constants.ts for what each unlocks. */
+export async function updateOrgTier(organizationId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+
+  const tier = String(formData.get("tier") ?? "");
+  if (!ORG_TIERS.includes(tier as (typeof ORG_TIERS)[number])) throw new Error("Invalid tier.");
+
+  await prisma.organization.update({ where: { id: organizationId }, data: { tier } });
+  await logPlatformAccess(s.userId, organizationId, "SET_ORG_TIER", `Tier set to ${tier}`);
+  redirect(`/platform/${organizationId}`);
 }
 
 /** Sets what a customer is actually being charged — a platform admin's own negotiated figure, not a fixed platform-wide price. */
@@ -277,6 +292,7 @@ export async function deleteProperty(propertyId: string) {
 export async function importPropertiesCsv(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
 
   const file = formData.get("file");
   if (!(file instanceof File)) throw new Error("Choose a CSV file.");
@@ -363,6 +379,7 @@ export async function deleteTenant(tenantId: string) {
 export async function importTenantsCsv(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
 
   const file = formData.get("file");
   if (!(file instanceof File)) throw new Error("Choose a CSV file.");
@@ -450,6 +467,7 @@ export async function deleteLease(leaseId: string) {
 export async function importRentRoll(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
 
   const propertyId = String(formData.get("propertyId") ?? "");
   const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
@@ -516,6 +534,7 @@ export async function recordPayment(leaseId: string, formData: FormData) {
 export async function runMonthlyBilling(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireFeature(await getOrgTier(s.organizationId), "BILLING_RUN");
 
   const period = String(formData.get("period") ?? "");
   if (!/^\d{4}-\d{2}$/.test(period)) throw new Error("Select a valid month.");
@@ -550,6 +569,7 @@ async function requireOpenEviction(organizationId: string, id: string) {
 export async function startEviction(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireFeature(await getOrgTier(s.organizationId), "EVICTIONS");
 
   const leaseId = str(formData, "leaseId");
   const lease = await requireOwnedLease(s.organizationId, leaseId);
@@ -748,6 +768,7 @@ export async function withdrawEviction(formData: FormData) {
 export async function createExpense(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireFeature(await getOrgTier(s.organizationId), "EXPENSES");
 
   const category = str(formData, "category");
   const amount = Number(formData.get("amount") ?? 0);
@@ -792,6 +813,7 @@ export async function deleteExpense(expenseId: string) {
 export async function createVendor(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireFeature(await getOrgTier(s.organizationId), "REPAIRS");
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Vendor name is required.");
@@ -823,6 +845,7 @@ export async function setVendorPrequalified(vendorId: string, prequalified: bool
 export async function createRepair(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireFeature(await getOrgTier(s.organizationId), "REPAIRS");
 
   const propertyId = String(formData.get("propertyId") ?? "");
   const unitId = String(formData.get("unitId") ?? "").trim() || null;
@@ -953,6 +976,71 @@ export async function markRepairDone(repairId: string, formData: FormData) {
     data: { status: "DONE", completedAt: new Date(), finalCost },
   });
   await postRepairExpense(s.organizationId, repairId, s.userId);
+}
+
+// --- staff: recurring jobs -------------------------------------------------
+// A vendor job whose cost and frequency are already agreed — cleaning being
+// the first of these — so it doesn't go through quoting or approval every
+// time it falls due. The daily cron (app/api/cron/daily) raises it already
+// DONE and posts its cost straight to Expenses. See app/lib/tier.ts — this
+// is a FULL-package feature.
+
+export async function createRecurringJob(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireFeature(await getOrgTier(s.organizationId), "RECURRING_JOBS");
+
+  const title = str(formData, "title");
+  const propertyId = str(formData, "propertyId");
+  const cost = Number(formData.get("cost") ?? 0);
+  const frequencyDays = Number(formData.get("frequencyDays") ?? 0);
+  if (!title || !propertyId || cost <= 0 || frequencyDays <= 0) {
+    throw new Error("Fill in the job, property, cost, and frequency.");
+  }
+
+  const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
+  if (!property) throw new Error("Property not found.");
+
+  const vendorId = optStr(formData, "vendorId");
+  if (vendorId) {
+    const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, organizationId: s.organizationId } });
+    if (!vendor) throw new Error("Vendor not found.");
+  }
+
+  await prisma.recurringJob.create({
+    data: {
+      organizationId: s.organizationId,
+      propertyId,
+      vendorId,
+      title,
+      category: str(formData, "category") || "CLEANING",
+      cost,
+      frequencyDays,
+      // Starts the clock today, not backdated — the office adds this once
+      // the job is already happening, not from whenever it first began.
+      nextDueAt: new Date(),
+    },
+  });
+  redirect("/repairs");
+}
+
+export async function setRecurringJobActive(jobId: string, active: boolean) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const job = await prisma.recurringJob.findFirst({ where: { id: jobId, organizationId: s.organizationId } });
+  if (!job) throw new Error("Recurring job not found.");
+  await prisma.recurringJob.update({ where: { id: jobId }, data: { active } });
+}
+
+export async function deleteRecurringJob(jobId: string) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const job = await prisma.recurringJob.findFirst({ where: { id: jobId, organizationId: s.organizationId } });
+  if (!job) throw new Error("Recurring job not found.");
+  await prisma.recurringJob.delete({ where: { id: jobId } });
+  redirect("/repairs");
 }
 
 // --- staff: outside-role invitations --------------------------------------
@@ -1105,6 +1193,16 @@ export async function ignoreTransactionAction(transactionId: string) {
 export async function inviteStaff(formData: FormData) {
   const s = await getSession();
   if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can invite staff.");
+
+  const limit = staffSeatLimit(await getOrgTier(s.organizationId));
+  if (limit !== null) {
+    const seats = await prisma.user.count({
+      where: { organizationId: s.organizationId, role: { in: ["ADMIN", "MANAGER", "VIEWER"] }, disabledAt: null },
+    });
+    if (seats >= limit) {
+      throw new Error(`Your plan is limited to ${limit} staff seat${limit === 1 ? "" : "s"} — upgrade to add teammates.`);
+    }
+  }
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const role = String(formData.get("role") ?? "VIEWER");
