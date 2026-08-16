@@ -128,6 +128,35 @@ async function applyApproval(
         },
       });
       return;
+    case "PAYMENT_OUT": {
+      const p = payload as {
+        organizationId: string;
+        raisedById: string;
+        category: string;
+        amount: number;
+        paidAt: string;
+        description: string | null;
+        payee: string | null;
+        method: string | null;
+        reference: string | null;
+        propertyId: string | null;
+      };
+      await prisma.expense.create({
+        data: {
+          organizationId: p.organizationId,
+          propertyId: p.propertyId,
+          category: p.category,
+          amount: p.amount,
+          paidAt: new Date(p.paidAt),
+          description: p.description,
+          payee: p.payee,
+          method: p.method,
+          reference: p.reference,
+          recordedBy: p.raisedById,
+        },
+      });
+      return;
+    }
     case "QUOTE_AWARD": {
       const quoteId = String(payload.quoteId);
       const quote = await prisma.quote.findUniqueOrThrow({ where: { id: quoteId } });

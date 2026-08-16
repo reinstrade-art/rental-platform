@@ -29,5 +29,20 @@ export type QuoteStatus = (typeof QUOTE_STATUSES)[number];
 export const APPROVAL_LEVELS = ["REQUESTER", "MANAGER", "DIRECTOR"] as const;
 export type ApprovalLevel = (typeof APPROVAL_LEVELS)[number];
 
-export const APPROVAL_KINDS = ["REPAIR_WORK", "REPAIR_COST", "QUOTE_AWARD"] as const;
+export const APPROVAL_KINDS = ["REPAIR_WORK", "REPAIR_COST", "QUOTE_AWARD", "PAYMENT_OUT"] as const;
 export type ApprovalKind = (typeof APPROVAL_KINDS)[number];
+
+export const EXPENSE_CATEGORIES = [
+  "REPAIRS",
+  "UTILITIES",
+  "STAFF",
+  "RATES_AND_TAXES",
+  "INSURANCE",
+  "LEGAL",
+  "SUPPLIES",
+  "OTHER",
+] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export const PAYMENT_METHODS = ["MPESA", "CASH", "BANK", "CHEQUE"] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];

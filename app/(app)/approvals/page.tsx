@@ -8,7 +8,12 @@ const KIND_LABEL: Record<string, string> = {
   REPAIR_WORK: "Approve repair work",
   REPAIR_COST: "Approve repair cost",
   QUOTE_AWARD: "Award quote",
+  PAYMENT_OUT: "Approve an expense payment",
 };
+
+function money(n: number) {
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
 
 export default async function ApprovalsPage() {
   const s = await getSession();
@@ -45,6 +50,17 @@ export default async function ApprovalsPage() {
                   {r.steps.length} / {chainLength} signed
                 </div>
               </div>
+
+              {r.kind === "PAYMENT_OUT" && r.payload && (() => {
+                const p = JSON.parse(r.payload) as { category: string; amount: number; payee: string | null; description: string | null };
+                return (
+                  <p className="mt-2 text-sm">
+                    <span className="font-medium">{money(p.amount)}</span> — {p.category}
+                    {p.payee ? ` to ${p.payee}` : ""}
+                    {p.description ? ` (${p.description})` : ""}
+                  </p>
+                );
+              })()}
 
               <ul className="mt-3 flex flex-col gap-1 text-sm">
                 {r.steps.map((step) => (

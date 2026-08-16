@@ -28,6 +28,7 @@ import { logPlatformAccess } from "./audit";
 import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll } from "./import";
 import { GROUNDS_LIST, joinGrounds, validNoticeDeadline } from "./eviction";
 import { applyBilling } from "./billing";
+import { postRepairExpense } from "./expenses";
 
 // --- auth --------------------------------------------------------------
 
@@ -687,6 +688,55 @@ export async function withdrawEviction(formData: FormData) {
   redirect(`/evictions/${id}`);
 }
 
+// --- staff: expenses ------------------------------------------------------
+// The landlord's own money going out. Every expense entered here — other
+// than one posted automatically from a completed repair, see
+// markRepairDone — goes through the same multi-signature approval chain as
+// a repair cost: nothing is written to the Expense table until the chain
+// resolves (see PAYMENT_OUT in app/lib/approvals.ts).
+
+export async function createExpense(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const category = str(formData, "category");
+  const amount = Number(formData.get("amount") ?? 0);
+  const paidAt = str(formData, "paidAt") || new Date().toISOString().slice(0, 10);
+  if (!category || !amount || amount <= 0) throw new Error("Category and a positive amount are required.");
+
+  const propertyId = optStr(formData, "propertyId");
+  if (propertyId) {
+    const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
+    if (!property) throw new Error("Property not found.");
+  }
+
+  await raiseApproval(s.organizationId, "PAYMENT_OUT", `new:${s.userId}:${Date.now()}`, s.userId, {
+    organizationId: s.organizationId,
+    raisedById: s.userId,
+    category,
+    amount,
+    paidAt,
+    description: optStr(formData, "description"),
+    payee: optStr(formData, "payee"),
+    method: optStr(formData, "method"),
+    reference: optStr(formData, "reference"),
+    propertyId,
+  });
+  redirect("/approvals");
+}
+
+export async function deleteExpense(expenseId: string) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const expense = await prisma.expense.findFirst({ where: { id: expenseId, organizationId: s.organizationId } });
+  if (!expense) throw new Error("Expense not found.");
+  if (expense.repairId) throw new Error("This expense was posted from a repair — edit the repair's final cost instead.");
+
+  await prisma.expense.delete({ where: { id: expenseId } });
+  redirect("/expenses");
+}
+
 // --- staff: vendors / repairs --------------------------------------------
 
 export async function createVendor(formData: FormData) {
@@ -852,6 +902,7 @@ export async function markRepairDone(repairId: string, formData: FormData) {
     where: { id: repairId },
     data: { status: "DONE", completedAt: new Date(), finalCost },
   });
+  await postRepairExpense(s.organizationId, repairId, s.userId);
 }
 
 // --- staff: outside-role invitations --------------------------------------
