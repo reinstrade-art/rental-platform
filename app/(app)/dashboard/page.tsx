@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getDashboard, getPropertyRollups, getRepairSummary } from "@/app/lib/data";
 import { redirect } from "next/navigation";
+import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -11,11 +12,14 @@ export default async function DashboardPage() {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
 
-  const [dash, rollups, repairs] = await Promise.all([
+  const [dash, rollups, repairs, tier] = await Promise.all([
     getDashboard(s.organizationId),
     getPropertyRollups(s.organizationId),
     getRepairSummary(s.organizationId),
+    getOrgTier(s.organizationId),
   ]);
+  const canAlerts = hasFeature(tier, "ARREARS_ALERTS");
+  const canRepairs = hasFeature(tier, "REPAIRS");
 
   const tiles = [
     { label: "Properties", value: dash.propertyCount, href: "/properties" },
@@ -23,9 +27,13 @@ export default async function DashboardPage() {
     { label: "Active leases", value: dash.activeLeaseCount, href: "/leases" },
     { label: "Billed this month", value: money(dash.billedThisMonth), href: "/leases" },
     { label: "Received this month", value: money(dash.receivedThisMonth), href: "/payments" },
-    { label: "Arrears (all leases)", value: money(dash.grossArrears), href: "/leases" },
-    { label: "Repairs pending", value: `${repairs.pendingCount} (${money(repairs.pendingCost)})`, href: "/repairs" },
-    { label: "Repairs done", value: `${repairs.doneCount} (${money(repairs.doneCost)})`, href: "/repairs" },
+    { label: "Arrears (all leases)", value: money(dash.grossArrears), href: canAlerts ? "/alerts" : "/leases" },
+    ...(canRepairs
+      ? [
+          { label: "Repairs pending", value: `${repairs.pendingCount} (${money(repairs.pendingCost)})`, href: "/repairs" },
+          { label: "Repairs done", value: `${repairs.doneCount} (${money(repairs.doneCost)})`, href: "/repairs" },
+        ]
+      : []),
   ];
 
   return (

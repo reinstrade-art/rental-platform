@@ -12,6 +12,7 @@ const NAV: { href: string; label: string; feature?: Feature }[] = [
   { href: "/properties", label: "Properties" },
   { href: "/tenants", label: "Tenants" },
   { href: "/leases", label: "Leases" },
+  { href: "/alerts", label: "Alerts", feature: "ARREARS_ALERTS" },
   { href: "/evictions", label: "Evictions", feature: "EVICTIONS" },
   { href: "/payments", label: "Payments" },
   { href: "/expenses", label: "Expenses", feature: "EXPENSES" },
