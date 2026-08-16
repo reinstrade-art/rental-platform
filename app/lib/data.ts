@@ -138,6 +138,21 @@ export async function getPropertyRollups(organizationId: string, at: Date = new 
   });
 }
 
+export async function getEvictions(organizationId: string) {
+  return prisma.eviction.findMany({
+    where: { organizationId },
+    include: { lease: { include: { tenant: true, unit: { include: { property: true } } } } },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+export async function getEviction(organizationId: string, evictionId: string) {
+  return prisma.eviction.findFirst({
+    where: { id: evictionId, organizationId },
+    include: { lease: { include: { tenant: true, unit: { include: { property: true } } } } },
+  });
+}
+
 export async function getVendors(organizationId: string) {
   return prisma.vendor.findMany({ where: { organizationId }, include: { user: true }, orderBy: { name: "asc" } });
 }

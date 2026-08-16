@@ -15,3 +15,10 @@ export function mpesaNumber(phone: string | null | undefined): string | null {
   if (d.length === 9 && /^[71]/.test(d)) return `254${d}`;
   return null;
 }
+
+/** A plain wa.me deep link — no Meta-approved template needed since a person clicks send, this app never pushes a message on its own. Null when the number can't be normalised. */
+export function waLink(phone: string | null | undefined, text: string): string | null {
+  const number = mpesaNumber(phone);
+  if (!number) return null;
+  return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+}

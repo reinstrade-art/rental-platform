@@ -83,6 +83,7 @@ model Organization {
   transactions     Transaction[]
   auditLogs        AuditLog[]
   mpesaRequests    MpesaRequest[]
+  evictions        Eviction[]
 }
 
 // Roles:
@@ -263,8 +264,76 @@ model Lease {
   charges  Charge[]
   payments Payment[]
   mpesaRequests MpesaRequest[]
+  evictions     Eviction[]
 
   createdAt DateTime @default(now())
+}
+
+// Eviction under Kenyan law — grounds, the notice period the law sets, and a
+// staged record of the process (notice → optional distress for rent → suit
+// → court order → enforcement by a bailiff). There is deliberately no
+// action anywhere in this app that ends a tenancy on its own from here: the
+// system drafts the notice and tracks what stage a case is at, but a lawful
+// eviction ends with a court order enforced by a court officer, never with
+// software changing a lock. See app/lib/eviction.ts.
+model Eviction {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  leaseId String
+  lease   Lease  @relation(fields: [leaseId], references: [id])
+
+  // Comma-separated codes from ARREARS | BREACH_OF_COVENANT | NUISANCE_ILLEGAL |
+  // WASTE_DAMAGE | LEASE_EXPIRY | LANDLORD_OCCUPATION — a tenant may be in
+  // breach of more than one at once, and the notice must name only the ones
+  // that actually apply to them, never the full list of what the law allows.
+  grounds       String
+  groundsDetail String?
+
+  // NOTICE_DRAFT | NOTICE_SERVED | DISTRESS_FILED | COURT_FILED | ORDER_OBTAINED | VACATED | ENFORCED | WITHDRAWN
+  status String @default("NOTICE_DRAFT")
+
+  // Step 1 — Notice to Vacate. deadline is never less than 30 days after
+  // servedAt for a monthly periodic tenancy, checked in code before the
+  // record is written, not left to whoever is filling the form in that day.
+  noticeServedAt       DateTime?
+  noticeDeliveryMethod String? // HAND_DELIVERED | REGISTERED_POST
+  noticeDeadline       DateTime?
+
+  // Step 2 — Distress for Rent (Cap 293), optional, arrears cases only.
+  distressFiledAt  DateTime?
+  auctioneerName   String?
+  proclamationEnds DateTime? // 14 days from the proclamation, before goods may be attached
+
+  // Step 3 — Suit filed once the notice period has expired unmet.
+  courtFiledAt DateTime?
+  courtVenue   String? // RRT | MAGISTRATE | ELC
+  caseNumber   String?
+
+  // Step 4 — the court's own order. Nothing may be enforced without this.
+  orderObtainedAt DateTime?
+  orderVacateBy   DateTime?
+
+  // Step 5 — carried out by a court officer, never by the landlord directly.
+  // Restricted to organization admins in app code (see recordEnforced).
+  enforcedAt    DateTime?
+  bailiffName   String?
+  policePresent Boolean   @default(false)
+
+  // The tenant complies and leaves on their own — the most common way a case
+  // actually ends, reachable from any open stage, not only after an order.
+  vacatedAt DateTime?
+
+  withdrawnAt     DateTime?
+  withdrawnReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([leaseId])
+  @@index([status])
 }
 
 model Charge {

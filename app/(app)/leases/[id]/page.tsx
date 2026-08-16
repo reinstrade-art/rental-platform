@@ -2,12 +2,13 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getLease, leaseBalance } from "@/app/lib/data";
-import { addCharge, recordPayment } from "@/app/lib/actions";
+import { addCharge, recordPayment, startEviction } from "@/app/lib/actions";
 import { sendMpesaPrompt } from "@/app/lib/mpesa-actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 import { prisma } from "@/app/lib/prisma";
 import { CHARGE_TYPES } from "@/app/lib/constants";
 import { MpesaPay } from "@/app/components/mpesa-pay";
+import { GROUNDS, GROUNDS_LIST, STATUS_LABEL, OPEN_STATUSES } from "@/app/lib/eviction";
 
 function periodParam(d: Date) {
   const dt = new Date(d);
@@ -26,6 +27,12 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
   if (!lease) notFound();
 
   const balance = leaseBalance(lease);
+
+  const latestEviction = await prisma.eviction.findFirst({
+    where: { leaseId: lease.id, organizationId: s.organizationId },
+    orderBy: { createdAt: "desc" },
+  });
+  const openEviction = latestEviction && OPEN_STATUSES.includes(latestEviction.status) ? latestEviction : null;
 
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } });
   const mpesaReady = mpesaConfigured({
@@ -180,6 +187,55 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
           )}
         </div>
       </div>
+
+      {lease.status === "ACTIVE" && (
+        <div className="max-w-sm border-t pt-6">
+          <h2 className="font-semibold">Eviction</h2>
+          {openEviction ? (
+            <p className="mt-2 text-sm">
+              Open case —{" "}
+              <Link href={`/evictions/${openEviction.id}`} className="underline">
+                {STATUS_LABEL[openEviction.status] ?? openEviction.status}
+              </Link>
+            </p>
+          ) : (
+            <>
+              {latestEviction && (
+                <p className="mt-1 text-xs text-silver-dark">
+                  Previous case:{" "}
+                  <Link href={`/evictions/${latestEviction.id}`} className="underline">
+                    {STATUS_LABEL[latestEviction.status] ?? latestEviction.status}
+                  </Link>
+                </p>
+              )}
+              <p className="mt-1 text-xs text-silver-dark">
+                Opens a case only — nothing is served or filed yet, and no lock is ever changed without a court
+                order.
+              </p>
+              <form action={startEviction} className="mt-3 flex flex-col gap-2">
+                <input type="hidden" name="leaseId" value={lease.id} />
+                <div className="flex flex-col gap-1">
+                  {GROUNDS_LIST.map((code) => (
+                    <label key={code} className="flex items-start gap-2 text-xs">
+                      <input type="checkbox" name={`ground_${code}`} className="mt-0.5" />
+                      {GROUNDS[code].label}
+                    </label>
+                  ))}
+                </div>
+                <textarea
+                  name="groundsDetail"
+                  placeholder="Particulars (optional)"
+                  className="rounded border px-3 py-2 text-sm"
+                  rows={2}
+                />
+                <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
+                  Start eviction case
+                </button>
+              </form>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

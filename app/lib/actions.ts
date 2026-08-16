@@ -26,6 +26,7 @@ import { createInvitation, redeemInvitation } from "./invites";
 import { ingestTransaction, matchTransaction, ignoreTransaction, parseTransactionsCsv } from "./payments";
 import { logPlatformAccess } from "./audit";
 import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll } from "./import";
+import { GROUNDS_LIST, joinGrounds, validNoticeDeadline } from "./eviction";
 
 // --- auth --------------------------------------------------------------
 
@@ -373,11 +374,14 @@ export async function deleteLease(leaseId: string) {
 
   const lease = await prisma.lease.findFirst({
     where: { id: leaseId, organizationId: s.organizationId },
-    include: { charges: true, payments: true },
+    include: { charges: true, payments: true, evictions: true },
   });
   if (!lease) throw new Error("Lease not found.");
   if (lease.charges.length > 0 || lease.payments.length > 0) {
     throw new Error("This lease has charges or payments on record — end it instead of deleting, to keep the financial history.");
+  }
+  if (lease.evictions.length > 0) {
+    throw new Error("This lease has an eviction case on record — end the lease instead of deleting, to keep that history.");
   }
 
   await prisma.lease.delete({ where: { id: leaseId } });
@@ -448,6 +452,220 @@ export async function recordPayment(leaseId: string, formData: FormData) {
     data: { organizationId: s.organizationId, leaseId, amount, method, reference, paidAt },
   });
   redirect(`/leases/${leaseId}`);
+}
+
+// --- staff: evictions ------------------------------------------------------
+// Kenyan-law eviction process: notice → optional distress for rent → suit →
+// court order → enforcement. See app/lib/eviction.ts for the legal detail.
+// Nothing here ends a tenancy except recordEnforced/recordVacated, and only
+// once a lawful basis (a court order, or the tenant simply leaving) exists.
+
+const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
+const optStr = (fd: FormData, k: string) => str(fd, k) || null;
+
+async function requireOwnedLease(organizationId: string, leaseId: string) {
+  const lease = await prisma.lease.findFirst({ where: { id: leaseId, organizationId } });
+  if (!lease) throw new Error("Lease not found.");
+  return lease;
+}
+
+async function requireOpenEviction(organizationId: string, id: string) {
+  const ev = await prisma.eviction.findFirst({ where: { id, organizationId } });
+  if (!ev) throw new Error("Eviction case not found.");
+  if (["ENFORCED", "WITHDRAWN", "VACATED"].includes(ev.status)) throw new Error("This case is already closed.");
+  return ev;
+}
+
+/** Opens a case. Nothing is served or filed yet — this is only the record of intent. */
+export async function startEviction(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const leaseId = str(formData, "leaseId");
+  const lease = await requireOwnedLease(s.organizationId, leaseId);
+
+  const existing = await prisma.eviction.findFirst({
+    where: { leaseId, status: { notIn: ["ENFORCED", "WITHDRAWN", "VACATED"] } },
+  });
+  if (existing) throw new Error("There is already an open eviction case for this lease.");
+
+  const codes = GROUNDS_LIST.filter((g) => formData.get(`ground_${g}`) === "on");
+  if (codes.length === 0) throw new Error("Select at least one ground.");
+
+  const ev = await prisma.eviction.create({
+    data: {
+      organizationId: s.organizationId,
+      leaseId: lease.id,
+      grounds: joinGrounds(codes),
+      groundsDetail: optStr(formData, "groundsDetail"),
+      status: "NOTICE_DRAFT",
+    },
+  });
+  redirect(`/evictions/${ev.id}`);
+}
+
+/**
+ * Step 1: the notice is served. The deadline is checked against the
+ * statutory floor before it is written — a form's `min` attribute is advice
+ * a browser can be talked out of; this is not.
+ */
+export async function recordNoticeServed(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const id = str(formData, "id");
+  const ev = await requireOpenEviction(s.organizationId, id);
+
+  const servedAt = new Date(str(formData, "servedAt"));
+  const deadline = new Date(str(formData, "deadline"));
+  if (isNaN(servedAt.getTime()) || isNaN(deadline.getTime())) throw new Error("Served date and deadline are required.");
+  if (!validNoticeDeadline(servedAt, deadline)) throw new Error("The deadline must be at least 30 days after the served date.");
+
+  await prisma.eviction.update({
+    where: { id: ev.id },
+    data: {
+      status: "NOTICE_SERVED",
+      noticeServedAt: servedAt,
+      noticeDeliveryMethod: str(formData, "deliveryMethod") || "HAND_DELIVERED",
+      noticeDeadline: deadline,
+    },
+  });
+  redirect(`/evictions/${id}`);
+}
+
+export async function recordDistressFiled(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const id = str(formData, "id");
+  const ev = await requireOpenEviction(s.organizationId, id);
+
+  const filedAtStr = str(formData, "filedAt");
+  const filedAt = filedAtStr ? new Date(filedAtStr) : new Date();
+  await prisma.eviction.update({
+    where: { id: ev.id },
+    data: {
+      status: "DISTRESS_FILED",
+      distressFiledAt: filedAt,
+      auctioneerName: optStr(formData, "auctioneerName"),
+      proclamationEnds: new Date(filedAt.getTime() + 14 * 864e5),
+    },
+  });
+  redirect(`/evictions/${id}`);
+}
+
+export async function recordCourtFiled(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const id = str(formData, "id");
+  const ev = await requireOpenEviction(s.organizationId, id);
+
+  const courtVenue = str(formData, "courtVenue");
+  if (!["RRT", "MAGISTRATE", "ELC"].includes(courtVenue)) throw new Error("Select a valid venue.");
+
+  const filedAtStr = str(formData, "filedAt");
+  await prisma.eviction.update({
+    where: { id: ev.id },
+    data: {
+      status: "COURT_FILED",
+      courtFiledAt: filedAtStr ? new Date(filedAtStr) : new Date(),
+      courtVenue,
+      caseNumber: optStr(formData, "caseNumber"),
+    },
+  });
+  redirect(`/evictions/${id}`);
+}
+
+/** Step 4: the court's own order. Nothing downstream may happen without this. */
+export async function recordOrderObtained(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const id = str(formData, "id");
+  const ev = await requireOpenEviction(s.organizationId, id);
+
+  const vacateByStr = str(formData, "vacateBy");
+  const vacateBy = new Date(vacateByStr);
+  if (isNaN(vacateBy.getTime())) throw new Error("A vacant-possession date is required.");
+
+  const obtainedAtStr = str(formData, "obtainedAt");
+  await prisma.eviction.update({
+    where: { id: ev.id },
+    data: {
+      status: "ORDER_OBTAINED",
+      orderObtainedAt: obtainedAtStr ? new Date(obtainedAtStr) : new Date(),
+      orderVacateBy: vacateBy,
+    },
+  });
+  redirect(`/evictions/${id}`);
+}
+
+/** The one thing both a forced removal and a voluntary exit have in common. */
+async function endTenancy(leaseId: string) {
+  await prisma.lease.update({ where: { id: leaseId }, data: { status: "ENDED", endDate: new Date() } });
+}
+
+/**
+ * Step 5: carried out. This is the only step that touches the tenancy
+ * itself — it ends the lease — and only an organization admin may take it,
+ * gated behind an order already being on record.
+ */
+export async function recordEnforced(formData: FormData) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can record an eviction as enforced.");
+
+  const id = str(formData, "id");
+  const ev = await requireOpenEviction(s.organizationId, id);
+  if (!ev.orderObtainedAt) throw new Error("An eviction order must be on record before this can be enforced.");
+
+  await prisma.eviction.update({
+    where: { id: ev.id },
+    data: {
+      status: "ENFORCED",
+      enforcedAt: new Date(),
+      bailiffName: optStr(formData, "bailiffName"),
+      policePresent: formData.get("policePresent") === "on",
+    },
+  });
+  await endTenancy(ev.leaseId);
+  redirect(`/evictions/${id}`);
+}
+
+/**
+ * The tenant complies and leaves on their own — the most common way a case
+ * actually ends. Reachable from any open stage, not only after an order.
+ * Any staff member may record it, not only an admin, since nothing about it
+ * is irreversible the way enforcement is — it is simply what happened.
+ */
+export async function recordVacated(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const id = str(formData, "id");
+  const ev = await requireOpenEviction(s.organizationId, id);
+
+  const vacatedAtStr = str(formData, "vacatedAt");
+  await prisma.eviction.update({
+    where: { id: ev.id },
+    data: { status: "VACATED", vacatedAt: vacatedAtStr ? new Date(vacatedAtStr) : new Date() },
+  });
+  await endTenancy(ev.leaseId);
+  redirect(`/evictions/${id}`);
+}
+
+export async function withdrawEviction(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const id = str(formData, "id");
+  const ev = await requireOpenEviction(s.organizationId, id);
+
+  await prisma.eviction.update({
+    where: { id: ev.id },
+    data: { status: "WITHDRAWN", withdrawnAt: new Date(), withdrawnReason: optStr(formData, "reason") },
+  });
+  redirect(`/evictions/${id}`);
 }
 
 // --- staff: vendors / repairs --------------------------------------------
