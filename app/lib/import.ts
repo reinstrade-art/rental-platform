@@ -106,33 +106,72 @@ export type RentRollRow = {
   expectedRent: number;
   billedRent: number;
   rentPaid: number;
+  // A one-off deposit HELD, not billed every period — see ingestRentRoll,
+  // which raises this at most once per lease regardless of how many rows
+  // (months) that lease appears in across the file.
+  deposit: number;
+  // A recurring per-period charge distinct from rent (garbage collection
+  // being the first of these) — billed every period it appears in, same as
+  // rent, but as its own UTILITY line so it reads separately on a statement.
+  utilityFee: number;
 };
 
 /**
  * Parses the "rent roll" shape a landlord's own spreadsheet already uses —
  * one row per unit per month: Unit #, Tenant, Month, Year, Expected Rent,
- * Billed Rent, RENT Paid (Arrears/Resultant Balance are derivable and
- * ignored on import). Column order is read from the header row by name, not
- * position, so a spreadsheet's own column order doesn't need to change.
+ * Billed Rent, RENT Paid, plus two optional columns — a deposit column
+ * (Deposit / Rent Deposit Payment / ...) and a utility/service-fee column
+ * (Garbage Collection Fees / Utility / Service Charge / ...) — neither of
+ * which every spreadsheet has, so both simply read as 0 when absent.
+ * Arrears/Resultant Balance are derivable and ignored on import. Column
+ * order is read from the header row by name, not position, so a
+ * spreadsheet's own column order doesn't need to change.
  */
 export function parseRentRollCsv(csv: string): RentRollRow[] {
   const rows = splitCsvRows(csv);
   if (rows.length < 2) return [];
-  const header = rows[0];
 
-  const unitIdx = headerIndex(header, "unit #", "unit", "unit number", "unit label");
-  const tenantIdx = headerIndex(header, "tenant", "tenant name");
-  if (unitIdx === -1 || tenantIdx === -1) return [];
+  // Some spreadsheets lead with a title row (e.g. "Alma Hill Apartment,,,,")
+  // before the real header — scanned for among the first few lines rather
+  // than assumed to always be row one, so a title row doesn't read as an
+  // unrecognisable header and fail the whole import.
+  let headerRowIdx = -1;
+  let unitIdx = -1;
+  let tenantIdx = -1;
+  for (let i = 0; i < Math.min(5, rows.length); i++) {
+    const candidate = rows[i];
+    const u = headerIndex(candidate, "unit #", "unit", "unit number", "unit label");
+    const t = headerIndex(candidate, "tenant", "tenant name", "name of tenant");
+    if (u !== -1 && t !== -1) {
+      headerRowIdx = i;
+      unitIdx = u;
+      tenantIdx = t;
+      break;
+    }
+  }
+  if (headerRowIdx === -1) return [];
+  const header = rows[headerRowIdx];
 
   const monthIdx = headerIndex(header, "month");
   const yearIdx = headerIndex(header, "year");
-  const expectedIdx = headerIndex(header, "expected rent", "monthly rent", "rent");
+  const expectedIdx = headerIndex(header, "expected rent", "monthly rent", "rent", "rent expected");
   const billedIdx = headerIndex(header, "billed rent");
-  const paidIdx = headerIndex(header, "rent paid", "paid");
+  const paidIdx = headerIndex(header, "rent paid", "paid", "rent received");
+  const depositIdx = headerIndex(header, "deposit", "rent deposit payment", "deposit paid", "deposit amount", "deposit held");
+  const utilityIdx = headerIndex(
+    header,
+    "garbage collection fees",
+    "garbage",
+    "garbage fees",
+    "utility",
+    "utilities",
+    "utility fee",
+    "service charge",
+  );
 
   const now = new Date();
   const out: RentRollRow[] = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = headerRowIdx + 1; i < rows.length; i++) {
     const cols = rows[i];
     const unitLabel = cols[unitIdx];
     if (!unitLabel) continue;
@@ -151,6 +190,8 @@ export function parseRentRollCsv(csv: string): RentRollRow[] {
       expectedRent: expectedIdx !== -1 ? money(cols[expectedIdx]) : 0,
       billedRent: billedIdx !== -1 ? money(cols[billedIdx]) : 0,
       rentPaid: paidIdx !== -1 ? money(cols[paidIdx]) : 0,
+      deposit: depositIdx !== -1 ? money(cols[depositIdx]) : 0,
+      utilityFee: utilityIdx !== -1 ? money(cols[utilityIdx]) : 0,
     });
   }
   return out;
@@ -233,6 +274,41 @@ export async function ingestRentRoll(
           data: { organizationId, leaseId: lease.id, amount: row.rentPaid, method: "IMPORT", paidAt: row.periodMonth },
         });
         summary.payments++;
+      }
+    }
+
+    // A deposit is held once, not billed every month a lease shows up in the
+    // file — so it's raised only the first time this lease is seen with one,
+    // never re-raised on a later row (a later month re-import, or a second
+    // row for the same lease). A "deposit payment" column is read as already
+    // received, so the matching payment is recorded alongside it.
+    if (row.deposit) {
+      const existingDeposit = await prisma.charge.findFirst({ where: { leaseId: lease.id, type: "DEPOSIT" } });
+      if (!existingDeposit) {
+        await prisma.charge.create({
+          data: { organizationId, leaseId: lease.id, type: "DEPOSIT", amount: row.deposit, periodMonth: row.periodMonth },
+        });
+        summary.charges++;
+        await prisma.payment.create({
+          data: { organizationId, leaseId: lease.id, amount: row.deposit, method: "IMPORT", paidAt: row.periodMonth },
+        });
+        summary.payments++;
+      }
+    }
+
+    // A recurring charge distinct from rent (garbage collection, a service
+    // fee, ...) — billed per period exactly like rent, as its own UTILITY
+    // line, with the same re-run safety: never raised twice for one lease
+    // and period.
+    if (row.utilityFee) {
+      const existingUtility = await prisma.charge.findFirst({
+        where: { leaseId: lease.id, periodMonth: row.periodMonth, type: "UTILITY" },
+      });
+      if (!existingUtility) {
+        await prisma.charge.create({
+          data: { organizationId, leaseId: lease.id, type: "UTILITY", amount: row.utilityFee, periodMonth: row.periodMonth },
+        });
+        summary.charges++;
       }
     }
   }

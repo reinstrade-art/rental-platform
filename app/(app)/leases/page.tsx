@@ -101,7 +101,9 @@ export default async function LeasesPage({ searchParams }: { searchParams: Promi
             Select the property this file belongs to, then upload a CSV with a header row like: Unit #, Tenant, Month,
             Year, Expected Rent, Billed Rent, RENT Paid. Units, tenants, and leases are created or matched
             automatically, and each period&apos;s charge/payment is recorded — a &quot;VACANT&quot; tenant just creates the
-            unit.
+            unit. Two more columns are read if present — a Deposit column (raised once per lease, not every month)
+            and a Garbage/Utility fee column (billed every period, same as rent) — both simply skipped if your file
+            doesn&apos;t have them.
           </p>
           <form action={importRentRoll} className="mt-3 flex flex-col gap-2" encType="multipart/form-data">
             <select name="propertyId" required className="rounded border px-3 py-2 text-sm">
