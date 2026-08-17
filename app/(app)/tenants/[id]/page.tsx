@@ -9,10 +9,17 @@ function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-export default async function TenantDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TenantDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   const { id } = await params;
+  const { error } = await searchParams;
   const tenant = await getTenant(s.organizationId, id);
   if (!tenant) notFound();
 
@@ -22,6 +29,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div>
         <Link href="/tenants" className="text-xs underline text-silver-dark">
           All tenants

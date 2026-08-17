@@ -352,7 +352,7 @@ export async function deleteProperty(propertyId: string) {
     include: { units: true },
   });
   if (!property) throw new Error("Property not found.");
-  if (property.units.length > 0) throw new Error("Remove this property's units before deleting it.");
+  if (property.units.length > 0) errorRedirect("/properties", "Remove this property's units before deleting it.");
 
   await prisma.property.delete({ where: { id: propertyId } });
   redirect("/properties");
@@ -449,8 +449,8 @@ export async function deleteTenant(tenantId: string) {
     include: { leases: true, user: true },
   });
   if (!tenant) throw new Error("Tenant not found.");
-  if (tenant.leases.length > 0) throw new Error("Remove this tenant's leases before deleting them.");
-  if (tenant.user) throw new Error("This tenant has portal access — disable it before deleting.");
+  if (tenant.leases.length > 0) errorRedirect(`/tenants/${tenantId}`, "Remove this tenant's leases before deleting them.");
+  if (tenant.user) errorRedirect(`/tenants/${tenantId}`, "This tenant has portal access — disable it before deleting.");
 
   await prisma.tenant.delete({ where: { id: tenantId } });
   redirect("/tenants");
@@ -545,10 +545,10 @@ export async function deleteLease(leaseId: string) {
   });
   if (!lease) throw new Error("Lease not found.");
   if (lease.charges.length > 0 || lease.payments.length > 0) {
-    throw new Error("This lease has charges or payments on record — end it instead of deleting, to keep the financial history.");
+    errorRedirect("/leases", "This lease has charges or payments on record — end it instead of deleting, to keep the financial history.");
   }
   if (lease.evictions.length > 0) {
-    throw new Error("This lease has an eviction case on record — end the lease instead of deleting, to keep that history.");
+    errorRedirect("/leases", "This lease has an eviction case on record — end the lease instead of deleting, to keep that history.");
   }
 
   await prisma.lease.delete({ where: { id: leaseId } });
@@ -972,8 +972,8 @@ export async function deleteVendor(vendorId: string) {
     include: { quotes: true, user: true },
   });
   if (!vendor) throw new Error("Vendor not found.");
-  if (vendor.quotes.length > 0) throw new Error("This vendor has quote history on file — leave them on record rather than deleting.");
-  if (vendor.user) throw new Error("This vendor has portal access — disable it before deleting.");
+  if (vendor.quotes.length > 0) errorRedirect(`/vendors/${vendorId}`, "This vendor has quote history on file — leave them on record rather than deleting.");
+  if (vendor.user) errorRedirect(`/vendors/${vendorId}`, "This vendor has portal access — disable it before deleting.");
 
   await prisma.repair.updateMany({ where: { awardedVendorId: vendorId, organizationId: s.organizationId }, data: { awardedVendorId: null } });
   await prisma.recurringJob.updateMany({ where: { vendorId, organizationId: s.organizationId }, data: { vendorId: null } });

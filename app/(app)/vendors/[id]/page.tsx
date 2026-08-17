@@ -10,11 +10,18 @@ function money(n: number | null | undefined) {
   return n == null ? "—" : n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-export default async function VendorDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function VendorDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/dashboard");
   const { id } = await params;
+  const { error } = await searchParams;
   const vendor = await getVendor(s.organizationId, id);
   if (!vendor) notFound();
 
@@ -23,6 +30,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div>
         <Link href="/vendors" className="text-xs underline text-silver-dark">
           All vendors
