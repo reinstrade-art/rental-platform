@@ -101,6 +101,7 @@ export default async function SettingsPage() {
         {mpesaConfigured({
           env: org.mpesaEnv,
           shortcode: org.mpesaShortcode,
+          accountType: org.mpesaAccountType,
           consumerKey: org.mpesaConsumerKey,
           consumerSecret: org.mpesaConsumerSecret,
           passkey: org.mpesaPasskey,
@@ -111,10 +112,14 @@ export default async function SettingsPage() {
           <option value="sandbox">Sandbox (testing)</option>
           <option value="production">Production</option>
         </select>
+        <select name="mpesaAccountType" defaultValue={org.mpesaAccountType ?? "PAYBILL"} className="rounded border px-3 py-2">
+          <option value="PAYBILL">Paybill number</option>
+          <option value="TILL">Till number (Buy Goods and Services)</option>
+        </select>
         <input
           name="mpesaShortcode"
           defaultValue={org.mpesaShortcode ?? ""}
-          placeholder="Shortcode (paybill/till)"
+          placeholder="Shortcode (your paybill or till number)"
           className="rounded border px-3 py-2"
         />
         <input

@@ -38,6 +38,7 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
   const mpesaReady = mpesaConfigured({
     env: org.mpesaEnv,
     shortcode: org.mpesaShortcode,
+    accountType: org.mpesaAccountType,
     consumerKey: org.mpesaConsumerKey,
     consumerSecret: org.mpesaConsumerSecret,
     passkey: org.mpesaPasskey,

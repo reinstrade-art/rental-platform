@@ -19,6 +19,11 @@ import { mpesaNumber } from "./phone";
 export type DarajaCredentials = {
   env: string | null; // "sandbox" | "production" — sandbox unless explicitly production
   shortcode: string | null;
+  // "PAYBILL" | "TILL" | null — null reads as PAYBILL. Changes only which
+  // STK Push TransactionType is sent; a Till number (Buy Goods and Services)
+  // uses the exact same shortcode/password/PartyB shape as a paybill, just a
+  // different TransactionType value.
+  accountType: string | null;
   consumerKey: string | null;
   consumerSecret: string | null;
   passkey: string | null;
@@ -72,6 +77,7 @@ export async function stkPush(
   const shortcode = credentials.shortcode!;
   const ts = timestamp();
   const password = Buffer.from(`${shortcode}${credentials.passkey}${ts}`).toString("base64");
+  const transactionType = credentials.accountType === "TILL" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline";
 
   try {
     const token = await accessToken(credentials);
@@ -82,7 +88,7 @@ export async function stkPush(
         BusinessShortCode: shortcode,
         Password: password,
         Timestamp: ts,
-        TransactionType: "CustomerPayBillOnline",
+        TransactionType: transactionType,
         Amount: amount,
         PartyA: phone,
         PartyB: shortcode,

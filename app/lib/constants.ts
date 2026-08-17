@@ -50,6 +50,9 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export const LICENSE_PAYMENT_METHODS = ["MPESA_STK", "BANK", "CASH", "OTHER"] as const;
 export type LicensePaymentMethod = (typeof LICENSE_PAYMENT_METHODS)[number];
 
+export const MPESA_ACCOUNT_TYPES = ["PAYBILL", "TILL"] as const;
+export type MpesaAccountType = (typeof MPESA_ACCOUNT_TYPES)[number];
+
 export const SUPPLIER_CATEGORIES = [
   "HARDWARE",
   "BUILDING_MATERIALS",

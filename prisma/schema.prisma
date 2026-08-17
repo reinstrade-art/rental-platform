@@ -88,6 +88,12 @@ model Organization {
   // as the reference build's env vars; encrypting these at rest is a
   // reasonable later hardening pass, not done here.
   mpesaEnv            String? // "sandbox" | "production"
+  // Which kind of shortcode mpesaShortcode actually is — changes only the
+  // STK Push TransactionType sent to Safaricom (CustomerPayBillOnline vs
+  // CustomerBuyGoodsOnline); everything else about the request is identical.
+  // Null reads as PAYBILL, so every org configured before this field existed
+  // keeps behaving exactly as before.
+  mpesaAccountType    String? // "PAYBILL" | "TILL"
   mpesaShortcode      String?
   mpesaConsumerKey    String?
   mpesaConsumerSecret String?

@@ -29,6 +29,7 @@ export default async function TenantPortalPage() {
   const mpesaReady = mpesaConfigured({
     env: org.mpesaEnv,
     shortcode: org.mpesaShortcode,
+    accountType: org.mpesaAccountType,
     consumerKey: org.mpesaConsumerKey,
     consumerSecret: org.mpesaConsumerSecret,
     passkey: org.mpesaPasskey,

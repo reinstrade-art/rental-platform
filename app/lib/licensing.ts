@@ -70,6 +70,7 @@ function platformMpesaCredentials(): DarajaCredentials {
   return {
     env: process.env.PLATFORM_MPESA_ENV ?? null,
     shortcode: process.env.PLATFORM_MPESA_SHORTCODE ?? null,
+    accountType: process.env.PLATFORM_MPESA_ACCOUNT_TYPE ?? null,
     consumerKey: process.env.PLATFORM_MPESA_CONSUMER_KEY ?? null,
     consumerSecret: process.env.PLATFORM_MPESA_CONSUMER_SECRET ?? null,
     passkey: process.env.PLATFORM_MPESA_PASSKEY ?? null,

@@ -296,10 +296,14 @@ export async function updateMpesaSettings(formData: FormData) {
   const env = String(formData.get("mpesaEnv") ?? "sandbox");
   if (env !== "sandbox" && env !== "production") throw new Error("Invalid environment.");
 
+  const accountType = String(formData.get("mpesaAccountType") ?? "PAYBILL");
+  if (accountType !== "PAYBILL" && accountType !== "TILL") throw new Error("Invalid account type.");
+
   await prisma.organization.update({
     where: { id: s.organizationId },
     data: {
       mpesaEnv: env,
+      mpesaAccountType: accountType,
       mpesaShortcode: String(formData.get("mpesaShortcode") ?? "").trim() || null,
       mpesaConsumerKey: String(formData.get("mpesaConsumerKey") ?? "").trim() || null,
       mpesaConsumerSecret: String(formData.get("mpesaConsumerSecret") ?? "").trim() || null,

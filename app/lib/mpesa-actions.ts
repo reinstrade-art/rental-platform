@@ -44,6 +44,7 @@ async function raise(
     {
       env: org.mpesaEnv,
       shortcode: org.mpesaShortcode,
+      accountType: org.mpesaAccountType,
       consumerKey: org.mpesaConsumerKey,
       consumerSecret: org.mpesaConsumerSecret,
       passkey: org.mpesaPasskey,
