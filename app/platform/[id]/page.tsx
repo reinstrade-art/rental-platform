@@ -5,7 +5,7 @@ import { prisma } from "@/app/lib/prisma";
 import { logPlatformAccess } from "@/app/lib/audit";
 import { licenseState, platformMpesaConfigured } from "@/app/lib/licensing";
 import { LICENSE_PAYMENT_METHODS } from "@/app/lib/constants";
-import { updateLicenseFee, recordLicensePayment, sendLicenseStkAction, updateOrgTier } from "@/app/lib/actions";
+import { updateLicenseFee, recordLicensePayment, sendLicenseStkAction, updateOrgTier, platformImpersonateAction } from "@/app/lib/actions";
 import { ORG_TIERS } from "@/app/lib/constants";
 
 const STATE_COLOR: Record<string, string> = {
@@ -157,6 +157,47 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
             </tbody>
           </table>
         )}
+      </div>
+
+      <div>
+        <h2 className="font-semibold">Team</h2>
+        <p className="text-xs text-silver-dark">
+          Sign in as this organization&apos;s own staff to view, edit, or delete its data through their real
+          screens — never a separate platform-side copy. Every sign-in here is recorded in the audit log.
+        </p>
+        <table className="mt-2 w-full max-w-lg border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
+              <th className="py-1">Email</th>
+              <th className="py-1">Role</th>
+              <th className="py-1"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {org.users.map((u) => (
+              <tr key={u.id} className="border-b">
+                <td className="py-1">{u.email ?? u.phone}</td>
+                <td className="py-1">{u.role}</td>
+                <td className="py-1">
+                  {u.disabledAt ? (
+                    <span className="text-xs text-silver-dark">Disabled</span>
+                  ) : (
+                    <form action={platformImpersonateAction.bind(null, u.id)}>
+                      <button className="text-xs underline">Sign in as</button>
+                    </form>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {org.users.length === 0 && (
+              <tr>
+                <td colSpan={3} className="py-2 text-silver-dark">
+                  No staff yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

@@ -15,6 +15,7 @@ import {
   verifyCredentials,
   getSession,
   impersonate,
+  platformImpersonate,
   endImpersonation,
   revokeSession,
   revokeOtherSessions,
@@ -1409,10 +1410,27 @@ export async function impersonateAction(targetUserId: string) {
   redirect("/dashboard");
 }
 
-/** Hands the session back to the admin who opened it. */
+/**
+ * A platform admin opening a session as an org's own staff — for support
+ * that needs actual edit/delete access to a customer's data, through their
+ * real UI rather than a duplicate set of platform-side forms. See
+ * platformImpersonate() in app/lib/auth.ts for why this is allowed to cross
+ * organizations and reach the org's own ADMIN seat. Logged unconditionally,
+ * on the same footing as viewing an org's data.
+ */
+export async function platformImpersonateAction(targetUserId: string) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+  const organizationId = await platformImpersonate(s, targetUserId);
+  await logPlatformAccess(s.userId, organizationId, "IMPERSONATE_ORG", `Signed in as staff by ${s.email ?? s.userId}`);
+  redirect("/dashboard");
+}
+
+/** Hands the session back to whoever opened it — a platform admin returns to the org list, an org admin to their own team page. */
 export async function endImpersonationAction() {
   await endImpersonation();
-  redirect("/users");
+  const s = await getSession();
+  redirect(s && requirePlatformAdmin(s) ? "/platform" : "/users");
 }
 
 // --- account: session management -----------------------------------------

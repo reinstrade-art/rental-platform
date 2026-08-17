@@ -412,3 +412,41 @@ export async function allowLeaseDoc(leaseId: string): Promise<Session | null> {
   if (requireTenant(s) && s.organizationId === lease.organizationId && s.tenantId === lease.tenantId) return s;
   return null;
 }
+
+/**
+ * The platform admin own version of impersonate() above - crosses
+ * organizations by design (that is the entire point: full support access to
+ * a customer data through their own real UI, rather than a second,
+ * parallel set of platform-side CRUD forms that would drift from the staff
+ * app over time), and - unlike the peer-to-peer staff version - MAY reach
+ * the org own ADMIN seat, since anything less would not actually be full
+ * access. Every call is a deliberate, logged cross-org action (see
+ * platformImpersonateAction), on the same footing as viewing an org data.
+ */
+export async function platformImpersonate(admin: Session, targetUserId: string) {
+  if (!requirePlatformAdmin(admin)) throw new Error("Not authorized.");
+
+  const target = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: { id: true, organizationId: true, email: true, phone: true, role: true, disabledAt: true },
+  });
+  if (!target || target.disabledAt) throw new Error("That account cannot be signed in to.");
+  if (!target.organizationId || !isStaff(target.role)) throw new Error("Only an organization own staff can be signed in to.");
+
+  const ownToken = (await cookies()).get(COOKIE)?.value;
+  if (ownToken) {
+    (await cookies()).set(IMPERSONATOR_COOKIE, ownToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: MAX_AGE,
+    });
+  }
+
+  await createSession(
+    { id: target.id, organizationId: target.organizationId, email: target.email, phone: target.phone, role: target.role },
+    admin.userId,
+  );
+  return target.organizationId;
+}
