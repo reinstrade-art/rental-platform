@@ -50,6 +50,17 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export const LICENSE_PAYMENT_METHODS = ["MPESA_STK", "BANK", "CASH", "OTHER"] as const;
 export type LicensePaymentMethod = (typeof LICENSE_PAYMENT_METHODS)[number];
 
+export const SUPPLIER_CATEGORIES = [
+  "HARDWARE",
+  "BUILDING_MATERIALS",
+  "ELECTRICAL",
+  "PLUMBING",
+  "PAINT",
+  "TIMBER",
+  "GENERAL",
+] as const;
+export type SupplierCategory = (typeof SUPPLIER_CATEGORIES)[number];
+
 // Every new organization gets this many days free from creation before it
 // needs a recorded license payment to keep working — see app/lib/licensing.ts.
 export const TRIAL_DAYS = 30;
@@ -71,6 +82,7 @@ export const FEATURE_TIER: Record<string, OrgTier> = {
   BILLING_RUN: "INTERMEDIATE",
   MULTI_STAFF: "INTERMEDIATE",
   REPAIRS: "ADVANCED",
+  SUPPLIERS: "ADVANCED",
   EXPENSES: "ADVANCED",
   EVICTIONS: "ADVANCED",
   ARREARS_ALERTS: "ADVANCED",

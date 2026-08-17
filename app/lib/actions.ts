@@ -842,6 +842,92 @@ export async function setVendorPrequalified(vendorId: string, prequalified: bool
   await prisma.vendor.update({ where: { id: vendorId }, data: { prequalified } });
 }
 
+// --- staff: suppliers -------------------------------------------------------
+// Where materials for a repair were bought — distinct from Vendor, who is
+// paid for labour. See app/lib/tier.ts — bundled with Repairs, same package.
+
+export async function createSupplier(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireFeature(await getOrgTier(s.organizationId), "SUPPLIERS");
+
+  const name = str(formData, "name");
+  if (!name) throw new Error("Supplier name is required.");
+
+  await prisma.supplier.create({
+    data: {
+      organizationId: s.organizationId,
+      name,
+      category: str(formData, "category") || "GENERAL",
+      itemDescription: optStr(formData, "itemDescription"),
+      itemPrice: formData.get("itemPrice") ? Number(formData.get("itemPrice")) : null,
+      contactName: optStr(formData, "contactName"),
+      phone: optStr(formData, "phone"),
+      email: optStr(formData, "email"),
+      notes: optStr(formData, "notes"),
+    },
+  });
+  redirect("/suppliers");
+}
+
+export async function updateSupplier(supplierId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, organizationId: s.organizationId } });
+  if (!supplier) throw new Error("Supplier not found.");
+
+  const name = str(formData, "name");
+  if (!name) throw new Error("Supplier name is required.");
+
+  await prisma.supplier.update({
+    where: { id: supplierId },
+    data: {
+      name,
+      category: str(formData, "category") || "GENERAL",
+      itemDescription: optStr(formData, "itemDescription"),
+      itemPrice: formData.get("itemPrice") ? Number(formData.get("itemPrice")) : null,
+      contactName: optStr(formData, "contactName"),
+      phone: optStr(formData, "phone"),
+      email: optStr(formData, "email"),
+      notes: optStr(formData, "notes"),
+    },
+  });
+  redirect("/suppliers");
+}
+
+export async function deleteSupplier(supplierId: string) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, organizationId: s.organizationId } });
+  if (!supplier) throw new Error("Supplier not found.");
+
+  // Repairs that named this supplier keep their history and simply lose the
+  // assignment, the same treatment a removed vendor gets.
+  await prisma.repair.updateMany({ where: { supplierId }, data: { supplierId: null } });
+  await prisma.supplier.delete({ where: { id: supplierId } });
+  redirect("/suppliers");
+}
+
+/** Naming, or clearing, which supplier a repair's materials came from. */
+export async function assignSupplier(repairId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const repair = await prisma.repair.findFirst({ where: { id: repairId, organizationId: s.organizationId } });
+  if (!repair) throw new Error("Repair not found.");
+
+  const supplierId = optStr(formData, "supplierId");
+  if (supplierId) {
+    const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, organizationId: s.organizationId } });
+    if (!supplier) throw new Error("Supplier not found.");
+  }
+
+  await prisma.repair.update({ where: { id: repairId }, data: { supplierId } });
+  redirect(`/repairs/${repairId}`);
+}
+
 export async function createRepair(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");

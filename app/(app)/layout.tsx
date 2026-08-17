@@ -18,6 +18,7 @@ const NAV: { href: string; label: string; feature?: Feature }[] = [
   { href: "/expenses", label: "Expenses", feature: "EXPENSES" },
   { href: "/repairs", label: "Repairs", feature: "REPAIRS" },
   { href: "/vendors", label: "Vendors", feature: "REPAIRS" },
+  { href: "/suppliers", label: "Suppliers", feature: "SUPPLIERS" },
   { href: "/reports", label: "Reports", feature: "REPORTS" },
   { href: "/approvals", label: "Approvals" },
   { href: "/users", label: "Team" },

@@ -104,6 +104,7 @@ model Organization {
   payments         Payment[]
   expenses         Expense[]
   vendors          Vendor[]
+  suppliers        Supplier[]
   repairs          Repair[]
   quotes           Quote[]
   approvalRequests ApprovalRequest[]
@@ -505,6 +506,31 @@ model Vendor {
   createdAt DateTime @default(now())
 }
 
+// Where materials for a repair were bought — a hardware shop, a builders'
+// merchant, an electrical or plumbing supplier — distinct from Vendor, which
+// is who is paid for labour. itemDescription/itemPrice are a quick
+// reference so the office doesn't have to ring round to remember what
+// something cost last time, not a catalogue.
+model Supplier {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  name            String
+  category        String  @default("GENERAL")
+  itemDescription String?
+  itemPrice       Float?
+  contactName     String?
+  phone           String?
+  email           String?
+  notes           String?
+
+  repairs Repair[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Repair {
   id             String       @id @default(cuid())
   organizationId String
@@ -515,6 +541,12 @@ model Repair {
   // Nullable so common-area faults (not tied to one tenancy) are expressible.
   unitId     String?
   unit       Unit?    @relation(fields: [unitId], references: [id])
+
+  // Where this job's materials were bought, if anywhere — one supplier per
+  // job for now; a job drawing on several can name the main one and note
+  // the rest in `description`.
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
 
   title       String
   description String?

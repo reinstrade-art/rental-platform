@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
-import { getRepair, getVendors } from "@/app/lib/data";
+import { getRepair, getVendors, getSuppliers } from "@/app/lib/data";
 import { getApprovalForSubject } from "@/app/lib/approvals";
 import {
   sendWorkOrder,
@@ -10,6 +10,7 @@ import {
   approveWork,
   approveCost,
   markRepairDone,
+  assignSupplier,
 } from "@/app/lib/actions";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
@@ -33,9 +34,15 @@ function PendingNote({ request }: { request: { steps: unknown[] } | null }) {
 export default async function RepairDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/dashboard");
+  const tier = await getOrgTier(s.organizationId);
+  if (!hasFeature(tier, "REPAIRS")) redirect("/dashboard");
+  const canSuppliers = hasFeature(tier, "SUPPLIERS");
   const { id } = await params;
-  const [repair, vendors] = await Promise.all([getRepair(s.organizationId, id), getVendors(s.organizationId)]);
+  const [repair, vendors, suppliers] = await Promise.all([
+    getRepair(s.organizationId, id),
+    getVendors(s.organizationId),
+    canSuppliers ? getSuppliers(s.organizationId) : Promise.resolve([]),
+  ]);
   if (!repair) notFound();
 
   const [awardRequest, workRequest, costRequest] = await Promise.all([
@@ -56,6 +63,24 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
         </p>
         {repair.description && <p className="mt-2 text-sm">{repair.description}</p>}
       </div>
+
+      {canSuppliers && (
+        <div className="max-w-sm">
+          <h2 className="font-semibold">Materials supplier</h2>
+          <p className="text-xs text-silver-dark">Where this job's materials were bought from, if anywhere.</p>
+          <form action={assignSupplier.bind(null, repair.id)} className="mt-2 flex gap-2">
+            <select name="supplierId" defaultValue={repair.supplierId ?? ""} className="flex-1 rounded border px-3 py-2 text-sm">
+              <option value="">— none —</option>
+              {suppliers.map((sup) => (
+                <option key={sup.id} value={sup.id}>
+                  {sup.name}
+                </option>
+              ))}
+            </select>
+            <button className="rounded border px-3 py-2 text-sm transition-colors hover:bg-silver-light">Save</button>
+          </form>
+        </div>
+      )}
 
       {/* Work order */}
       {!repair.workOrderSentAt ? (
