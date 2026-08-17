@@ -187,6 +187,15 @@ export async function getVendor(organizationId: string, vendorId: string) {
   });
 }
 
+export async function getSupplier(organizationId: string, supplierId: string) {
+  return prisma.supplier.findFirst({
+    where: { id: supplierId, organizationId },
+    include: {
+      repairs: { orderBy: { reportedAt: "desc" }, include: { property: true, unit: true } },
+    },
+  });
+}
+
 export async function getSuppliers(organizationId: string) {
   return prisma.supplier.findMany({
     where: { organizationId },

@@ -1032,7 +1032,7 @@ export async function updateSupplier(supplierId: string, formData: FormData) {
       notes: optStr(formData, "notes"),
     },
   });
-  redirect("/suppliers");
+  redirect(`/suppliers/${supplierId}`);
 }
 
 export async function deleteSupplier(supplierId: string) {

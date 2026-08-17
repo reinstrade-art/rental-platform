@@ -45,7 +45,11 @@ export default async function SuppliersPage() {
         <tbody>
           {suppliers.map((sup) => (
             <tr key={sup.id} className="border-b align-top">
-              <td className="py-2 font-medium">{sup.name}</td>
+              <td className="py-2 font-medium">
+                <Link href={`/suppliers/${sup.id}`} className="underline">
+                  {sup.name}
+                </Link>
+              </td>
               <td className="py-2">
                 {label(sup.category)}
                 {sup.itemDescription && (

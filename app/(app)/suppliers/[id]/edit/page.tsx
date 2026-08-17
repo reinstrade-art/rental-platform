@@ -21,8 +21,8 @@ export default async function EditSupplierPage({ params }: { params: Promise<{ i
 
   return (
     <div className="max-w-sm">
-      <Link href="/suppliers" className="text-xs underline text-silver-dark">
-        All suppliers
+      <Link href={`/suppliers/${supplier.id}`} className="text-xs underline text-silver-dark">
+        Back to {supplier.name}
       </Link>
       <h1 className="mt-1 text-lg font-semibold">Edit supplier</h1>
       <form action={updateSupplier.bind(null, supplier.id)} className="mt-4 flex flex-col gap-3">
