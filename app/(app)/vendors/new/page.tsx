@@ -11,8 +11,8 @@ export default async function NewVendorPage() {
 
   return (
     <div className="max-w-sm">
-      <Link href="/repairs" className="text-xs underline text-silver-dark">
-        Back to repairs
+      <Link href="/vendors" className="text-xs underline text-silver-dark">
+        All vendors
       </Link>
       <h1 className="mt-1 text-lg font-semibold">Add vendor</h1>
       <form action={createVendor} className="mt-4 flex flex-col gap-3">

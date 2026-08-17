@@ -71,7 +71,15 @@ export default async function RepairsPage() {
               </td>
               <td className={`py-2 ${PRIORITY_COLOR[r.priority] ?? ""}`}>{r.priority}</td>
               <td className="py-2">{r.status}</td>
-              <td className="py-2">{r.awardedVendor?.name ?? "—"}</td>
+              <td className="py-2">
+                {r.awardedVendor ? (
+                  <Link href={`/vendors/${r.awardedVendor.id}`} className="underline">
+                    {r.awardedVendor.name}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </td>
             </tr>
           ))}
           {repairs.length === 0 && (

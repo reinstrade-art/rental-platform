@@ -83,7 +83,15 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
         </div>
         <div className="rounded border p-4">
           <div className="text-xs text-silver-dark">Vendor</div>
-          <div className="mt-1 text-xl font-semibold">{repair.awardedVendor?.name ?? "—"}</div>
+          <div className="mt-1 text-xl font-semibold">
+            {repair.awardedVendor ? (
+              <Link href={`/vendors/${repair.awardedVendor.id}`} className="underline">
+                {repair.awardedVendor.name}
+              </Link>
+            ) : (
+              "—"
+            )}
+          </div>
         </div>
         <div className="rounded border p-4">
           <div className="text-xs text-silver-dark">{repair.status === "DONE" ? "Final cost" : "Approved cost"}</div>
@@ -145,7 +153,11 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
           <tbody>
             {repair.quotes.map((q) => (
               <tr key={q.id} className="border-b">
-                <td className="py-1">{q.vendor.name}</td>
+                <td className="py-1">
+                  <Link href={`/vendors/${q.vendor.id}`} className="underline">
+                    {q.vendor.name}
+                  </Link>
+                </td>
                 <td className="py-1">{money(q.amount)}</td>
                 <td className="py-1">{q.status}</td>
                 <td className="py-1">
@@ -192,7 +204,15 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
       {repair.awardedVendorId && (
         <div className="max-w-sm">
           <h2 className="font-semibold">Approvals</h2>
-          <p className="text-sm text-silver-dark">Awarded to {repair.awardedVendor?.name}.</p>
+          <p className="text-sm text-silver-dark">
+            Awarded to{" "}
+            {repair.awardedVendor && (
+              <Link href={`/vendors/${repair.awardedVendor.id}`} className="underline">
+                {repair.awardedVendor.name}
+              </Link>
+            )}
+            .
+          </p>
 
           <div className="mt-3 flex flex-col gap-4">
             <div>

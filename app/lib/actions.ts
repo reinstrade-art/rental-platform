@@ -941,6 +941,46 @@ export async function setVendorPrequalified(vendorId: string, prequalified: bool
   await prisma.vendor.update({ where: { id: vendorId }, data: { prequalified } });
 }
 
+export async function updateVendor(vendorId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+  const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, organizationId: s.organizationId } });
+  if (!vendor) throw new Error("Vendor not found.");
+
+  const name = str(formData, "name");
+  if (!name) throw new Error("Vendor name is required.");
+
+  await prisma.vendor.update({
+    where: { id: vendorId },
+    data: {
+      name,
+      trade: optStr(formData, "trade"),
+      contactName: optStr(formData, "contactName"),
+      phone: optStr(formData, "phone"),
+      email: optStr(formData, "email"),
+      notes: optStr(formData, "notes"),
+    },
+  });
+  redirect(`/vendors/${vendorId}`);
+}
+
+export async function deleteVendor(vendorId: string) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+  const vendor = await prisma.vendor.findFirst({
+    where: { id: vendorId, organizationId: s.organizationId },
+    include: { quotes: true, user: true },
+  });
+  if (!vendor) throw new Error("Vendor not found.");
+  if (vendor.quotes.length > 0) throw new Error("This vendor has quote history on file — leave them on record rather than deleting.");
+  if (vendor.user) throw new Error("This vendor has portal access — disable it before deleting.");
+
+  await prisma.repair.updateMany({ where: { awardedVendorId: vendorId, organizationId: s.organizationId }, data: { awardedVendorId: null } });
+  await prisma.recurringJob.updateMany({ where: { vendorId, organizationId: s.organizationId }, data: { vendorId: null } });
+  await prisma.vendor.delete({ where: { id: vendorId } });
+  redirect("/vendors");
+}
+
 // --- staff: suppliers -------------------------------------------------------
 // Where materials for a repair were bought — distinct from Vendor, who is
 // paid for labour. See app/lib/tier.ts — bundled with Repairs, same package.

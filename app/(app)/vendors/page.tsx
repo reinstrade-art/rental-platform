@@ -32,7 +32,11 @@ export default async function VendorsPage() {
         <tbody>
           {vendors.map((v) => (
             <tr key={v.id} className="border-b">
-              <td className="py-2">{v.name}</td>
+              <td className="py-2">
+                <Link href={`/vendors/${v.id}`} className="underline">
+                  {v.name}
+                </Link>
+              </td>
               <td className="py-2">{v.trade ?? "—"}</td>
               <td className="py-2">{[v.contactName, v.phone, v.email].filter(Boolean).join(" · ") || "—"}</td>
               <td className="py-2">
