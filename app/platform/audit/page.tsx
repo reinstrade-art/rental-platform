@@ -23,8 +23,8 @@ export default async function PlatformAuditPage() {
       <div>
         <h1 className="text-lg font-semibold">Platform admin audit log</h1>
         <p className="text-sm text-silver-dark">
-          Every time a platform administrator views or acts on an organization's data, it's recorded here —
-          append-only, and no organization's own staff can see or alter it.
+          Every time a platform administrator views or acts on an organization&apos;s data, it&apos;s recorded here —
+          append-only, and no organization&apos;s own staff can see or alter it.
         </p>
       </div>
       <table className="w-full border-collapse text-sm">

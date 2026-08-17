@@ -176,7 +176,7 @@ export default async function TenantPortalPage() {
 
       <div className="rounded border p-4">
         <h2 className="text-sm font-semibold">Messages</h2>
-        <p className="text-xs text-silver-dark">Write to the office here — they'll reply in the same thread.</p>
+        <p className="text-xs text-silver-dark">Write to the office here — they&apos;ll reply in the same thread.</p>
 
         <ul className="mt-3 flex flex-col gap-2">
           {tenant.messages.slice(-10).map((msg) => (

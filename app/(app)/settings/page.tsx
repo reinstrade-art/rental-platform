@@ -96,7 +96,7 @@ export default async function SettingsPage() {
     <div className="max-w-sm">
       <h2 className="text-lg font-semibold">M-Pesa (STK Push)</h2>
       <p className="mt-1 text-sm text-silver-dark">
-        Uses this organization's own Safaricom shortcode — there is no shared/platform paybill. Get these from your
+        Uses this organization&apos;s own Safaricom shortcode — there is no shared/platform paybill. Get these from your
         Daraja app at developer.safaricom.co.ke.
         {mpesaConfigured({
           env: org.mpesaEnv,
@@ -154,7 +154,7 @@ export default async function SettingsPage() {
         )}
       </div>
       {sessions.length === 0 ? (
-        <p className="mt-2 text-xs text-silver-dark">Nothing else — this is the only place you're signed in.</p>
+        <p className="mt-2 text-xs text-silver-dark">Nothing else — this is the only place you&apos;re signed in.</p>
       ) : (
         <ul className="mt-2 flex flex-col gap-2">
           {sessions.map((sess) => (

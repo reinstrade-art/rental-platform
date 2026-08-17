@@ -104,7 +104,7 @@ export default async function AlertsPage() {
           {alerts.length === 0 && (
             <tr>
               <td colSpan={6} className="py-4 text-silver-dark">
-                Nothing to chase — no tenant owes two months' rent or has a charge older than two months.
+                Nothing to chase — no tenant owes two months&apos; rent or has a charge older than two months.
               </td>
             </tr>
           )}

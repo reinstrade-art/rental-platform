@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { parseCallbackMetadata, type StkCallback } from "@/app/lib/mpesa";
-import { extendLicense } from "@/app/lib/licensing";
 
 /**
  * Where Safaricom tells us what happened to a license-billing prompt —

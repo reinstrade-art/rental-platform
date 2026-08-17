@@ -63,7 +63,7 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
       </div>
 
       <div className="rounded border border-silver bg-silver-light p-3 text-sm font-medium text-ink">
-        You are viewing this organization's data as the Platform Administrator, for support purposes. This visit
+        You are viewing this organization&apos;s data as the Platform Administrator, for support purposes. This visit
         has been recorded in the audit log.
       </div>
 

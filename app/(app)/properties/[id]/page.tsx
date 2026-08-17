@@ -60,7 +60,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
           </tbody>
         </table>
         <p className="mt-2 text-xs text-silver-dark">
-          A unit's payment code is matched against incoming transaction references (M-Pesa, bank, manual) to
+          A unit&apos;s payment code is matched against incoming transaction references (M-Pesa, bank, manual) to
           auto-record rent payments — see Payments.
         </p>
       </div>

@@ -25,7 +25,7 @@ export default async function PaymentsPage() {
       <div>
         <h1 className="text-lg font-semibold">Payments ingestion</h1>
         <p className="text-sm text-silver-dark">
-          Every transaction — however it arrives — lands here first and either auto-matches by a unit's payment
+          Every transaction — however it arrives — lands here first and either auto-matches by a unit&apos;s payment
           code or waits for a manual match. Nothing is guessed silently.
         </p>
       </div>

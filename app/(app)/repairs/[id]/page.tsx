@@ -67,7 +67,7 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
       {canSuppliers && (
         <div className="max-w-sm">
           <h2 className="font-semibold">Materials supplier</h2>
-          <p className="text-xs text-silver-dark">Where this job's materials were bought from, if anywhere.</p>
+          <p className="text-xs text-silver-dark">Where this job&apos;s materials were bought from, if anywhere.</p>
           <form action={assignSupplier.bind(null, repair.id)} className="mt-2 flex gap-2">
             <select name="supplierId" defaultValue={repair.supplierId ?? ""} className="flex-1 rounded border px-3 py-2 text-sm">
               <option value="">— none —</option>

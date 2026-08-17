@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
 import { leaseBalance } from "./data";
-import { newDocument, drawHeader, drawRule, money, textRow, paletteFor, MARGIN, PAGE_WIDTH, PAGE_HEIGHT } from "./pdf-chrome";
+import { newDocument, drawHeader, drawRule, money, textRow, paletteFor, MARGIN, PAGE_WIDTH } from "./pdf-chrome";
 import type { OrgBranding } from "./pdf-chrome";
 
 /**

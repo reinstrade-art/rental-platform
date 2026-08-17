@@ -98,7 +98,7 @@ export default async function LeasesPage() {
           <p className="text-xs text-silver-dark">
             Select the property this file belongs to, then upload a CSV with a header row like: Unit #, Tenant, Month,
             Year, Expected Rent, Billed Rent, RENT Paid. Units, tenants, and leases are created or matched
-            automatically, and each period's charge/payment is recorded — a &quot;VACANT&quot; tenant just creates the
+            automatically, and each period&apos;s charge/payment is recorded — a &quot;VACANT&quot; tenant just creates the
             unit.
           </p>
           <form action={importRentRoll} className="mt-3 flex flex-col gap-2" encType="multipart/form-data">

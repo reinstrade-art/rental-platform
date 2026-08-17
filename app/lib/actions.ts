@@ -575,7 +575,7 @@ export async function startEviction(formData: FormData) {
   const lease = await requireOwnedLease(s.organizationId, leaseId);
 
   const existing = await prisma.eviction.findFirst({
-    where: { leaseId, status: { notIn: ["ENFORCED", "WITHDRAWN", "VACATED"] } },
+    where: { leaseId, organizationId: s.organizationId, status: { notIn: ["ENFORCED", "WITHDRAWN", "VACATED"] } },
   });
   if (existing) throw new Error("There is already an open eviction case for this lease.");
 
@@ -905,7 +905,7 @@ export async function deleteSupplier(supplierId: string) {
 
   // Repairs that named this supplier keep their history and simply lose the
   // assignment, the same treatment a removed vendor gets.
-  await prisma.repair.updateMany({ where: { supplierId }, data: { supplierId: null } });
+  await prisma.repair.updateMany({ where: { supplierId, organizationId: s.organizationId }, data: { supplierId: null } });
   await prisma.supplier.delete({ where: { id: supplierId } });
   redirect("/suppliers");
 }

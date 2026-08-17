@@ -14,7 +14,7 @@ export default async function InviteConfirmationPage({ params }: { params: Promi
     <div className="max-w-sm">
       <h1 className="text-lg font-semibold">Invitation created</h1>
       <p className="mt-2 text-sm text-silver-dark">
-        Give this code to {invite.email ?? invite.phone}, along with the address/number it was issued to — they'll
+        Give this code to {invite.email ?? invite.phone}, along with the address/number it was issued to — they&apos;ll
         need both to register at <span className="font-mono">/register</span>.
       </p>
       <div className="mt-4 rounded border bg-silver-light p-4 text-center font-mono text-2xl tracking-widest">

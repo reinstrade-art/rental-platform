@@ -46,7 +46,7 @@ export function LeaseUnitSelect({ units, defaultUnitId }: { units: UnitOption[];
           onChange={(e) => setRent(e.target.value === "" ? "" : Number(e.target.value))}
           className="w-full rounded border px-3 py-2"
         />
-        <p className="mt-1 text-xs text-silver-dark">Filled in from the unit's expected rent — adjust only if this lease differs.</p>
+        <p className="mt-1 text-xs text-silver-dark">Filled in from the unit&apos;s expected rent — adjust only if this lease differs.</p>
       </div>
     </>
   );

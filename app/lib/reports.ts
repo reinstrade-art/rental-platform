@@ -83,7 +83,7 @@ export async function getReportData(
         payments: { select: { amount: true, paidAt: true } },
       },
     }),
-    propertyId ? prisma.property.findUnique({ where: { id: propertyId }, select: { name: true } }) : Promise.resolve(null),
+    propertyId ? prisma.property.findFirst({ where: { id: propertyId, organizationId }, select: { name: true } }) : Promise.resolve(null),
     prisma.expense.aggregate({
       where: { organizationId, paidAt: { gte: from, lt: to }, ...(propertyId ? { propertyId } : {}) },
       _sum: { amount: true },

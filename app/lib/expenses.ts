@@ -62,7 +62,7 @@ export async function postRepairExpense(organizationId: string, repairId: string
   if (amount <= 0) return;
 
   const vendor = repair.awardedVendorId
-    ? await prisma.vendor.findUnique({ where: { id: repair.awardedVendorId }, select: { name: true } })
+    ? await prisma.vendor.findFirst({ where: { id: repair.awardedVendorId, organizationId }, select: { name: true } })
     : null;
 
   await prisma.expense.upsert({

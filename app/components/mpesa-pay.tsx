@@ -38,31 +38,37 @@ export function MpesaPay({
   buttonLabel?: string;
 }) {
   const [state, formAction, pending] = useActionState<MpesaState, FormData>(action, undefined);
-  const [poll, setPoll] = useState<PollResult | null>(null);
-  const [timedOut, setTimedOut] = useState(false);
+  // Tagged with the requestId each result belongs to, rather than reset in
+  // the effect — so a poll result from a previous prompt can never render
+  // for a split second against the new one, and the effect never needs to
+  // call setState synchronously on entry (which was itself triggering an
+  // extra cascading render for no benefit).
+  const [poll, setPoll] = useState<(PollResult & { requestId: string }) | null>(null);
+  const [timedOutFor, setTimedOutFor] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!state?.requestId) return;
-    setPoll(null);
-    setTimedOut(false);
+    const requestId = state?.requestId;
+    if (!requestId) return;
     let elapsed = 0;
     const iv = setInterval(async () => {
       elapsed += 3000;
       if (elapsed > 120_000) {
-        setTimedOut(true);
+        setTimedOutFor(requestId);
         clearInterval(iv);
         return;
       }
-      const res = await fetch(`/api/mpesa/status/${state.requestId}`).catch(() => null);
+      const res = await fetch(`/api/mpesa/status/${requestId}`).catch(() => null);
       if (!res?.ok) return;
       const data = (await res.json()) as PollResult;
-      setPoll(data);
+      setPoll({ ...data, requestId });
       if (data.status !== "PENDING") clearInterval(iv);
     }, 3000);
     return () => clearInterval(iv);
   }, [state?.requestId]);
 
-  const waiting = state?.requestId && (!poll || poll.status === "PENDING") && !timedOut;
+  const currentPoll = poll?.requestId === state?.requestId ? poll : null;
+  const timedOut = timedOutFor === state?.requestId;
+  const waiting = state?.requestId && (!currentPoll || currentPoll.status === "PENDING") && !timedOut;
 
   return (
     <form action={formAction} className="flex flex-col gap-2">
@@ -100,15 +106,15 @@ export function MpesaPay({
           Prompt sent — check the phone for the M-Pesa PIN prompt. Waiting for confirmation…
         </p>
       )}
-      {poll?.status === "SUCCESS" && (
+      {currentPoll?.status === "SUCCESS" && (
         <p className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-800">
-          Paid {money(poll.amount)}
-          {poll.mpesaReceiptNumber ? ` · receipt ${poll.mpesaReceiptNumber}` : ""}.
+          Paid {money(currentPoll.amount)}
+          {currentPoll.mpesaReceiptNumber ? ` · receipt ${currentPoll.mpesaReceiptNumber}` : ""}.
         </p>
       )}
-      {poll?.status === "FAILED" && (
+      {currentPoll?.status === "FAILED" && (
         <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {poll.resultDesc ?? "The prompt was not completed."}
+          {currentPoll.resultDesc ?? "The prompt was not completed."}
         </p>
       )}
       {timedOut && (

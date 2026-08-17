@@ -100,11 +100,17 @@ async function resolve(requestId: string) {
   });
   const finalSignerId = request.steps[0]?.userId ?? request.raisedById;
   const payload = request.payload ? (JSON.parse(request.payload) as Record<string, unknown>) : {};
-  await applyApproval(request.kind as ApprovalKind, request.subjectId, finalSignerId, payload);
+  await applyApproval(request.organizationId, request.kind as ApprovalKind, request.subjectId, finalSignerId, payload);
 }
 
-/** The single place that turns a fully-signed request into an actual change. */
+/**
+ * The single place that turns a fully-signed request into an actual change.
+ * organizationId comes from the ApprovalRequest row itself (never re-derived
+ * from payload), so every write here is scoped to the org that raised the
+ * request even if a future caller forgets to pre-validate subjectId's owner.
+ */
 async function applyApproval(
+  organizationId: string,
   kind: ApprovalKind,
   subjectId: string,
   finalSignerId: string,
@@ -112,14 +118,14 @@ async function applyApproval(
 ) {
   switch (kind) {
     case "REPAIR_WORK":
-      await prisma.repair.update({
-        where: { id: subjectId },
+      await prisma.repair.updateMany({
+        where: { id: subjectId, organizationId },
         data: { workApprovedAt: new Date(), workApprovedBy: finalSignerId, status: "APPROVED" },
       });
       return;
     case "REPAIR_COST":
-      await prisma.repair.update({
-        where: { id: subjectId },
+      await prisma.repair.updateMany({
+        where: { id: subjectId, organizationId },
         data: {
           costApprovedAt: new Date(),
           costApprovedBy: finalSignerId,
@@ -159,14 +165,14 @@ async function applyApproval(
     }
     case "QUOTE_AWARD": {
       const quoteId = String(payload.quoteId);
-      const quote = await prisma.quote.findUniqueOrThrow({ where: { id: quoteId } });
+      const quote = await prisma.quote.findFirstOrThrow({ where: { id: quoteId, organizationId } });
       await prisma.$transaction([
         prisma.quote.update({ where: { id: quoteId }, data: { status: "ACCEPTED" } }),
         prisma.quote.updateMany({
-          where: { repairId: quote.repairId, id: { not: quoteId } },
+          where: { repairId: quote.repairId, id: { not: quoteId }, organizationId },
           data: { status: "REJECTED" },
         }),
-        prisma.repair.update({ where: { id: quote.repairId }, data: { awardedVendorId: quote.vendorId } }),
+        prisma.repair.updateMany({ where: { id: quote.repairId, organizationId }, data: { awardedVendorId: quote.vendorId } }),
       ]);
       return;
     }
