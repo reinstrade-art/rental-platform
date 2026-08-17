@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getLease, leaseBalance } from "@/app/lib/data";
 import { addCharge, recordPayment, startEviction, deleteLease, forceDeleteLease } from "@/app/lib/actions";
@@ -10,6 +11,7 @@ import { prisma } from "@/app/lib/prisma";
 import { CHARGE_TYPES } from "@/app/lib/constants";
 import { MpesaPay } from "@/app/components/mpesa-pay";
 import { GROUNDS, GROUNDS_LIST, STATUS_LABEL, OPEN_STATUSES } from "@/app/lib/eviction";
+import { waLink } from "@/app/lib/phone";
 
 function periodParam(d: Date) {
   const dt = new Date(d);
@@ -54,6 +56,15 @@ export default async function LeaseDetailPage({
     passkey: org.mpesaPasskey,
   });
 
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
+  const firstName = lease.tenant.name.split(" ")[0];
+  const statementWa = waLink(lease.tenant.phone, `Dear ${firstName}, here is your account statement: ${origin}/api/statement/${lease.id}`);
+  const agreementWa = waLink(lease.tenant.phone, `Dear ${firstName}, here is your tenancy agreement: ${origin}/api/agreement/${lease.id}`);
+  const invoicePeriods = [...new Set(lease.charges.map((c) => periodParam(c.periodMonth)))].sort().reverse();
+  const currentPeriod = periodParam(new Date());
+
   return (
     <div className="flex flex-col gap-8">
       {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -69,20 +80,10 @@ export default async function LeaseDetailPage({
             Edit lease
           </Link>
         </div>
-        <p className="text-sm text-silver-dark">{lease.status}</p>
-        <div className="mt-1 flex items-center gap-3">
-          <Link href={`/api/statement/${lease.id}`} target="_blank" className="text-xs underline text-silver-dark">
-            Full statement
-          </Link>
-          <Link href={`/api/agreement/${lease.id}`} target="_blank" className="text-xs underline text-silver-dark">
-            Tenancy agreement
-          </Link>
-          <span className="text-xs text-silver-dark">
-            {lease.signedAt
-              ? `Signed ${new Date(lease.signedAt).toLocaleDateString()} by ${lease.signedByName}`
-              : "Not yet signed"}
-          </span>
-        </div>
+        <p className="text-sm text-silver-dark">
+          {lease.status} ·{" "}
+          {lease.signedAt ? `Signed ${new Date(lease.signedAt).toLocaleDateString()} by ${lease.signedByName}` : "Not yet signed"}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -101,6 +102,80 @@ export default async function LeaseDetailPage({
         <div className="rounded border p-4">
           <div className="text-xs text-silver-dark">{balance > 0 ? "Balance owed" : "Balance"}</div>
           <div className={`mt-1 text-xl font-semibold ${balance > 0 ? "text-red-600" : ""}`}>{money(balance)}</div>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="font-semibold">Documents</h2>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <div className="rounded border p-3">
+            <p className="text-sm font-medium">Account statement</p>
+            <p className="mt-0.5 text-xs text-silver-dark">Full history of charges and payments on this lease.</p>
+            <div className="mt-2 flex items-center gap-3">
+              <a href={`/api/statement/${lease.id}`} target="_blank" rel="noreferrer" className="rounded border px-3 py-1.5 text-xs transition-colors hover:bg-silver-light">
+                View / print
+              </a>
+              {statementWa ? (
+                <a href={statementWa} target="_blank" rel="noreferrer" className="text-xs underline text-silver-dark">
+                  Send on WhatsApp
+                </a>
+              ) : (
+                <span className="text-xs text-silver-dark">No phone on file</span>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded border p-3">
+            <p className="text-sm font-medium">Tenancy agreement</p>
+            <p className="mt-0.5 text-xs text-silver-dark">
+              {lease.signedAt ? `Signed ${new Date(lease.signedAt).toLocaleDateString()} by ${lease.signedByName}.` : "Not yet signed."}
+            </p>
+            <div className="mt-2 flex items-center gap-3">
+              <a href={`/api/agreement/${lease.id}`} target="_blank" rel="noreferrer" className="rounded border px-3 py-1.5 text-xs transition-colors hover:bg-silver-light">
+                View / print
+              </a>
+              {agreementWa ? (
+                <a href={agreementWa} target="_blank" rel="noreferrer" className="text-xs underline text-silver-dark">
+                  Send on WhatsApp
+                </a>
+              ) : (
+                <span className="text-xs text-silver-dark">No phone on file</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 rounded border p-3">
+          <p className="text-sm font-medium">Invoice</p>
+          <p className="mt-0.5 text-xs text-silver-dark">One per billing period — pick any month, whether or not a charge has been posted for it yet.</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <form action={`/api/invoice/${lease.id}`} method="GET" target="_blank" className="flex items-center gap-2">
+              <input name="period" type="month" defaultValue={currentPeriod} className="rounded border px-2 py-1.5 text-xs" />
+              <button type="submit" className="rounded border px-3 py-1.5 text-xs transition-colors hover:bg-silver-light">
+                Generate
+              </button>
+            </form>
+          </div>
+          {invoicePeriods.length > 0 && (
+            <div className="mt-3 flex flex-col gap-1.5 border-t pt-3">
+              {invoicePeriods.map((p) => {
+                const wa = waLink(lease.tenant.phone, `Dear ${firstName}, here is your invoice for ${p}: ${origin}/api/invoice/${lease.id}?period=${p}`);
+                return (
+                  <div key={p} className="flex items-center gap-3 text-xs">
+                    <span className="w-16 text-silver-dark">{p}</span>
+                    <a href={`/api/invoice/${lease.id}?period=${p}`} target="_blank" rel="noreferrer" className="underline">
+                      View
+                    </a>
+                    {wa && (
+                      <a href={wa} target="_blank" rel="noreferrer" className="underline text-silver-dark">
+                        WhatsApp
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -134,17 +209,6 @@ export default async function LeaseDetailPage({
               )}
             </tbody>
           </table>
-
-          {[...new Set(lease.charges.map((c) => periodParam(c.periodMonth)))].map((p) => (
-            <Link
-              key={p}
-              href={`/api/invoice/${lease.id}?period=${p}`}
-              target="_blank"
-              className="mr-3 text-xs underline text-silver-dark"
-            >
-              Invoice {p}
-            </Link>
-          ))}
 
           <form action={addCharge.bind(null, lease.id)} className="mt-4 flex flex-col gap-2">
             <select name="type" className="rounded border px-3 py-2">
@@ -181,9 +245,22 @@ export default async function LeaseDetailPage({
                   <td className="py-1">{p.method ?? "—"}</td>
                   <td className="py-1">{money(p.amount)}</td>
                   <td className="py-1">
-                    <Link href={`/api/receipt/${p.id}`} target="_blank" className="text-xs underline text-silver-dark">
-                      Receipt
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <a href={`/api/receipt/${p.id}`} target="_blank" rel="noreferrer" className="text-xs underline text-silver-dark">
+                        Receipt
+                      </a>
+                      {(() => {
+                        const wa = waLink(
+                          lease.tenant.phone,
+                          `Dear ${firstName}, here is your payment receipt: ${origin}/api/receipt/${p.id}`,
+                        );
+                        return wa ? (
+                          <a href={wa} target="_blank" rel="noreferrer" className="text-xs underline text-silver-dark">
+                            WhatsApp
+                          </a>
+                        ) : null;
+                      })()}
+                    </div>
                   </td>
                 </tr>
               ))}
