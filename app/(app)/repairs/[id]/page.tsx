@@ -61,10 +61,34 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
         </Link>
         <h1 className="mt-1 text-lg font-semibold">{repair.title}</h1>
         <p className="text-sm text-silver-dark">
-          {repair.property.name}
-          {repair.unit ? ` / ${repair.unit.label}` : " (common area)"} · {repair.priority} · {repair.status}
+          <Link href={`/properties/${repair.property.id}`} className="underline">
+            {repair.property.name}
+          </Link>
+          {repair.unit ? ` / ${repair.unit.label}` : " (common area)"} · reported{" "}
+          {new Date(repair.reportedAt).toLocaleDateString()}
         </p>
         {repair.description && <p className="mt-2 text-sm">{repair.description}</p>}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">Priority</div>
+          <div className={`mt-1 text-xl font-semibold ${repair.priority === "URGENT" ? "text-red-600" : repair.priority === "HIGH" ? "text-orange-600" : ""}`}>
+            {repair.priority}
+          </div>
+        </div>
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">Status</div>
+          <div className={`mt-1 text-xl font-semibold ${repair.status === "DONE" ? "text-green-700" : ""}`}>{repair.status}</div>
+        </div>
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">Vendor</div>
+          <div className="mt-1 text-xl font-semibold">{repair.awardedVendor?.name ?? "—"}</div>
+        </div>
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">{repair.status === "DONE" ? "Final cost" : "Approved cost"}</div>
+          <div className="mt-1 text-xl font-semibold">{money(repair.status === "DONE" ? repair.finalCost : repair.approvedCost)}</div>
+        </div>
       </div>
 
       {canSuppliers && (
