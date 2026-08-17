@@ -13,8 +13,8 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="max-w-sm">
-      <Link href="/tenants" className="text-xs underline text-silver-dark">
-        All tenants
+      <Link href={`/tenants/${tenant.id}`} className="text-xs underline text-silver-dark">
+        Back to {tenant.name}
       </Link>
       <h1 className="mt-1 text-lg font-semibold">Edit tenant</h1>
       <form action={updateTenant.bind(null, tenant.id)} className="mt-4 flex flex-col gap-3">

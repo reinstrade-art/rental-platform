@@ -436,7 +436,7 @@ export async function updateTenant(tenantId: string, formData: FormData) {
       email: String(formData.get("email") ?? "").trim() || null,
     },
   });
-  redirect("/tenants");
+  redirect(`/tenants/${tenantId}`);
 }
 
 /** Blocked while leases or portal access remain attached — both are FKs to this row, so the office clears them first rather than the delete cascading history away. */

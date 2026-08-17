@@ -37,6 +37,20 @@ export async function getTenants(organizationId: string) {
   });
 }
 
+export async function getTenant(organizationId: string, tenantId: string) {
+  return prisma.tenant.findFirst({
+    where: { id: tenantId, organizationId },
+    include: {
+      leases: {
+        orderBy: { startDate: "desc" },
+        include: { unit: { include: { property: true } }, charges: true, payments: true },
+      },
+      user: { select: { email: true, phone: true, disabledAt: true } },
+      messages: { orderBy: { createdAt: "desc" }, take: 20 },
+    },
+  });
+}
+
 export async function getLeases(organizationId: string) {
   return prisma.lease.findMany({
     where: { organizationId },

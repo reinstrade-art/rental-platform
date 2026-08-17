@@ -36,7 +36,11 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
         <tbody>
           {tenants.map((t) => (
             <tr key={t.id} className="border-b">
-              <td className="py-2">{t.name}</td>
+              <td className="py-2">
+                <Link href={`/tenants/${t.id}`} className="underline">
+                  {t.name}
+                </Link>
+              </td>
               <td className="py-2">{t.phone ?? "—"}</td>
               <td className="py-2">{t.email ?? "—"}</td>
               <td className="py-2">
