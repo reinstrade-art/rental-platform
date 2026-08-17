@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getLease, leaseBalance } from "@/app/lib/data";
-import { addCharge, recordPayment, startEviction } from "@/app/lib/actions";
+import { addCharge, recordPayment, startEviction, deleteLease, forceDeleteLease } from "@/app/lib/actions";
+import { DeleteButton } from "@/app/components/delete-button";
 import { sendMpesaPrompt } from "@/app/lib/mpesa-actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 import { prisma } from "@/app/lib/prisma";
@@ -19,10 +20,17 @@ function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-export default async function LeaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function LeaseDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   const { id } = await params;
+  const { error } = await searchParams;
   const lease = await getLease(s.organizationId, id);
   if (!lease) notFound();
 
@@ -48,6 +56,7 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div>
         <Link href="/leases" className="text-xs underline text-silver-dark">
           All leases
@@ -263,6 +272,34 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
           )}
         </div>
       )}
+
+      <div className="max-w-sm border-t pt-6">
+        <h2 className="font-semibold text-red-600">Delete lease</h2>
+        <p className="mt-1 text-xs text-silver-dark">
+          {lease.charges.length > 0 || lease.payments.length > 0
+            ? "This lease has charges or payments on record — deleting is blocked to protect that history. If this is a genuine tenancy, use Edit lease to mark it ENDED instead."
+            : "No charges or payments recorded yet, so this is safe to delete."}
+        </p>
+        <form action={deleteLease.bind(null, lease.id)} className="mt-2">
+          <DeleteButton confirmText={`Delete this lease for ${lease.tenant.name}? This cannot be undone.`} />
+        </form>
+
+        {(lease.charges.length > 0 || lease.payments.length > 0) && s.role === "ADMIN" && (
+          <div className="mt-4 rounded border border-red-300 bg-red-50 p-3">
+            <p className="text-xs text-red-700">
+              Only use this for a genuine duplicate (e.g. the same tenancy entered twice) — not for a real tenancy
+              that has simply ended. This permanently removes {lease.charges.length} charge(s) and{" "}
+              {lease.payments.length} payment(s) along with the lease.
+            </p>
+            <form action={forceDeleteLease.bind(null, lease.id)} className="mt-2">
+              <DeleteButton
+                confirmText={`This permanently deletes ${lease.charges.length} charge(s) and ${lease.payments.length} payment(s) for ${lease.tenant.name}, along with the lease itself. This cannot be undone. Continue?`}
+                label="Force delete (removes financial history)"
+              />
+            </form>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

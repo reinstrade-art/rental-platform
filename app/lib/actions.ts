@@ -556,6 +556,28 @@ export async function deleteLease(leaseId: string) {
 }
 
 /**
+ * For a genuine data-entry duplicate (e.g. a tenant imported twice onto the
+ * same unit) that deleteLease refuses to touch because it already has
+ * charges or payments recorded. Admin-only, since it destroys financial
+ * history rather than just archiving it — the normal "end the lease"
+ * (status ENDED) path is always the first option offered, this is only for
+ * when the lease itself should never have existed.
+ */
+export async function forceDeleteLease(leaseId: string) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can force-delete a lease with financial history.");
+
+  const lease = await prisma.lease.findFirst({ where: { id: leaseId, organizationId: s.organizationId } });
+  if (!lease) throw new Error("Lease not found.");
+
+  await prisma.charge.deleteMany({ where: { leaseId, organizationId: s.organizationId } });
+  await prisma.payment.deleteMany({ where: { leaseId, organizationId: s.organizationId } });
+  await prisma.eviction.deleteMany({ where: { leaseId, organizationId: s.organizationId } });
+  await prisma.lease.delete({ where: { id: leaseId } });
+  redirect("/leases");
+}
+
+/**
  * Imports a rent roll (Unit #, Tenant, Month, Year, Expected Rent, Billed
  * Rent, RENT Paid) against one selected property, creating/updating units,
  * tenants, and leases and recording each period's charge/payment — the same
