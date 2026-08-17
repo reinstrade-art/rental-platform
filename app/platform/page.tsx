@@ -10,8 +10,13 @@ const STATE_COLOR: Record<string, string> = {
   EXPIRED: "text-red-600",
 };
 
-export default async function PlatformPage() {
+export default async function PlatformPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const orgs = await prisma.organization.findMany({ orderBy: { createdAt: "desc" } });
+  const { error } = await searchParams;
 
   return (
     <div className="flex flex-col gap-8">
@@ -23,6 +28,9 @@ export default async function PlatformPage() {
           </Link>
         </div>
         <p className="mt-1 text-sm text-silver-dark">Click a holding company to see its properties, and a property to see its leases.</p>
+        {error && (
+          <div className="mt-3 rounded border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
+        )}
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">

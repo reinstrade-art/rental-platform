@@ -85,19 +85,31 @@ export async function logout() {
 
 // --- platform admin: organization provisioning --------------------------
 
+/**
+ * Validation failures here redirect back with the message in the query
+ * string instead of throwing. A thrown Error's .message is redacted by
+ * Next.js in production for any Server Action — replaced with a generic
+ * "Minified React error #441" pointer with no real content — so a caught,
+ * expected failure (bad input, a duplicate email) needs to travel as data,
+ * not an exception, to actually reach the person who needs to see it. The
+ * same technique app/(app)/leases/billing-run/page.tsx already uses for its
+ * result banner.
+ */
 export async function createOrganization(formData: FormData) {
   const s = await getSession();
   if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+
+  const fail = (message: string) => redirect(`/platform?error=${encodeURIComponent(message)}`);
 
   const name = String(formData.get("name") ?? "").trim();
   const adminEmail = String(formData.get("adminEmail") ?? "").trim().toLowerCase();
   const adminPassword = String(formData.get("adminPassword") ?? "");
   if (!name || !adminEmail || adminPassword.length < 8) {
-    throw new Error("Organization name, admin email, and an 8+ character password are required.");
+    return fail("Organization name, admin email, and an 8+ character password are required.");
   }
 
   const existing = await prisma.user.findUnique({ where: { email: adminEmail } });
-  if (existing) throw new Error("That email is already in use by another account.");
+  if (existing) return fail("That email is already in use by another account.");
 
   // Batched (array form), not an interactive callback transaction — a hosted
   // database reached over HTTP (Turso in production) doesn't hold an
@@ -137,7 +149,7 @@ export async function updateOrganization(organizationId: string, formData: FormD
   if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
 
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) throw new Error("Organization name is required.");
+  if (!name) redirect(`/platform?error=${encodeURIComponent("Organization name is required.")}`);
 
   await prisma.organization.update({ where: { id: organizationId }, data: { name } });
   await logPlatformAccess(s.userId, organizationId, "VIEW_ORG_DETAIL", `Renamed to ${name}`);
@@ -155,7 +167,7 @@ export async function deleteOrganization(organizationId: string) {
   if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
 
   const org = await prisma.organization.findUnique({ where: { id: organizationId } });
-  if (!org) throw new Error("Organization not found.");
+  if (!org) redirect(`/platform?error=${encodeURIComponent("Organization not found.")}`);
 
   const [properties, tenants, vendors] = await Promise.all([
     prisma.property.count({ where: { organizationId } }),
@@ -163,7 +175,7 @@ export async function deleteOrganization(organizationId: string) {
     prisma.vendor.count({ where: { organizationId } }),
   ]);
   if (properties || tenants || vendors) {
-    throw new Error("This organization has data on file — suspend it instead of deleting, to keep its history.");
+    redirect(`/platform?error=${encodeURIComponent("This organization has data on file — suspend it instead of deleting, to keep its history.")}`);
   }
 
   await prisma.invitation.deleteMany({ where: { organizationId } });
