@@ -23,6 +23,22 @@ const PLACEHOLDER_TERMS =
   "sending this agreement to a tenant — this placeholder is not a legal substitute for actual terms.";
 
 /**
+ * Fills {{token}} placeholders in an org's own lease terms text with this
+ * lease's real values — e.g. "{{unit}}" becomes "A4". Case-insensitive,
+ * whitespace inside the braces is ignored. An org's template is free text
+ * they wrote themselves (often pasted from an existing paper form with
+ * blank lines like "PROPERTY:………"), so any token not present in the text
+ * is simply never touched — this never invents or requires a particular
+ * template shape.
+ */
+export function fillLeaseTermsTokens(text: string, tokens: Record<string, string>): string {
+  return text.replace(/\{\{\s*([a-zA-Z]+)\s*\}\}/g, (match, name: string) => {
+    const value = tokens[name.toLowerCase()];
+    return value !== undefined ? value : match;
+  });
+}
+
+/**
  * A tenancy agreement, filled in from the lease record.
  *
  * The factual fields (parties, property, rent, deposit) are always correct
@@ -100,7 +116,18 @@ export async function buildLeaseDoc(input: LeaseDocInput): Promise<Uint8Array> {
   drawRule(currentPage, y);
   y -= 18;
 
-  const termsText = input.org.leaseTermsTemplate?.trim() || PLACEHOLDER_TERMS;
+  const rawTerms = input.org.leaseTermsTemplate?.trim() || PLACEHOLDER_TERMS;
+  const termsText = fillLeaseTermsTokens(rawTerms, {
+    landlord: landlordName,
+    tenant: input.tenant.name,
+    phone: input.tenant.phone ?? "",
+    email: input.tenant.email ?? "",
+    property: input.property.name,
+    unit: input.unit.label,
+    rent: money(input.monthlyRent),
+    deposit: money(input.depositAmount),
+    startdate: new Date(input.startDate).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }),
+  });
   const words = termsText.split(/\s+/);
   const maxWidth = PAGE_WIDTH - MARGIN * 2;
   let line = "";

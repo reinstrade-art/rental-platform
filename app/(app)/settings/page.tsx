@@ -75,8 +75,17 @@ export default async function SettingsPage() {
     <div className="max-w-lg">
       <h2 className="text-lg font-semibold">Lease terms</h2>
       <p className="mt-1 text-sm text-silver-dark">
-        Printed verbatim into every tenancy agreement PDF. This is your own legal text — tenancy terms vary by
-        jurisdiction and by landlord, so nothing here is drafted for you. Have it reviewed before use.
+        Printed into every tenancy agreement PDF. This is your own legal text — tenancy terms vary by jurisdiction
+        and by landlord, so nothing here is drafted for you. Have it reviewed before use.
+      </p>
+      <p className="mt-2 text-xs text-silver-dark">
+        Any blank you&apos;d normally fill in by hand (e.g. &quot;PROPERTY:………&quot;) can be replaced with a token that
+        auto-fills from the actual lease: <code className="font-mono">{"{{tenant}}"}</code>,{" "}
+        <code className="font-mono">{"{{phone}}"}</code>, <code className="font-mono">{"{{email}}"}</code>,{" "}
+        <code className="font-mono">{"{{property}}"}</code>, <code className="font-mono">{"{{unit}}"}</code>,{" "}
+        <code className="font-mono">{"{{rent}}"}</code>, <code className="font-mono">{"{{deposit}}"}</code>,{" "}
+        <code className="font-mono">{"{{startdate}}"}</code>, <code className="font-mono">{"{{landlord}}"}</code>.
+        E.g. write &quot;UNIT NO: {"{{unit}}"}&quot; instead of leaving a dotted line.
       </p>
       <form action={updateLeaseTerms} className="mt-4 flex flex-col gap-3">
         <textarea
