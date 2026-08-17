@@ -113,6 +113,10 @@ export async function ignoreTransaction(organizationId: string, transactionId: s
 
 /** Minimal CSV: date,amount,reference,payer — one transaction per row, header row optional. */
 export function parseTransactionsCsv(csv: string): Omit<IngestInput, "organizationId" | "source">[] {
+  // See the matching note in app/lib/import.ts — an Excel/Windows-saved CSV's
+  // leading byte-order-mark otherwise corrupts the very first cell of the
+  // very first row, which here means silently losing one real transaction.
+  if (csv.charCodeAt(0) === 0xfeff) csv = csv.slice(1);
   const rows = csv
     .split(/\r?\n/)
     .map((r) => r.trim())

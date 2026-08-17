@@ -35,6 +35,12 @@ function parseCsvLine(line: string): string[] {
 }
 
 function splitCsvRows(csv: string): string[][] {
+  // Excel (and Windows generally) commonly saves CSV as UTF-8 with a leading
+  // byte-order-mark — invisible in a text editor, but it silently glues
+  // itself onto the first header cell ("﻿Unit #" ≠ "Unit #"), so only
+  // the FIRST column's header ever failed to match, which read as a
+  // confusing "no valid rows" on files that otherwise looked completely fine.
+  if (csv.charCodeAt(0) === 0xfeff) csv = csv.slice(1);
   return csv
     .split(/\r?\n/)
     .filter((r) => r.trim().length > 0)
