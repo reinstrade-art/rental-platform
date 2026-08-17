@@ -25,7 +25,12 @@ export async function getProperties(organizationId: string) {
 export async function getProperty(organizationId: string, propertyId: string) {
   return prisma.property.findFirst({
     where: { id: propertyId, organizationId },
-    include: { units: { include: { leases: { include: { tenant: true } } } } },
+    include: {
+      units: {
+        orderBy: { label: "asc" },
+        include: { leases: { include: { tenant: true, charges: true, payments: true } } },
+      },
+    },
   });
 }
 

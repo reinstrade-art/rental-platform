@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
-import { getProperty } from "@/app/lib/data";
-import { createUnit, setUnitPaymentCode } from "@/app/lib/actions";
+import { getProperty, leaseBalance } from "@/app/lib/data";
+import { createUnit, setUnitPaymentCode, deleteProperty } from "@/app/lib/actions";
+import { DeleteButton } from "@/app/components/delete-button";
+
+function money(n: number) {
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
 
 export default async function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const s = await getSession();
@@ -11,14 +16,49 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
   const property = await getProperty(s.organizationId, id);
   if (!property) notFound();
 
+  const activeLeaseByUnit = new Map(
+    property.units.map((u) => [u.id, u.leases.find((l) => l.status === "ACTIVE") ?? null]),
+  );
+  const occupied = [...activeLeaseByUnit.values()].filter(Boolean).length;
+  const monthlyRentTotal = [...activeLeaseByUnit.values()].reduce((sum, l) => sum + (l?.monthlyRent ?? 0), 0);
+  const balanceOwed = [...activeLeaseByUnit.values()].reduce((sum, l) => sum + (l ? leaseBalance(l) : 0), 0);
+
   return (
     <div className="flex flex-col gap-8">
       <div>
         <Link href="/properties" className="text-xs underline text-silver-dark">
           All properties
         </Link>
-        <h1 className="mt-1 text-lg font-semibold">{property.name}</h1>
-        <p className="text-sm text-silver-dark">{property.address ?? "No address on file"}</p>
+        <div className="mt-1 flex items-start justify-between">
+          <div>
+            <h1 className="text-lg font-semibold">{property.name}</h1>
+            <p className="text-sm text-silver-dark">{property.address ?? "No address on file"}</p>
+          </div>
+          <Link href={`/properties/${property.id}/edit`} className="text-xs underline text-silver-dark">
+            Edit
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">Units</div>
+          <div className="mt-1 text-xl font-semibold">{property.units.length}</div>
+        </div>
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">Occupied / Vacant</div>
+          <div className="mt-1 text-xl font-semibold">
+            {occupied} / {property.units.length - occupied}
+          </div>
+        </div>
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">Monthly rent (occupied)</div>
+          <div className="mt-1 text-xl font-semibold">{money(monthlyRentTotal)}</div>
+        </div>
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">{balanceOwed > 0 ? "Owed (active leases)" : "Balance"}</div>
+          <div className={`mt-1 text-xl font-semibold ${balanceOwed > 0 ? "text-red-600" : ""}`}>{money(balanceOwed)}</div>
+        </div>
       </div>
 
       <div>
@@ -28,18 +68,30 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
             <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
               <th className="py-2">Label</th>
               <th className="py-2">Monthly rent</th>
-              <th className="py-2">Status</th>
+              <th className="py-2">Tenant</th>
+              <th className="py-2">Balance</th>
               <th className="py-2">Payment code</th>
             </tr>
           </thead>
           <tbody>
             {property.units.map((u) => {
-              const active = u.leases.find((l) => l.status === "ACTIVE");
+              const active = activeLeaseByUnit.get(u.id);
               return (
                 <tr key={u.id} className="border-b">
                   <td className="py-2">{u.label}</td>
                   <td className="py-2">{u.monthlyRent ?? "—"}</td>
-                  <td className="py-2">{active ? `Occupied — ${active.tenant.name}` : "Vacant"}</td>
+                  <td className="py-2">
+                    {active ? (
+                      <Link href={`/leases/${active.id}`} className="underline">
+                        {active.tenant.name}
+                      </Link>
+                    ) : (
+                      <span className="text-silver-dark">Vacant</span>
+                    )}
+                  </td>
+                  <td className={`py-2 ${active && leaseBalance(active) > 0 ? "text-red-600" : ""}`}>
+                    {active ? money(leaseBalance(active)) : "—"}
+                  </td>
                   <td className="py-2">
                     <form action={setUnitPaymentCode.bind(null, u.id)} className="flex gap-1">
                       <input
@@ -56,7 +108,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
             })}
             {property.units.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-4 text-silver-dark">
+                <td colSpan={5} className="py-4 text-silver-dark">
                   No units yet.
                 </td>
               </tr>
@@ -85,6 +137,16 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
           </button>
         </form>
       </div>
+
+      {property.units.length === 0 && (
+        <div className="max-w-sm border-t pt-6">
+          <h2 className="font-semibold text-red-600">Delete property</h2>
+          <p className="mt-1 text-xs text-silver-dark">{property.name} has no units, so this is safe to delete.</p>
+          <form action={deleteProperty.bind(null, property.id)} className="mt-2">
+            <DeleteButton confirmText={`Delete ${property.name}? This cannot be undone.`} />
+          </form>
+        </div>
+      )}
     </div>
   );
 }
