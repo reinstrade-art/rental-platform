@@ -1,4 +1,5 @@
 import { allocate } from "./settle";
+import { CHARGE_TYPE_LABEL } from "./constants";
 
 /**
  * A tenancy statement, grouped into months.
@@ -46,7 +47,6 @@ const monthTitle = (key: string) => {
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, { year: "numeric", month: "long" });
 };
 
-const TYPE_LABEL: Record<string, string> = { RENT: "Rent", UTILITY: "Utilities", DEPOSIT: "Deposit" };
 
 export function buildStatement(charges: ChargeLike[], payments: PaymentLike[]): StatementMonth[] {
   // One allocation for the whole tenancy, so every month agrees about which lines the money has reached.
@@ -63,7 +63,7 @@ export function buildStatement(charges: ChargeLike[], payments: PaymentLike[]): 
       id: c.id,
       kind: "charge",
       date: c.periodMonth,
-      desc: c.description || TYPE_LABEL[c.type] || c.type,
+      desc: c.description || CHARGE_TYPE_LABEL[c.type] || c.type,
       debit: c.amount,
       credit: 0,
       type: c.type,

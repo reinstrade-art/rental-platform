@@ -8,7 +8,7 @@ import { DeleteButton } from "@/app/components/delete-button";
 import { sendMpesaPrompt } from "@/app/lib/mpesa-actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 import { prisma } from "@/app/lib/prisma";
-import { CHARGE_TYPES } from "@/app/lib/constants";
+import { CHARGE_TYPES, CHARGE_TYPE_LABEL } from "@/app/lib/constants";
 import { MpesaPay } from "@/app/components/mpesa-pay";
 import { GROUNDS, GROUNDS_LIST, STATUS_LABEL, OPEN_STATUSES } from "@/app/lib/eviction";
 import { waLink } from "@/app/lib/phone";
@@ -195,7 +195,7 @@ export default async function LeaseDetailPage({
               {lease.charges.map((c) => (
                 <tr key={c.id} className="border-b">
                   <td className="py-1">{new Date(c.periodMonth).toLocaleDateString(undefined, { year: "numeric", month: "short" })}</td>
-                  <td className="py-1">{c.type}</td>
+                  <td className="py-1">{CHARGE_TYPE_LABEL[c.type] ?? c.type}</td>
                   <td className="py-1">{money(c.amount)}</td>
                   <td className="py-1"></td>
                 </tr>
@@ -214,7 +214,7 @@ export default async function LeaseDetailPage({
             <select name="type" className="rounded border px-3 py-2">
               {CHARGE_TYPES.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {CHARGE_TYPE_LABEL[t] ?? t}
                 </option>
               ))}
             </select>

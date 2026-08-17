@@ -1,12 +1,7 @@
 import "server-only";
 import { newDocument, drawRail, drawRule, money, textRow, paletteFor } from "./pdf-chrome";
 import type { OrgBranding } from "./pdf-chrome";
-
-const LINE_ITEM_LABEL: Record<string, string> = {
-  RENT: "Rent",
-  UTILITY: "Utilities",
-  DEPOSIT: "Deposit",
-};
+import { CHARGE_TYPE_LABEL } from "./constants";
 
 export type InvoiceInput = {
   org: OrgBranding;
@@ -44,7 +39,7 @@ export async function buildInvoicePdf(input: InvoiceInput): Promise<Uint8Array> 
 
   let total = 0;
   for (const charge of input.charges) {
-    const label = LINE_ITEM_LABEL[charge.type] ?? charge.type;
+    const label = CHARGE_TYPE_LABEL[charge.type] ?? charge.type;
     const text = charge.description ? `${label} — ${charge.description}` : label;
     textRow(page, y, [
       { text, x: bodyX, font, size: 10 },

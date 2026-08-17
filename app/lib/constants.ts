@@ -1,5 +1,17 @@
-export const CHARGE_TYPES = ["RENT", "UTILITY", "DEPOSIT"] as const;
+// UTILITY is no longer offered when raising a new charge, but stays valid so
+// charges already on file (older manual entries, and older CSV imports —
+// see ingestRentRoll, which now writes HYGIENE instead) keep displaying
+// correctly rather than falling back to a raw, unlabeled type string.
+export const CHARGE_TYPES = ["RENT", "DEPOSIT", "WATER", "HYGIENE"] as const;
 export type ChargeType = (typeof CHARGE_TYPES)[number];
+
+export const CHARGE_TYPE_LABEL: Record<string, string> = {
+  RENT: "Rent",
+  DEPOSIT: "Deposit",
+  WATER: "Water Services",
+  HYGIENE: "Hygiene Services",
+  UTILITY: "Utilities", // legacy — see comment above
+};
 
 export const LEASE_STATUSES = ["ACTIVE", "ENDED"] as const;
 export type LeaseStatus = (typeof LEASE_STATUSES)[number];

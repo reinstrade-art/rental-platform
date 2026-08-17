@@ -1,6 +1,7 @@
 import "server-only";
 import { newDocument, drawHeader, drawRule, money, textRow, paletteFor, MARGIN } from "./pdf-chrome";
 import type { OrgBranding } from "./pdf-chrome";
+import { CHARGE_TYPE_LABEL } from "./constants";
 
 const PAGE_RIGHT_LABEL_X = 460;
 
@@ -11,6 +12,9 @@ export type ReceiptInput = {
   unit: { label: string };
   property: { name: string };
   balanceAfter: number;
+  /** What this tenancy was billed for the same month as this payment — shown as an itemized
+   *  reference, not a claim about which part of the payment covered which line (see settle.ts). */
+  periodCharges: { type: string; description: string | null; amount: number }[];
 };
 
 export async function buildReceiptPdf(input: ReceiptInput): Promise<Uint8Array> {
@@ -47,7 +51,30 @@ export async function buildReceiptPdf(input: ReceiptInput): Promise<Uint8Array> 
 
   y -= 40;
   drawRule(page, y);
-  y -= 26;
+  y -= 24;
+
+  if (input.periodCharges.length > 0) {
+    const periodLabel = new Date(input.payment.paidAt).toLocaleDateString(undefined, { year: "numeric", month: "long" });
+    textRow(page, y, [{ text: `Billed for ${periodLabel}`, x: MARGIN, font, size: 9, color: palette.muted }]);
+    y -= 16;
+    let periodTotal = 0;
+    for (const charge of input.periodCharges) {
+      const label = charge.description || CHARGE_TYPE_LABEL[charge.type] || charge.type;
+      textRow(page, y, [
+        { text: label, x: MARGIN, font, size: 10 },
+        { text: money(charge.amount), x: PAGE_RIGHT_LABEL_X, font, size: 10 },
+      ]);
+      periodTotal += charge.amount;
+      y -= 15;
+    }
+    textRow(page, y, [
+      { text: "Total billed", x: MARGIN, font: bold, size: 10 },
+      { text: money(periodTotal), x: PAGE_RIGHT_LABEL_X, font: bold, size: 10 },
+    ]);
+    y -= 26;
+    drawRule(page, y);
+    y -= 24;
+  }
 
   textRow(page, y, [
     { text: "Amount received", x: MARGIN, font, size: 10, color: palette.muted },

@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ payment
           tenant: true,
           unit: { include: { property: true } },
           organization: true,
-          charges: { select: { amount: true, periodMonth: true } },
+          charges: { select: { amount: true, periodMonth: true, type: true, description: true } },
           payments: { select: { amount: true, paidAt: true } },
         },
       },
@@ -33,6 +33,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ payment
     .reduce((s, p) => s + p.amount, 0);
   const balanceAfter = chargedToDate - paidToDate;
 
+  // What this tenancy was billed for the same calendar month as the payment
+  // — an itemized "what this was for" alongside the lump amount received,
+  // since a payment itself isn't earmarked to any one charge (see settle.ts).
+  const periodKey = (d: Date) => `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+  const paidPeriod = periodKey(payment.paidAt);
+  const periodCharges = payment.lease.charges.filter((c) => periodKey(c.periodMonth) === paidPeriod);
+
   const pdf = await buildReceiptPdf({
     org: payment.lease.organization,
     payment,
@@ -40,6 +47,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ payment
     unit: payment.lease.unit,
     property: payment.lease.unit.property,
     balanceAfter,
+    periodCharges,
   });
 
   return new NextResponse(Buffer.from(pdf), {

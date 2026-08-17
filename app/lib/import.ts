@@ -110,10 +110,12 @@ export type RentRollRow = {
   // which raises this at most once per lease regardless of how many rows
   // (months) that lease appears in across the file.
   deposit: number;
-  // A recurring per-period charge distinct from rent (garbage collection
-  // being the first of these) — billed every period it appears in, same as
-  // rent, but as its own UTILITY line so it reads separately on a statement.
+  // A recurring per-period charge distinct from rent — billed every period
+  // it appears in, same as rent, but as its own HYGIENE line (garbage /
+  // waste collection) so it reads separately on a statement.
   utilityFee: number;
+  // Same idea, for a separate water-bill column when the spreadsheet has one.
+  waterFee: number;
 };
 
 /**
@@ -163,11 +165,15 @@ export function parseRentRollCsv(csv: string): RentRollRow[] {
     "garbage collection fees",
     "garbage",
     "garbage fees",
+    "garbage collection",
+    "hygiene",
+    "hygiene services",
     "utility",
     "utilities",
     "utility fee",
     "service charge",
   );
+  const waterIdx = headerIndex(header, "water", "water bill", "water bills", "water services", "water fee");
 
   const now = new Date();
   const out: RentRollRow[] = [];
@@ -192,6 +198,7 @@ export function parseRentRollCsv(csv: string): RentRollRow[] {
       rentPaid: paidIdx !== -1 ? money(cols[paidIdx]) : 0,
       deposit: depositIdx !== -1 ? money(cols[depositIdx]) : 0,
       utilityFee: utilityIdx !== -1 ? money(cols[utilityIdx]) : 0,
+      waterFee: waterIdx !== -1 ? money(cols[waterIdx]) : 0,
     });
   }
   return out;
@@ -296,17 +303,30 @@ export async function ingestRentRoll(
       }
     }
 
-    // A recurring charge distinct from rent (garbage collection, a service
-    // fee, ...) — billed per period exactly like rent, as its own UTILITY
+    // A recurring charge distinct from rent (garbage collection, a hygiene
+    // fee, ...) — billed per period exactly like rent, as its own HYGIENE
     // line, with the same re-run safety: never raised twice for one lease
     // and period.
     if (row.utilityFee) {
-      const existingUtility = await prisma.charge.findFirst({
-        where: { leaseId: lease.id, periodMonth: row.periodMonth, type: "UTILITY" },
+      const existingHygiene = await prisma.charge.findFirst({
+        where: { leaseId: lease.id, periodMonth: row.periodMonth, type: "HYGIENE" },
       });
-      if (!existingUtility) {
+      if (!existingHygiene) {
         await prisma.charge.create({
-          data: { organizationId, leaseId: lease.id, type: "UTILITY", amount: row.utilityFee, periodMonth: row.periodMonth },
+          data: { organizationId, leaseId: lease.id, type: "HYGIENE", amount: row.utilityFee, periodMonth: row.periodMonth },
+        });
+        summary.charges++;
+      }
+    }
+
+    // Same idea for a separate water-bill column, as its own WATER line.
+    if (row.waterFee) {
+      const existingWater = await prisma.charge.findFirst({
+        where: { leaseId: lease.id, periodMonth: row.periodMonth, type: "WATER" },
+      });
+      if (!existingWater) {
+        await prisma.charge.create({
+          data: { organizationId, leaseId: lease.id, type: "WATER", amount: row.waterFee, periodMonth: row.periodMonth },
         });
         summary.charges++;
       }
