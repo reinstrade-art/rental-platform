@@ -27,6 +27,8 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
   if (!lease) notFound();
 
   const balance = leaseBalance(lease);
+  const totalCharged = lease.charges.reduce((s, c) => s + c.amount, 0);
+  const totalPaid = lease.payments.reduce((s, p) => s + p.amount, 0);
 
   const latestEviction = await prisma.eviction.findFirst({
     where: { leaseId: lease.id, organizationId: s.organizationId },
@@ -47,13 +49,18 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-lg font-semibold">
-          {lease.tenant.name} — {lease.unit.property.name} / {lease.unit.label}
-        </h1>
-        <p className="text-sm text-silver-dark">
-          {money(lease.monthlyRent)}/month · {lease.status} · Balance:{" "}
-          <span className={balance > 0 ? "text-red-600 font-medium" : ""}>{money(balance)}</span>
-        </p>
+        <Link href="/leases" className="text-xs underline text-silver-dark">
+          All leases
+        </Link>
+        <div className="mt-1 flex items-start justify-between">
+          <h1 className="text-lg font-semibold">
+            {lease.tenant.name} — {lease.unit.property.name} / {lease.unit.label}
+          </h1>
+          <Link href={`/leases/${lease.id}/edit`} className="text-xs underline text-silver-dark">
+            Edit lease
+          </Link>
+        </div>
+        <p className="text-sm text-silver-dark">{lease.status}</p>
         <div className="mt-1 flex items-center gap-3">
           <Link href={`/api/statement/${lease.id}`} target="_blank" className="text-xs underline text-silver-dark">
             Full statement
@@ -66,6 +73,25 @@ export default async function LeaseDetailPage({ params }: { params: Promise<{ id
               ? `Signed ${new Date(lease.signedAt).toLocaleDateString()} by ${lease.signedByName}`
               : "Not yet signed"}
           </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">Monthly rent</div>
+          <div className="mt-1 text-xl font-semibold">{money(lease.monthlyRent)}</div>
+        </div>
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">Total charged</div>
+          <div className="mt-1 text-xl font-semibold">{money(totalCharged)}</div>
+        </div>
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">Total paid</div>
+          <div className="mt-1 text-xl font-semibold text-green-700">{money(totalPaid)}</div>
+        </div>
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">{balance > 0 ? "Balance owed" : "Balance"}</div>
+          <div className={`mt-1 text-xl font-semibold ${balance > 0 ? "text-red-600" : ""}`}>{money(balance)}</div>
         </div>
       </div>
 

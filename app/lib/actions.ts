@@ -497,6 +497,12 @@ export async function createLease(formData: FormData) {
   redirect("/leases");
 }
 
+/**
+ * Tenant/unit are correctable here — for a lease created against the wrong
+ * person, or matched to the wrong unit by an import — not for a genuine
+ * move, which belongs in a new lease instead so the old unit's history
+ * stays attached to it rather than being silently carried to a new one.
+ */
 export async function updateLease(leaseId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
@@ -504,6 +510,8 @@ export async function updateLease(leaseId: string, formData: FormData) {
   const lease = await prisma.lease.findFirst({ where: { id: leaseId, organizationId: s.organizationId } });
   if (!lease) throw new Error("Lease not found.");
 
+  const tenantId = String(formData.get("tenantId") ?? "").trim() || lease.tenantId;
+  const unitId = String(formData.get("unitId") ?? "").trim() || lease.unitId;
   const monthlyRent = Number(formData.get("monthlyRent") ?? 0);
   const startDate = new Date(String(formData.get("startDate") ?? ""));
   const endDateRaw = String(formData.get("endDate") ?? "").trim();
@@ -513,7 +521,16 @@ export async function updateLease(leaseId: string, formData: FormData) {
   if (endDateRaw && isNaN((endDate as Date).getTime())) throw new Error("Invalid end date.");
   if (status !== "ACTIVE" && status !== "ENDED") throw new Error("Invalid status.");
 
-  await prisma.lease.update({ where: { id: leaseId }, data: { monthlyRent, startDate, endDate, status } });
+  if (tenantId !== lease.tenantId) {
+    const tenant = await prisma.tenant.findFirst({ where: { id: tenantId, organizationId: s.organizationId } });
+    if (!tenant) throw new Error("Tenant not found.");
+  }
+  if (unitId !== lease.unitId) {
+    const unit = await prisma.unit.findFirst({ where: { id: unitId, organizationId: s.organizationId } });
+    if (!unit) throw new Error("Unit not found.");
+  }
+
+  await prisma.lease.update({ where: { id: leaseId }, data: { tenantId, unitId, monthlyRent, startDate, endDate, status } });
   redirect("/leases");
 }
 

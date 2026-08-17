@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
@@ -12,7 +13,10 @@ export default async function EditPropertyPage({ params }: { params: Promise<{ i
 
   return (
     <div className="max-w-sm">
-      <h1 className="text-lg font-semibold">Edit property</h1>
+      <Link href={`/properties/${property.id}`} className="text-xs underline text-silver-dark">
+        Back to {property.name}
+      </Link>
+      <h1 className="mt-1 text-lg font-semibold">Edit property</h1>
       <form action={updateProperty.bind(null, property.id)} className="mt-4 flex flex-col gap-3">
         <input name="name" required defaultValue={property.name} placeholder="Property name" className="rounded border px-3 py-2" />
         <input name="address" defaultValue={property.address ?? ""} placeholder="Address (optional)" className="rounded border px-3 py-2" />

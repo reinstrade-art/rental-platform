@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getProperty } from "@/app/lib/data";
@@ -13,7 +14,10 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-lg font-semibold">{property.name}</h1>
+        <Link href="/properties" className="text-xs underline text-silver-dark">
+          All properties
+        </Link>
+        <h1 className="mt-1 text-lg font-semibold">{property.name}</h1>
         <p className="text-sm text-silver-dark">{property.address ?? "No address on file"}</p>
       </div>
 

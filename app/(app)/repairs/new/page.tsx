@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getProperties } from "@/app/lib/data";
@@ -13,7 +14,10 @@ export default async function NewRepairPage() {
 
   return (
     <div className="max-w-sm">
-      <h1 className="text-lg font-semibold">Report a repair</h1>
+      <Link href="/repairs" className="text-xs underline text-silver-dark">
+        All repairs
+      </Link>
+      <h1 className="mt-1 text-lg font-semibold">Report a repair</h1>
       <form action={createRepair} className="mt-4 flex flex-col gap-3">
         <select name="propertyId" required className="rounded border px-3 py-2">
           <option value="">Select property</option>

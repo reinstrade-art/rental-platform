@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
@@ -12,7 +13,10 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="max-w-sm">
-      <h1 className="text-lg font-semibold">Edit tenant</h1>
+      <Link href="/tenants" className="text-xs underline text-silver-dark">
+        All tenants
+      </Link>
+      <h1 className="mt-1 text-lg font-semibold">Edit tenant</h1>
       <form action={updateTenant.bind(null, tenant.id)} className="mt-4 flex flex-col gap-3">
         <input name="name" required defaultValue={tenant.name} placeholder="Full name" className="rounded border px-3 py-2" />
         <input name="phone" defaultValue={tenant.phone ?? ""} placeholder="Phone (optional)" className="rounded border px-3 py-2" />

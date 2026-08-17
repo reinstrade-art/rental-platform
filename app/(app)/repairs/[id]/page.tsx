@@ -56,7 +56,10 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-lg font-semibold">{repair.title}</h1>
+        <Link href="/repairs" className="text-xs underline text-silver-dark">
+          All repairs
+        </Link>
+        <h1 className="mt-1 text-lg font-semibold">{repair.title}</h1>
         <p className="text-sm text-silver-dark">
           {repair.property.name}
           {repair.unit ? ` / ${repair.unit.label}` : " (common area)"} · {repair.priority} · {repair.status}

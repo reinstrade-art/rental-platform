@@ -50,16 +50,21 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">{org.name}</h1>
-          <p className="text-sm text-silver-dark">
-            Status: {org.status} · Created {new Date(org.createdAt).toLocaleDateString()}
-          </p>
-        </div>
-        <Link href="/platform/audit" className="text-sm underline text-silver-dark">
-          View audit log
+      <div>
+        <Link href="/platform" className="text-xs underline text-silver-dark">
+          All organizations
         </Link>
+        <div className="mt-1 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-semibold">{org.name}</h1>
+            <p className="text-sm text-silver-dark">
+              Status: {org.status} · Created {new Date(org.createdAt).toLocaleDateString()}
+            </p>
+          </div>
+          <Link href="/platform/audit" className="text-sm underline text-silver-dark">
+            View audit log
+          </Link>
+        </div>
       </div>
 
       <div className="rounded border border-silver bg-silver-light p-3 text-sm font-medium text-ink">

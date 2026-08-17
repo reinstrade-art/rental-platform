@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
@@ -24,7 +25,10 @@ export default async function NewLeasePage({
 
   return (
     <div className="max-w-sm">
-      <h1 className="text-lg font-semibold">Add lease</h1>
+      <Link href="/leases" className="text-xs underline text-silver-dark">
+        All leases
+      </Link>
+      <h1 className="mt-1 text-lg font-semibold">Add lease</h1>
       <form action={createLease} className="mt-4 flex flex-col gap-3">
         <LeaseUnitSelect
           units={units.map((u) => ({

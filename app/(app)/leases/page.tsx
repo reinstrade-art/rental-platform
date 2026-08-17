@@ -63,11 +63,13 @@ export default async function LeasesPage({ searchParams }: { searchParams: Promi
         <tbody>
           {withBalances.map((l) => (
             <tr key={l.id} className="border-b">
-              <td className="py-2">{l.tenant.name}</td>
               <td className="py-2">
                 <Link href={`/leases/${l.id}`} className="underline">
-                  {l.unit.property.name} / {l.unit.label}
+                  {l.tenant.name}
                 </Link>
+              </td>
+              <td className="py-2">
+                {l.unit.property.name} / {l.unit.label}
               </td>
               <td className="py-2">{money(l.monthlyRent)}</td>
               <td className="py-2">{l.status}</td>

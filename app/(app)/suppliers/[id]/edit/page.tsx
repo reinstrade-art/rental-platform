@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
@@ -20,7 +21,10 @@ export default async function EditSupplierPage({ params }: { params: Promise<{ i
 
   return (
     <div className="max-w-sm">
-      <h1 className="text-lg font-semibold">Edit supplier</h1>
+      <Link href="/suppliers" className="text-xs underline text-silver-dark">
+        All suppliers
+      </Link>
+      <h1 className="mt-1 text-lg font-semibold">Edit supplier</h1>
       <form action={updateSupplier.bind(null, supplier.id)} className="mt-4 flex flex-col gap-3">
         <input name="name" required defaultValue={supplier.name} placeholder="Name" className="rounded border px-3 py-2" />
         <select name="category" defaultValue={supplier.category} className="rounded border px-3 py-2">
