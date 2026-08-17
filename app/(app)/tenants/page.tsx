@@ -44,7 +44,22 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
               <td className="py-2">{t.phone ?? "—"}</td>
               <td className="py-2">{t.email ?? "—"}</td>
               <td className="py-2">
-                {t.leases.map((l) => `${l.unit.property.name} / ${l.unit.label}`).join(", ") || "—"}
+                {t.leases.length === 0 ? (
+                  "—"
+                ) : (
+                  <div className="flex flex-col gap-0.5">
+                    {t.leases.map((l) => (
+                      <Link
+                        key={l.id}
+                        href={`/leases/${l.id}`}
+                        className={`underline ${l.status === "ACTIVE" ? "" : "text-silver-dark"}`}
+                      >
+                        {l.unit.property.name} / {l.unit.label}
+                        <span className="ml-1 text-xs">({l.status === "ACTIVE" ? "active" : "ended"})</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </td>
               <td className="py-2">
                 {t.user ? (

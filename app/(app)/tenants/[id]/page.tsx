@@ -100,7 +100,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
                       </Link>
                     </td>
                     <td className="py-2">{new Date(l.startDate).toLocaleDateString()}</td>
-                    <td className="py-2">{l.status}</td>
+                    <td className={`py-2 ${l.status === "ACTIVE" ? "text-green-700" : "text-silver-dark"}`}>{l.status}</td>
                     <td className={`py-2 ${balance > 0 ? "text-red-600" : ""}`}>{money(balance)}</td>
                   </tr>
                 );
