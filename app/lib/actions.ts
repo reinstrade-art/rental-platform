@@ -96,20 +96,30 @@ export async function createOrganization(formData: FormData) {
     throw new Error("Organization name, admin email, and an 8+ character password are required.");
   }
 
-  await prisma.$transaction(async (tx) => {
-    const org = await tx.organization.create({ data: { name, trialEndsAt: newTrialEndsAt() } });
-    await tx.user.create({
+  const existing = await prisma.user.findUnique({ where: { email: adminEmail } });
+  if (existing) throw new Error("That email is already in use by another account.");
+
+  // Batched (array form), not an interactive callback transaction — a hosted
+  // database reached over HTTP (Turso in production) doesn't hold an
+  // interactive transaction open reliably, the same reason applyBilling
+  // avoids one (see app/lib/billing.ts). The id is generated here so the
+  // user row can be built up front and both writes submitted as one batch.
+  const orgId = crypto.randomUUID();
+  const passwordHash = await hashPassword(adminPassword);
+  await prisma.$transaction([
+    prisma.organization.create({ data: { id: orgId, name, trialEndsAt: newTrialEndsAt() } }),
+    prisma.user.create({
       data: {
-        organizationId: org.id,
+        organizationId: orgId,
         email: adminEmail,
-        passwordHash: await hashPassword(adminPassword),
+        passwordHash,
         role: "ADMIN",
         // Seeded so the approval chain isn't inert on day one — mirrors the
         // reference build's own migration (ADMIN → DIRECTOR).
         approvalLevel: "DIRECTOR",
       },
-    });
-  });
+    }),
+  ]);
 
   redirect("/platform");
 }
@@ -119,6 +129,49 @@ export async function setOrganizationStatus(organizationId: string, status: "ACT
   if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
   await prisma.organization.update({ where: { id: organizationId }, data: { status } });
   await logPlatformAccess(s.userId, organizationId, status === "SUSPENDED" ? "SUSPEND_ORG" : "REACTIVATE_ORG");
+}
+
+/** Renames a customer — the only field a platform admin edits inline from the org list. */
+export async function updateOrganization(organizationId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) throw new Error("Organization name is required.");
+
+  await prisma.organization.update({ where: { id: organizationId }, data: { name } });
+  await logPlatformAccess(s.userId, organizationId, "VIEW_ORG_DETAIL", `Renamed to ${name}`);
+  redirect("/platform");
+}
+
+/**
+ * Removes an organization outright — only when it's still empty (no
+ * properties, tenants, or vendors), so this reaches botched or test
+ * onboarding, never a customer with real data. A real customer is retired
+ * via setOrganizationStatus(SUSPENDED) instead, which keeps their history.
+ */
+export async function deleteOrganization(organizationId: string) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+
+  const org = await prisma.organization.findUnique({ where: { id: organizationId } });
+  if (!org) throw new Error("Organization not found.");
+
+  const [properties, tenants, vendors] = await Promise.all([
+    prisma.property.count({ where: { organizationId } }),
+    prisma.tenant.count({ where: { organizationId } }),
+    prisma.vendor.count({ where: { organizationId } }),
+  ]);
+  if (properties || tenants || vendors) {
+    throw new Error("This organization has data on file — suspend it instead of deleting, to keep its history.");
+  }
+
+  await prisma.invitation.deleteMany({ where: { organizationId } });
+  await prisma.auditLog.deleteMany({ where: { organizationId } });
+  await prisma.user.deleteMany({ where: { organizationId } }); // sessions cascade with the user
+  await prisma.organization.delete({ where: { id: organizationId } });
+
+  redirect("/platform");
 }
 
 /** Sets which commercial package a customer is on — see FEATURE_TIER in app/lib/constants.ts for what each unlocks. */

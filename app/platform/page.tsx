@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/app/lib/prisma";
-import { createOrganization, setOrganizationStatus } from "@/app/lib/actions";
+import { createOrganization, setOrganizationStatus, updateOrganization, deleteOrganization } from "@/app/lib/actions";
 import { licenseState } from "@/app/lib/licensing";
+import { DeleteButton } from "@/app/components/delete-button";
 
 const STATE_COLOR: Record<string, string> = {
   TRIAL: "text-orange-600",
@@ -47,17 +48,32 @@ export default async function PlatformPage() {
                   {license.daysLeft !== null && license.state !== "EXPIRED" ? ` (${license.daysLeft}d)` : ""}
                 </td>
                 <td className="py-2">
-                  <form
-                    action={setOrganizationStatus.bind(
-                      null,
-                      o.id,
-                      o.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
-                    )}
-                  >
-                    <button className="text-xs underline text-silver-dark">
-                      {o.status === "ACTIVE" ? "Suspend" : "Reactivate"}
-                    </button>
-                  </form>
+                  <div className="flex items-center justify-end gap-3">
+                    <details className="relative">
+                      <summary className="cursor-pointer text-xs underline text-silver-dark">Edit</summary>
+                      <form
+                        action={updateOrganization.bind(null, o.id)}
+                        className="absolute right-0 z-10 mt-1 flex gap-1 rounded border bg-lily p-2 shadow-lg"
+                      >
+                        <input name="name" required defaultValue={o.name} className="w-40 rounded border px-2 py-1 text-xs" />
+                        <button className="rounded border px-2 py-1 text-xs hover:bg-silver-light">Save</button>
+                      </form>
+                    </details>
+                    <form
+                      action={setOrganizationStatus.bind(
+                        null,
+                        o.id,
+                        o.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
+                      )}
+                    >
+                      <button className="text-xs underline text-silver-dark">
+                        {o.status === "ACTIVE" ? "Suspend" : "Reactivate"}
+                      </button>
+                    </form>
+                    <form action={deleteOrganization.bind(null, o.id)}>
+                      <DeleteButton confirmText={`Delete ${o.name}? Only possible while it has no properties, tenants, or vendors on file.`} />
+                    </form>
+                  </div>
                 </td>
               </tr>
               );
