@@ -222,8 +222,35 @@ export async function getTenantPortal(tenantId: string) {
         },
         orderBy: { createdAt: "desc" },
       },
+      messages: { orderBy: { createdAt: "asc" } },
     },
   });
+}
+
+/**
+ * Every tenant thread with at least one message, ordered so whoever has been
+ * waiting longest for a reply surfaces first — the point of a staff inbox is
+ * finding the person nobody has got back to, which stops being "most recent"
+ * the moment it's ignored.
+ */
+export async function getMessageThreads(organizationId: string) {
+  const tenants = await prisma.tenant.findMany({
+    where: { organizationId, messages: { some: {} } },
+    include: {
+      messages: { orderBy: { createdAt: "asc" } },
+      leases: { where: { status: "ACTIVE" }, take: 1, include: { unit: { include: { property: true } } } },
+    },
+  });
+
+  return tenants
+    .map((t) => {
+      const last = t.messages[t.messages.length - 1];
+      return { tenant: t, last, waiting: last.fromTenant, lease: t.leases[0] };
+    })
+    .sort((a, b) => {
+      if (a.waiting !== b.waiting) return a.waiting ? -1 : 1;
+      return a.waiting ? a.last.createdAt.getTime() - b.last.createdAt.getTime() : b.last.createdAt.getTime() - a.last.createdAt.getTime();
+    });
 }
 
 export async function getTransactions(organizationId: string) {

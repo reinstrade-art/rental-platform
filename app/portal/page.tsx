@@ -6,7 +6,7 @@ import { prisma } from "@/app/lib/prisma";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 import { payMpesaSelf } from "@/app/lib/mpesa-actions";
 import { MpesaPay } from "@/app/components/mpesa-pay";
-import { signLease } from "@/app/lib/actions";
+import { signLease, sendTenantMessage } from "@/app/lib/actions";
 import { SignaturePad } from "@/app/components/signature-pad";
 
 function money(n: number) {
@@ -173,6 +173,33 @@ export default async function TenantPortalPage() {
         );
       })}
       {tenant.leases.length === 0 && <p className="text-sm text-silver-dark">No tenancy on file yet.</p>}
+
+      <div className="rounded border p-4">
+        <h2 className="text-sm font-semibold">Messages</h2>
+        <p className="text-xs text-silver-dark">Write to the office here — they'll reply in the same thread.</p>
+
+        <ul className="mt-3 flex flex-col gap-2">
+          {tenant.messages.slice(-10).map((msg) => (
+            <li
+              key={msg.id}
+              className={`max-w-[85%] rounded border px-3 py-2 text-sm ${msg.fromTenant ? "ml-auto bg-silver-light" : ""}`}
+            >
+              <p className="whitespace-pre-wrap">{msg.body}</p>
+              <p className="mt-1 text-xs text-silver-dark">
+                {msg.fromTenant ? tenant.name : msg.authorName} · {new Date(msg.createdAt).toLocaleString()}
+              </p>
+            </li>
+          ))}
+          {tenant.messages.length === 0 && <p className="text-xs text-silver-dark">No messages yet.</p>}
+        </ul>
+
+        <form action={sendTenantMessage} className="mt-3 flex flex-col gap-2 border-t pt-3">
+          <textarea name="body" rows={2} required maxLength={2000} placeholder="Write a message…" className="rounded border px-3 py-2 text-sm" />
+          <button type="submit" className="self-start rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
+            Send
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

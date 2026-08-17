@@ -105,6 +105,7 @@ model Organization {
   expenses         Expense[]
   vendors          Vendor[]
   suppliers        Supplier[]
+  messages         Message[]
   repairs          Repair[]
   quotes           Quote[]
   approvalRequests ApprovalRequest[]
@@ -295,10 +296,33 @@ model Tenant {
   phone String?
   email String?
 
-  leases Lease[]
-  user   User?
+  leases   Lease[]
+  user     User?
+  messages Message[]
 
   createdAt DateTime @default(now())
+}
+
+// A conversation thread with one tenant, office and tenant both writing into
+// the same list. fromTenant is the only thing that decides which side of the
+// thread a line renders on; authorName is captured at write time so a
+// disabled/removed staff account never blanks out who said what.
+model Message {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  body       String
+  fromTenant Boolean @default(false)
+  authorName String
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([tenantId])
 }
 
 model Lease {

@@ -1403,3 +1403,45 @@ export async function signLease(leaseId: string, formData: FormData) {
     },
   });
 }
+
+// --- messages ---------------------------------------------------------------
+// One thread per tenant, office and tenant writing into the same list.
+
+/** The tenant's own line in their thread with the office. */
+export async function sendTenantMessage(formData: FormData) {
+  const s = await getSession();
+  if (!requireTenant(s)) throw new Error("Not authorized.");
+
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body) throw new Error("Write a message first.");
+  if (body.length > 2000) throw new Error("Please keep it under 2000 characters.");
+
+  const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: s.tenantId! } });
+  await prisma.message.create({
+    data: { organizationId: s.organizationId, tenantId: tenant.id, body, fromTenant: true, authorName: tenant.name },
+  });
+  redirect("/portal");
+}
+
+/** The office replying in a tenant's thread — never a tenant's own session. */
+export async function replyToTenant(tenantId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const tenant = await prisma.tenant.findFirst({ where: { id: tenantId, organizationId: s.organizationId } });
+  if (!tenant) throw new Error("Tenant not found.");
+
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body) throw new Error("Write a message first.");
+
+  await prisma.message.create({
+    data: {
+      organizationId: s.organizationId,
+      tenantId,
+      body: body.slice(0, 2000),
+      fromTenant: false,
+      authorName: s.email ?? s.phone ?? "Staff",
+    },
+  });
+  redirect("/messages");
+}
