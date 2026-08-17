@@ -358,6 +358,17 @@ export async function deleteProperty(propertyId: string) {
   redirect("/properties");
 }
 
+/**
+ * Redirects with a message a page can read from searchParams and show
+ * inline, instead of throwing. Next.js redacts a thrown Error's message in
+ * production (only the server log keeps it, via error.digest) — fine for a
+ * truly unexpected failure, but a CSV with a typo'd header is an EXPECTED
+ * outcome that deserves to say what actually went wrong.
+ */
+function errorRedirect(path: string, message: string): never {
+  redirect(`${path}?error=${encodeURIComponent(message)}`);
+}
+
 /** One row per property: name,address — header row optional. */
 export async function importPropertiesCsv(formData: FormData) {
   const s = await getSession();
@@ -365,9 +376,9 @@ export async function importPropertiesCsv(formData: FormData) {
   requireFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
 
   const file = formData.get("file");
-  if (!(file instanceof File)) throw new Error("Choose a CSV file.");
+  if (!(file instanceof File)) errorRedirect("/properties", "Choose a CSV file.");
   const rows = parsePropertiesCsv(await file.text());
-  if (rows.length === 0) throw new Error("No valid rows found — expected name,address per line.");
+  if (rows.length === 0) errorRedirect("/properties", "No valid rows found — expected name,address per line.");
 
   for (const row of rows) {
     await prisma.property.create({ data: { organizationId: s.organizationId, name: row.name, address: row.address } });
@@ -452,9 +463,9 @@ export async function importTenantsCsv(formData: FormData) {
   requireFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
 
   const file = formData.get("file");
-  if (!(file instanceof File)) throw new Error("Choose a CSV file.");
+  if (!(file instanceof File)) errorRedirect("/tenants", "Choose a CSV file.");
   const rows = parseTenantsCsv(await file.text());
-  if (rows.length === 0) throw new Error("No valid rows found — expected name,phone,email per line.");
+  if (rows.length === 0) errorRedirect("/tenants", "No valid rows found — expected name,phone,email per line.");
 
   for (const row of rows) {
     await prisma.tenant.create({ data: { organizationId: s.organizationId, name: row.name, phone: row.phone, email: row.email } });
@@ -541,13 +552,14 @@ export async function importRentRoll(formData: FormData) {
 
   const propertyId = String(formData.get("propertyId") ?? "");
   const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
-  if (!property) throw new Error("Select a property to import into.");
+  if (!property) errorRedirect("/leases", "Select a property to import into.");
 
   const file = formData.get("file");
-  if (!(file instanceof File)) throw new Error("Choose a CSV file.");
+  if (!(file instanceof File)) errorRedirect("/leases", "Choose a CSV file.");
   const rows = parseRentRollCsv(await file.text());
   if (rows.length === 0) {
-    throw new Error(
+    errorRedirect(
+      "/leases",
       "No valid rows found — expected a header row with columns like Unit #, Tenant, Month, Year, Expected Rent, Billed Rent, RENT Paid.",
     );
   }

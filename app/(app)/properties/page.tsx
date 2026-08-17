@@ -6,14 +6,16 @@ import { deleteProperty, importPropertiesCsv } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
-export default async function PropertiesPage() {
+export default async function PropertiesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   const properties = await getProperties(s.organizationId);
   const canImport = hasFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
+  const { error } = await searchParams;
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Properties</h1>
         <Link href="/properties/new" className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">

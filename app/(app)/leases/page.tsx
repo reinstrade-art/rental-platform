@@ -11,12 +11,13 @@ function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-export default async function LeasesPage() {
+export default async function LeasesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   const tier = await getOrgTier(s.organizationId);
   const canImport = hasFeature(tier, "CSV_IMPORT");
   const canBillingRun = hasFeature(tier, "BILLING_RUN");
+  const { error } = await searchParams;
   const [leases, properties] = await Promise.all([
     getLeases(s.organizationId),
     prisma.property.findMany({ where: { organizationId: s.organizationId }, orderBy: { name: "asc" } }),
@@ -34,6 +35,7 @@ export default async function LeasesPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Leases</h1>
         <div className="flex items-center gap-3">
