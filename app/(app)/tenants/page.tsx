@@ -28,13 +28,17 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
             <th className="py-2">Name</th>
             <th className="py-2">Phone</th>
             <th className="py-2">Email</th>
+            <th className="py-2">Status</th>
             <th className="py-2">Leases</th>
             <th className="py-2">Portal access</th>
             <th className="py-2"></th>
           </tr>
         </thead>
         <tbody>
-          {tenants.map((t) => (
+          {tenants.map((t) => {
+            const hasActive = t.leases.some((l) => l.status === "ACTIVE");
+            const hasAny = t.leases.length > 0;
+            return (
             <tr key={t.id} className="border-b">
               <td className="py-2">
                 <Link href={`/tenants/${t.id}`} className="underline">
@@ -43,6 +47,19 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
               </td>
               <td className="py-2">{t.phone ?? "—"}</td>
               <td className="py-2">{t.email ?? "—"}</td>
+              <td className="py-2">
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
+                    hasActive
+                      ? "border-green-300 bg-green-50 text-green-700"
+                      : hasAny
+                        ? "border-orange-300 bg-orange-50 text-orange-700"
+                        : "border-silver text-silver-dark"
+                  }`}
+                >
+                  {hasActive ? "On lease" : hasAny ? "Ended only" : "No lease"}
+                </span>
+              </td>
               <td className="py-2">
                 {t.leases.length === 0 ? (
                   "—"
@@ -86,10 +103,11 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
           {tenants.length === 0 && (
             <tr>
-              <td colSpan={6} className="py-4 text-silver-dark">
+              <td colSpan={7} className="py-4 text-silver-dark">
                 No tenants yet.
               </td>
             </tr>
