@@ -1,6 +1,6 @@
 import "server-only";
 import { PDFFont, PDFPage } from "pdf-lib";
-import { newDocument, drawHeader, drawRule, money, textRow, paletteFor, MARGIN, PAGE_WIDTH, PAGE_HEIGHT } from "./pdf-chrome";
+import { newDocument, drawHeader, drawRule, embedCursive, money, textRow, paletteFor, MARGIN, PAGE_WIDTH, PAGE_HEIGHT } from "./pdf-chrome";
 import type { OrgBranding, Palette } from "./pdf-chrome";
 
 export type LeaseDocInput = {
@@ -136,6 +136,12 @@ export async function buildLeaseDoc(input: LeaseDocInput): Promise<Uint8Array> {
   const maxWidth = PAGE_WIDTH - MARGIN * 2;
 
   let y = drawHeader(currentPage, font, bold, input.org, "Tenancy Agreement");
+
+  // The landlord countersigns in script the moment the tenant has — a copy
+  // that comes back with only the tenant's ink still reads as half-executed.
+  // Embedded once, up front, since embedding is async and the drawing
+  // helpers below are not.
+  const cursive = input.signature.signedAt ? await embedCursive(doc) : null;
 
   const drawContinuationHeader = () => {
     let cy = PAGE_HEIGHT - MARGIN;
@@ -339,11 +345,28 @@ export async function buildLeaseDoc(input: LeaseDocInput): Promise<Uint8Array> {
     }
   }
 
+  // Landlord's countersignature — a script rendering of the landlord's own
+  // name (the property/org's letterhead name), drawn automatically the
+  // instant the tenant has signed. Not a real handwritten signature; a
+  // standing authorization the office has already given by putting this
+  // template in front of tenants at all, made visible on the page.
+  if (cursive) {
+    textRow(currentPage, y + 6, [{ text: landlordName, x: MARGIN + 4, font: cursive, size: 22 }]);
+  }
+
   y -= 34;
   drawRule(currentPage, y, MARGIN, MARGIN + colWidth);
   drawRule(currentPage, y, rightX, rightX + colWidth);
   textRow(currentPage, y - 12, [
-    { text: "Date", x: MARGIN, font, size: 8, color: palette.muted },
+    {
+      text: input.signature.signedAt
+        ? `Date: ${new Date(input.signature.signedAt).toLocaleDateString()} (countersigned automatically)`
+        : "Date",
+      x: MARGIN,
+      font,
+      size: 8,
+      color: palette.muted,
+    },
     {
       text: input.signature.signedAt
         ? `Date: ${new Date(input.signature.signedAt).toLocaleDateString()} (signed electronically${input.signature.signedIp ? ` from ${input.signature.signedIp}` : ""})`

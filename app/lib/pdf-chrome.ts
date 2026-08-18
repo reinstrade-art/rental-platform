@@ -1,5 +1,8 @@
 import "server-only";
 import { PDFDocument, StandardFonts, rgb, PDFPage, PDFFont, RGB } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { readFile } from "fs/promises";
+import { join } from "path";
 
 // A4. Page geometry only — nothing here names any particular business; every
 // visible label comes from OrgBranding, which is data one org entered about
@@ -61,6 +64,24 @@ export async function newDocument() {
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   return { doc, page, font, bold };
+}
+
+/**
+ * A genuine script face, embedded lazily — most documents never draw a
+ * signature, so this cost is paid only by the ones that do. Allura, SIL
+ * Open Font License 1.1 (Google Fonts), free to embed.
+ */
+let cursiveBytes: Buffer | null = null;
+export async function embedCursive(doc: PDFDocument): Promise<PDFFont | null> {
+  try {
+    if (!cursiveBytes) {
+      cursiveBytes = await readFile(join(process.cwd(), "app", "lib", "fonts", "Allura-Regular.ttf"));
+    }
+    doc.registerFontkit(fontkit);
+    return await doc.embedFont(cursiveBytes);
+  } catch {
+    return null; // font missing — callers fall back to no signature drawn
+  }
 }
 
 function orgLines(org: OrgBranding): string[] {
