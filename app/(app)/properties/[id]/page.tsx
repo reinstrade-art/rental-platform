@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getProperty, leaseBalance } from "@/app/lib/data";
-import { createUnit, setUnitPaymentCode, deleteProperty } from "@/app/lib/actions";
+import { createUnit, updateUnit, deleteProperty } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
 
 function money(n: number) {
@@ -76,10 +76,29 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
           <tbody>
             {property.units.map((u) => {
               const active = activeLeaseByUnit.get(u.id);
+              const formId = `unit-${u.id}`;
               return (
                 <tr key={u.id} className="border-b">
-                  <td className="py-2">{u.label}</td>
-                  <td className="py-2">{u.monthlyRent ?? "—"}</td>
+                  <td className="py-2">
+                    <form id={formId} action={updateUnit.bind(null, u.id)} />
+                    <input
+                      form={formId}
+                      name="label"
+                      required
+                      defaultValue={u.label}
+                      className="w-20 rounded border px-2 py-1"
+                    />
+                  </td>
+                  <td className="py-2">
+                    <input
+                      form={formId}
+                      name="monthlyRent"
+                      type="number"
+                      step="0.01"
+                      defaultValue={u.monthlyRent ?? ""}
+                      className="w-24 rounded border px-2 py-1"
+                    />
+                  </td>
                   <td className="py-2">
                     {active ? (
                       <Link href={`/leases/${active.id}`} className="underline">
@@ -93,15 +112,18 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                     {active ? money(leaseBalance(active)) : "—"}
                   </td>
                   <td className="py-2">
-                    <form action={setUnitPaymentCode.bind(null, u.id)} className="flex gap-1">
+                    <div className="flex gap-1">
                       <input
+                        form={formId}
                         name="paymentCode"
                         defaultValue={u.paymentCode ?? ""}
                         placeholder="e.g. A1"
                         className="w-20 rounded border px-2 py-1 text-xs"
                       />
-                      <button className="text-xs underline">Save</button>
-                    </form>
+                      <button form={formId} className="text-xs underline">
+                        Save
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

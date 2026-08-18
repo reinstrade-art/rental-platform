@@ -406,6 +406,23 @@ export async function createUnit(propertyId: string, formData: FormData) {
   redirect(`/properties/${propertyId}`);
 }
 
+export async function updateUnit(unitId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const unit = await prisma.unit.findFirst({ where: { id: unitId, organizationId: s.organizationId } });
+  if (!unit) throw new Error("Unit not found.");
+
+  const label = String(formData.get("label") ?? "").trim();
+  if (!label) errorRedirect(`/properties/${unit.propertyId}`, "Unit label is required.");
+
+  const monthlyRent = Number(formData.get("monthlyRent") ?? 0) || null;
+  const paymentCode = String(formData.get("paymentCode") ?? "").trim() || null;
+
+  await prisma.unit.update({ where: { id: unitId }, data: { label, monthlyRent, paymentCode } });
+  redirect(`/properties/${unit.propertyId}`);
+}
+
 export async function createTenant(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");

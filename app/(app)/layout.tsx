@@ -71,6 +71,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </form>
         </div>
       </aside>
+      <nav
+        aria-label="Quick module jump"
+        className="fixed right-0 top-1/2 z-20 hidden -translate-y-1/2 flex-col gap-0.5 rounded-l-lg border border-r-0 border-ink-soft bg-ink-photo/95 py-2 pl-2 pr-1 shadow-lg backdrop-blur lg:flex"
+      >
+        {nav.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            title={item.label}
+            className="rounded px-2 py-1 text-right text-[11px] leading-tight text-lily/75 transition-colors hover:bg-ink-soft hover:text-gold"
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
       <div className="flex-1">
         {s.impersonatedBy && (
           <div className="flex items-center justify-between border-b border-silver bg-silver-light px-6 py-2 text-sm text-ink">
