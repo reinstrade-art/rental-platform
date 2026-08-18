@@ -9,12 +9,20 @@ function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-export default async function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PropertyDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ saved?: string; error?: string }>;
+}) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   const { id } = await params;
+  const { saved, error } = await searchParams;
   const property = await getProperty(s.organizationId, id);
   if (!property) notFound();
+  const savedUnit = saved ? property.units.find((u) => u.id === saved) : null;
 
   const activeLeaseByUnit = new Map(
     property.units.map((u) => [u.id, u.leases.find((l) => l.status === "ACTIVE") ?? null]),
@@ -25,6 +33,12 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {savedUnit && (
+        <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">
+          Saved — unit {savedUnit.label} updated.
+        </div>
+      )}
       <div>
         <Link href="/properties" className="text-xs underline text-silver-dark">
           All properties
@@ -120,7 +134,10 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                         placeholder="e.g. A1"
                         className="w-20 rounded border px-2 py-1 text-xs"
                       />
-                      <button form={formId} className="text-xs underline">
+                      <button
+                        form={formId}
+                        className="rounded bg-ink px-2 py-1 text-xs text-lily transition-colors hover:bg-ink-soft"
+                      >
                         Save
                       </button>
                     </div>

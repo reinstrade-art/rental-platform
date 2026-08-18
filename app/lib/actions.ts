@@ -420,7 +420,7 @@ export async function updateUnit(unitId: string, formData: FormData) {
   const paymentCode = String(formData.get("paymentCode") ?? "").trim() || null;
 
   await prisma.unit.update({ where: { id: unitId }, data: { label, monthlyRent, paymentCode } });
-  redirect(`/properties/${unit.propertyId}`);
+  redirect(`/properties/${unit.propertyId}?saved=${unitId}`);
 }
 
 export async function createTenant(formData: FormData) {

@@ -89,7 +89,7 @@ export async function getDashboard(organizationId: string, at: Date = new Date()
   const [properties, units, tenants, leases, charges, payments, allCharges, allPayments] =
     await Promise.all([
       prisma.property.count({ where: { organizationId } }),
-      prisma.unit.findMany({ where: { organizationId }, select: { id: true, leases: { select: { status: true } } } }),
+      prisma.unit.findMany({ where: { organizationId }, select: { id: true, monthlyRent: true, leases: { select: { status: true } } } }),
       prisma.tenant.count({ where: { organizationId } }),
       prisma.lease.count({ where: { organizationId, status: "ACTIVE" } }),
       prisma.charge.findMany({ where: { organizationId, periodMonth: { gte: start, lt: end } }, select: { amount: true } }),
@@ -108,6 +108,10 @@ export async function getDashboard(organizationId: string, at: Date = new Date()
   }, 0);
 
   const occupiedUnits = units.filter((u) => u.leases.some((l) => l.status === "ACTIVE")).length;
+  // Every unit's rent, occupied or vacant — what the portfolio would earn at
+  // full occupancy, not what's actually billed. A unit with no monthlyRent
+  // set (never priced) contributes nothing, since there's no figure to sum.
+  const potentialIncome = units.reduce((sum, u) => sum + (u.monthlyRent ?? 0), 0);
 
   return {
     period: start,
@@ -119,6 +123,7 @@ export async function getDashboard(organizationId: string, at: Date = new Date()
     billedThisMonth,
     receivedThisMonth,
     grossArrears,
+    potentialIncome,
   };
 }
 

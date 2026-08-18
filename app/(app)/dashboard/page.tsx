@@ -25,6 +25,7 @@ export default async function DashboardPage() {
     { label: "Properties", value: dash.propertyCount, href: "/properties" },
     { label: "Units", value: `${dash.occupiedUnits} / ${dash.unitCount} occupied`, href: "/properties" },
     { label: "Active leases", value: dash.activeLeaseCount, href: "/leases" },
+    { label: "Total potential income", value: money(dash.potentialIncome), href: "/properties" },
     { label: "Billed this month", value: money(dash.billedThisMonth), href: "/leases" },
     { label: "Received this month", value: money(dash.receivedThisMonth), href: "/payments" },
     { label: "Arrears (all leases)", value: money(dash.grossArrears), href: canAlerts ? "/alerts" : "/leases" },
