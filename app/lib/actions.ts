@@ -430,9 +430,21 @@ export async function createTenant(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim() || null;
   const email = String(formData.get("email") ?? "").trim() || null;
-  if (!name) throw new Error("Tenant name is required.");
+  if (!name) errorRedirect("/tenants/new", "Tenant name is required.");
 
-  await prisma.tenant.create({ data: { organizationId: s.organizationId, name, phone, email } });
+  const tenant = await prisma.tenant.create({ data: { organizationId: s.organizationId, name, phone, email } });
+
+  // A prospective tenant who isn't in the system yet — add the record and
+  // send the registration invite in the same step, rather than making staff
+  // create the tenant first and come back to invite them separately.
+  if (formData.get("inviteNow") === "on") {
+    if (!phone && !email) {
+      errorRedirect(`/tenants/${tenant.id}`, "Added, but a phone or email is needed before inviting — add one, then invite.");
+    }
+    const invite = await createInvitation(s.organizationId, "TENANT", { tenantId: tenant.id }, { email: email ?? undefined, phone: phone ?? undefined });
+    redirect(`/invites/${invite.id}`);
+  }
+
   redirect("/tenants");
 }
 
