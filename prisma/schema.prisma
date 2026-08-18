@@ -108,6 +108,7 @@ model Organization {
   leases           Lease[]
   charges          Charge[]
   payments         Payment[]
+  paymentAllocations PaymentAllocation[]
   expenses         Expense[]
   vendors          Vendor[]
   suppliers        Supplier[]
@@ -440,12 +441,14 @@ model Charge {
   leaseId String
   lease   Lease  @relation(fields: [leaseId], references: [id])
 
-  type        String // RENT | UTILITY | DEPOSIT
+  type        String // RENT | DEPOSIT | WATER | HYGIENE (UTILITY kept for older rows — see CHARGE_TYPE_LABEL)
   description String?
   amount      Float
   periodMonth DateTime // UTC month-start, matches HM Kariuki's convention
 
   createdAt DateTime @default(now())
+
+  allocations PaymentAllocation[]
 }
 
 model Payment {
@@ -466,12 +469,43 @@ model Payment {
   transaction Transaction?
   mpesaRequest MpesaRequest?
 
+  // How much of this one payment the office has said goes to which charge —
+  // e.g. 4,000 of a 4,900 M-Pesa receipt is rent, 200 is water, 700 is
+  // hygiene. Optional and additive: rows here are a fact the office recorded,
+  // never a guess. Whatever isn't itemized (amount minus the sum of these)
+  // still falls into the ordinary oldest-charge-first pool — see allocate()
+  // in app/lib/settle.ts, which applies these first and pools the remainder.
+  allocations PaymentAllocation[]
+
   // A reference (M-Pesa code, bank transaction id) identifies one real-world
   // transfer — recording it twice would be the same money counted twice.
   // Scoped per organization rather than globally: SQLite allows many NULLs
   // in a unique index, so cash payments and historical imports without a
   // reference are unaffected.
   @@unique([organizationId, reference])
+}
+
+// One line of a payment's breakdown — "1,200 of this payment is rent." A
+// payment can have several of these (one per charge it covers) or none at
+// all (an ordinary undirected lump sum). Deleting the payment or the charge
+// it points at removes the allocation with it; neither can exist headless.
+model PaymentAllocation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  chargeId String
+  charge   Charge @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+
+  amount Float
+
+  createdAt DateTime @default(now())
+
+  @@index([paymentId])
+  @@index([chargeId])
 }
 
 // The landlord's own money going out — as distinct from Charge/Payment,
