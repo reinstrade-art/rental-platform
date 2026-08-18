@@ -144,9 +144,14 @@ export default async function TenantPortalPage() {
             <div className="mt-4 max-w-sm border-t pt-4">
               <h3 className="text-sm font-semibold">Tenancy agreement</h3>
               {lease.signedAt ? (
-                <p className="mt-1 text-xs text-green-700">
-                  Signed {new Date(lease.signedAt).toLocaleDateString()} as {lease.signedByName}.
-                </p>
+                <div className="mt-1">
+                  <p className="text-xs text-green-700">
+                    Signed {new Date(lease.signedAt).toLocaleDateString()} as {lease.signedByName}.
+                  </p>
+                  <Link href={`/api/agreement/${lease.id}`} target="_blank" className="mt-1 inline-block text-xs underline">
+                    Download your signed copy
+                  </Link>
+                </div>
               ) : (
                 <form action={signLease.bind(null, lease.id)} className="mt-2 flex flex-col gap-2">
                   <p className="text-xs text-silver-dark">

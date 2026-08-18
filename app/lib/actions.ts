@@ -1625,6 +1625,7 @@ export async function signLease(leaseId: string, formData: FormData) {
 
   const lease = await prisma.lease.findFirst({
     where: { id: leaseId, organizationId: s.organizationId, tenantId: s.tenantId },
+    include: { tenant: true, unit: { include: { property: true } } },
   });
   if (!lease) throw new Error("Lease not found.");
   if (lease.signedAt) throw new Error("This lease has already been signed.");
@@ -1641,6 +1642,20 @@ export async function signLease(leaseId: string, formData: FormData) {
       signedByName,
       signedIp: ip,
       signedUserAgent: userAgent,
+    },
+  });
+
+  // The office isn't watching every lease for a signature to land, so the
+  // moment one does, it's dropped into the same thread staff already check
+  // for tenant messages — no email/SMS provider configured to push it any
+  // further than that yet, but nothing here silently goes unnoticed.
+  await prisma.message.create({
+    data: {
+      organizationId: s.organizationId,
+      tenantId: lease.tenant.id,
+      body: `Signed the tenancy agreement for ${lease.unit.property.name}, unit ${lease.unit.label}, as ${signedByName}.`,
+      fromTenant: true,
+      authorName: lease.tenant.name,
     },
   });
 }
