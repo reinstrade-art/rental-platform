@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "./prisma";
+import { Prisma } from "@/app/generated/prisma/client";
 import { headers } from "next/headers";
 import {
   createSession,
@@ -618,7 +619,9 @@ export async function addCharge(leaseId: string, formData: FormData) {
   const amount = Number(formData.get("amount") ?? 0);
   const description = String(formData.get("description") ?? "").trim() || null;
   const periodMonth = new Date(String(formData.get("periodMonth") ?? ""));
-  if (!amount || isNaN(periodMonth.getTime())) throw new Error("Amount and period month are required.");
+  if (!amount || isNaN(periodMonth.getTime())) {
+    errorRedirect(`/leases/${leaseId}`, "Amount and period month are required.");
+  }
 
   await prisma.charge.create({
     data: { organizationId: s.organizationId, leaseId, type, amount, description, periodMonth },
@@ -637,11 +640,18 @@ export async function recordPayment(leaseId: string, formData: FormData) {
   const method = String(formData.get("method") ?? "").trim() || null;
   const reference = String(formData.get("reference") ?? "").trim() || null;
   const paidAt = new Date(String(formData.get("paidAt") ?? new Date().toISOString()));
-  if (!amount) throw new Error("Amount is required.");
+  if (!amount) errorRedirect(`/leases/${leaseId}`, "Amount is required.");
 
-  await prisma.payment.create({
-    data: { organizationId: s.organizationId, leaseId, amount, method, reference, paidAt },
-  });
+  try {
+    await prisma.payment.create({
+      data: { organizationId: s.organizationId, leaseId, amount, method, reference, paidAt },
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      errorRedirect(`/leases/${leaseId}`, "That reference has already been recorded against another payment.");
+    }
+    throw e;
+  }
   redirect(`/leases/${leaseId}`);
 }
 

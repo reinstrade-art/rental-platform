@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { allowPaymentDoc } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { buildReceiptPdf } from "@/app/lib/receipt";
+import { allocate } from "@/app/lib/settle";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ paymentId: string }> }) {
   const { paymentId } = await params;
@@ -17,8 +18,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ payment
           tenant: true,
           unit: { include: { property: true } },
           organization: true,
-          charges: { select: { amount: true, periodMonth: true, type: true, description: true } },
-          payments: { select: { amount: true, paidAt: true } },
+          charges: { select: { id: true, amount: true, periodMonth: true, type: true, description: true } },
+          payments: { select: { id: true, amount: true, paidAt: true, allocations: { select: { chargeId: true, amount: true } } } },
         },
       },
     },
@@ -37,9 +38,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ payment
   // What this tenancy was billed for the same calendar month as the payment
   // — an itemized "what this was for" alongside the lump amount received,
   // since a payment itself isn't earmarked to any one charge (see settle.ts).
+  // A one-time charge (the deposit) is billed once, in whichever month it was
+  // raised — a receipt for a later payment would otherwise never show it
+  // while it's still unpaid, so it's surfaced here too until it's settled.
   const periodKey = (d: Date) => `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
   const paidPeriod = periodKey(payment.paidAt);
-  const periodCharges = payment.lease.charges.filter((c) => periodKey(c.periodMonth) === paidPeriod);
+  const settled = allocate(payment.lease.charges, payment.lease.payments);
+  const periodCharges = payment.lease.charges.filter(
+    (c) =>
+      periodKey(c.periodMonth) === paidPeriod ||
+      (c.type === "DEPOSIT" && !(settled.get(c.id)?.settled ?? false)),
+  );
 
   const pdf = await buildReceiptPdf({
     org: payment.lease.organization,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { allowLeaseDoc } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { buildInvoicePdf } from "@/app/lib/invoice";
+import { allocate } from "@/app/lib/settle";
 
 export async function GET(req: Request, { params }: { params: Promise<{ leaseId: string }> }) {
   const { leaseId } = await params;
@@ -20,9 +21,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ leaseId:
       tenant: true,
       unit: { include: { property: true } },
       organization: true,
-      charges: { where: { periodMonth: { gte: period, lt: periodEnd } }, orderBy: { createdAt: "asc" } },
+      charges: { orderBy: { createdAt: "asc" } },
+      payments: { include: { allocations: true } },
     },
   });
+
+  // A one-time charge (the deposit) is billed once, in whichever month it was
+  // raised — an invoice generated for any later period would otherwise never
+  // show it, even while it's still unpaid. Surfaced on every invoice until
+  // it's settled, alongside whatever's actually due for the selected period.
+  const settled = allocate(lease.charges, lease.payments);
+  const periodCharges = lease.charges.filter((c) => c.periodMonth >= period && c.periodMonth < periodEnd);
+  const outstandingOneOff = lease.charges.filter(
+    (c) => c.type === "DEPOSIT" && !(c.periodMonth >= period && c.periodMonth < periodEnd) && !(settled.get(c.id)?.settled ?? false),
+  );
+  const charges = [...periodCharges, ...outstandingOneOff];
 
   const pdf = await buildInvoicePdf({
     org: lease.organization,
@@ -30,7 +43,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ leaseId:
     tenant: lease.tenant,
     unit: lease.unit,
     property: lease.unit.property,
-    charges: lease.charges,
+    charges,
   });
 
   return new NextResponse(Buffer.from(pdf), {
