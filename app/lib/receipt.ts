@@ -13,8 +13,12 @@ export type ReceiptInput = {
   property: { name: string };
   balanceAfter: number;
   /** What this tenancy was billed for the same month as this payment — shown as an itemized
-   *  reference, not a claim about which part of the payment covered which line (see settle.ts). */
+   *  reference, not a claim about which part of the payment covered which line (see settle.ts).
+   *  Only used when this payment carries no directed allocations of its own. */
   periodCharges: { type: string; description: string | null; amount: number }[];
+  /** How the office actually itemized THIS payment — "4,000 of this is rent, 200 is water".
+   *  A statement of fact recorded at the time, unlike periodCharges above. */
+  allocations: { amount: number; charge: { type: string; description: string | null } }[];
 };
 
 export async function buildReceiptPdf(input: ReceiptInput): Promise<Uint8Array> {
@@ -53,7 +57,32 @@ export async function buildReceiptPdf(input: ReceiptInput): Promise<Uint8Array> 
   drawRule(page, y);
   y -= 24;
 
-  if (input.periodCharges.length > 0) {
+  if (input.allocations.length > 0) {
+    // The office itemized this specific payment — a fact, not a derived guess.
+    textRow(page, y, [{ text: "This payment covers", x: MARGIN, font, size: 9, color: palette.muted }]);
+    y -= 16;
+    let allocated = 0;
+    for (const a of input.allocations) {
+      const label = a.charge.description || CHARGE_TYPE_LABEL[a.charge.type] || a.charge.type;
+      textRow(page, y, [
+        { text: label, x: MARGIN, font, size: 10 },
+        { text: money(a.amount), x: PAGE_RIGHT_LABEL_X, font, size: 10 },
+      ]);
+      allocated += a.amount;
+      y -= 15;
+    }
+    const unallocated = Math.round((input.payment.amount - allocated) * 100) / 100;
+    if (unallocated > 0.005) {
+      textRow(page, y, [
+        { text: "Unallocated (applied to oldest balance)", x: MARGIN, font, size: 10, color: palette.muted },
+        { text: money(unallocated), x: PAGE_RIGHT_LABEL_X, font, size: 10, color: palette.muted },
+      ]);
+      y -= 15;
+    }
+    y -= 11;
+    drawRule(page, y);
+    y -= 24;
+  } else if (input.periodCharges.length > 0) {
     const periodLabel = new Date(input.payment.paidAt).toLocaleDateString(undefined, { year: "numeric", month: "long" });
     textRow(page, y, [{ text: `Billed for ${periodLabel}`, x: MARGIN, font, size: 9, color: palette.muted }]);
     y -= 16;

@@ -15,7 +15,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ leaseId
       unit: { include: { property: true } },
       organization: true,
       charges: { orderBy: { periodMonth: "asc" } },
-      payments: { orderBy: { paidAt: "asc" } },
+      payments: { orderBy: { paidAt: "asc" }, include: { allocations: true } },
     },
   });
 

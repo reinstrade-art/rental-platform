@@ -39,7 +39,14 @@ export type StatementMonth = {
 };
 
 type ChargeLike = { id: string; type: string; description: string | null; amount: number; periodMonth: Date };
-type PaymentLike = { id: string; amount: number; method: string | null; reference: string | null; paidAt: Date };
+type PaymentLike = {
+  id: string;
+  amount: number;
+  method: string | null;
+  reference: string | null;
+  paidAt: Date;
+  allocations?: { chargeId: string; amount: number }[];
+};
 
 const monthKey = (d: Date) => new Date(d).toISOString().slice(0, 7);
 const monthTitle = (key: string) => {

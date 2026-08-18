@@ -646,6 +646,59 @@ export async function recordPayment(leaseId: string, formData: FormData) {
 }
 
 /**
+ * Records one payment broken down across specific charges — "4,000 of this
+ * is rent, 200 is water" — instead of leaving the whole amount to the
+ * ordinary oldest-charge-first pool. Reads one `charge_<id>` field per
+ * charge on the lease; only charges with a nonzero amount get an
+ * allocation. Whatever of the total isn't itemized this way simply falls
+ * into the pool like an ordinary payment (see allocate() in settle.ts) —
+ * this never invents an allocation the office didn't actually enter.
+ */
+export async function recordDirectedPayment(leaseId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const lease = await prisma.lease.findFirst({ where: { id: leaseId, organizationId: s.organizationId } });
+  if (!lease) throw new Error("Lease not found.");
+
+  const amount = Number(formData.get("amount") ?? 0);
+  const method = String(formData.get("method") ?? "").trim() || null;
+  const reference = String(formData.get("reference") ?? "").trim() || null;
+  const paidAt = new Date(String(formData.get("paidAt") ?? new Date().toISOString()));
+  if (!amount) errorRedirect(`/leases/${leaseId}`, "Amount is required.");
+
+  const charges = await prisma.charge.findMany({ where: { leaseId, organizationId: s.organizationId } });
+  const allocations: { chargeId: string; amount: number }[] = [];
+  let itemizedTotal = 0;
+  for (const c of charges) {
+    const raw = formData.get(`charge_${c.id}`);
+    const amt = raw ? Number(raw) : 0;
+    if (amt > 0) {
+      allocations.push({ chargeId: c.id, amount: amt });
+      itemizedTotal += amt;
+    }
+  }
+  if (itemizedTotal > amount + 0.01) {
+    errorRedirect(`/leases/${leaseId}`, "The itemized amounts add up to more than the total received.");
+  }
+
+  await prisma.payment.create({
+    data: {
+      organizationId: s.organizationId,
+      leaseId,
+      amount,
+      method,
+      reference,
+      paidAt,
+      allocations: {
+        create: allocations.map((a) => ({ organizationId: s.organizationId, chargeId: a.chargeId, amount: a.amount })),
+      },
+    },
+  });
+  redirect(`/leases/${leaseId}`);
+}
+
+/**
  * Raises an approved month's rent charges across every active lease still
  * missing one — see app/lib/billing.ts for the rules. The period is
  * recomputed from scratch inside applyBilling rather than trusted from the

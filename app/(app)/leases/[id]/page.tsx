@@ -3,7 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getLease, leaseBalance } from "@/app/lib/data";
-import { addCharge, recordPayment, startEviction, deleteLease, forceDeleteLease } from "@/app/lib/actions";
+import { addCharge, recordPayment, recordDirectedPayment, startEviction, deleteLease, forceDeleteLease } from "@/app/lib/actions";
+import { allocate } from "@/app/lib/settle";
 import { DeleteButton } from "@/app/components/delete-button";
 import { sendMpesaPrompt } from "@/app/lib/mpesa-actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
@@ -39,6 +40,8 @@ export default async function LeaseDetailPage({
   const balance = leaseBalance(lease);
   const totalCharged = lease.charges.reduce((s, c) => s + c.amount, 0);
   const totalPaid = lease.payments.reduce((s, p) => s + p.amount, 0);
+  const settled = allocate(lease.charges, lease.payments);
+  const openCharges = lease.charges.filter((c) => !(settled.get(c.id)?.settled ?? false));
 
   const latestEviction = await prisma.eviction.findFirst({
     where: { leaseId: lease.id, organizationId: s.organizationId },
@@ -239,10 +242,25 @@ export default async function LeaseDetailPage({
               </tr>
             </thead>
             <tbody>
-              {lease.payments.map((p) => (
+              {lease.payments.map((p) => {
+                const chargeById = new Map(lease.charges.map((c) => [c.id, c]));
+                return (
                 <tr key={p.id} className="border-b">
                   <td className="py-1">{new Date(p.paidAt).toLocaleDateString()}</td>
-                  <td className="py-1">{p.method ?? "—"}</td>
+                  <td className="py-1">
+                    {p.method ?? "—"}
+                    {p.allocations.length > 0 && (
+                      <span className="block text-xs text-silver-dark">
+                        {p.allocations
+                          .map((a) => {
+                            const c = chargeById.get(a.chargeId);
+                            const label = c ? CHARGE_TYPE_LABEL[c.type] ?? c.type : "charge";
+                            return `${label} ${money(a.amount)}`;
+                          })
+                          .join(" · ")}
+                      </span>
+                    )}
+                  </td>
                   <td className="py-1">{money(p.amount)}</td>
                   <td className="py-1">
                     <div className="flex items-center gap-2">
@@ -263,7 +281,8 @@ export default async function LeaseDetailPage({
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {lease.payments.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-2 text-silver-dark">
@@ -283,6 +302,49 @@ export default async function LeaseDetailPage({
               Record payment
             </button>
           </form>
+
+          {openCharges.length > 0 && (
+            <details className="mt-3 rounded border p-3">
+              <summary className="cursor-pointer text-xs font-medium text-silver-dark">
+                Split this payment across specific charges
+              </summary>
+              <p className="mt-2 text-xs text-silver-dark">
+                Say how much of the total went to which charge — e.g. 4,000 of a 4,900 M-Pesa receipt is rent, 200 is
+                water. Anything left over from the total still counts toward the balance, applied to the oldest
+                unpaid charge.
+              </p>
+              <form action={recordDirectedPayment.bind(null, lease.id)} className="mt-3 flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5">
+                  {openCharges.map((c) => {
+                    const outstanding = settled.get(c.id)?.outstanding ?? c.amount;
+                    return (
+                      <label key={c.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span>
+                          {CHARGE_TYPE_LABEL[c.type] ?? c.type} —{" "}
+                          {new Date(c.periodMonth).toLocaleDateString(undefined, { year: "numeric", month: "short" })}
+                          <span className="ml-1 text-silver-dark">(owes {money(outstanding)})</span>
+                        </span>
+                        <input
+                          name={`charge_${c.id}`}
+                          type="number"
+                          step="0.01"
+                          placeholder="0"
+                          className="w-28 rounded border px-2 py-1"
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+                <input name="paidAt" type="date" required placeholder="Date" className="mt-2 rounded border px-3 py-2 text-sm" />
+                <input name="amount" type="number" step="0.01" required placeholder="Total amount received" className="rounded border px-3 py-2 text-sm" />
+                <input name="method" placeholder="Method (e.g. M-Pesa, Cash)" className="rounded border px-3 py-2 text-sm" />
+                <input name="reference" placeholder="Reference (optional)" className="rounded border px-3 py-2 text-sm" />
+                <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily">
+                  Record itemized payment
+                </button>
+              </form>
+            </details>
+          )}
 
           {mpesaReady && (
             <div className="mt-4 border-t pt-4">

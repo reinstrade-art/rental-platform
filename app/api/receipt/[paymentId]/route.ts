@@ -11,6 +11,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ payment
   const payment = await prisma.payment.findUniqueOrThrow({
     where: { id: paymentId },
     include: {
+      allocations: { include: { charge: { select: { type: true, description: true } } } },
       lease: {
         include: {
           tenant: true,
@@ -48,6 +49,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ payment
     property: payment.lease.unit.property,
     balanceAfter,
     periodCharges,
+    allocations: payment.allocations,
   });
 
   return new NextResponse(Buffer.from(pdf), {

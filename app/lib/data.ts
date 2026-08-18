@@ -71,7 +71,7 @@ export async function getLease(organizationId: string, leaseId: string) {
       tenant: true,
       unit: { include: { property: true } },
       charges: { orderBy: { periodMonth: "asc" } },
-      payments: { orderBy: { paidAt: "asc" } },
+      payments: { orderBy: { paidAt: "asc" }, include: { allocations: true } },
     },
   });
 }

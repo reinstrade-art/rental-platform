@@ -9,7 +9,14 @@ export type StatementInput = {
   unit: { label: string };
   property: { name: string };
   charges: { id: string; type: string; description: string | null; amount: number; periodMonth: Date }[];
-  payments: { id: string; amount: number; method: string | null; reference: string | null; paidAt: Date }[];
+  payments: {
+    id: string;
+    amount: number;
+    method: string | null;
+    reference: string | null;
+    paidAt: Date;
+    allocations?: { chargeId: string; amount: number }[];
+  }[];
 };
 
 export async function buildStatementPdf(input: StatementInput): Promise<Uint8Array> {
