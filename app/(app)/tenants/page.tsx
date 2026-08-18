@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getTenants } from "@/app/lib/data";
-import { inviteTenant, deleteTenant, importTenantsCsv } from "@/app/lib/actions";
+import { inviteTenant, inviteNewTenant, deleteTenant, importTenantsCsv } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
@@ -22,6 +22,25 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
           Add tenant
         </Link>
       </div>
+
+      <div className="max-w-md rounded border p-4">
+        <h2 className="font-semibold">Invite a new tenant</h2>
+        <p className="mt-1 text-xs text-silver-dark">
+          For a prospective tenant not yet in the system — creates their record and sends the portal invite in one
+          step. They can register and message you before ever being placed on a lease.
+        </p>
+        <form action={inviteNewTenant} className="mt-3 flex flex-col gap-2">
+          <input name="name" required placeholder="Full name" className="rounded border px-3 py-2 text-sm" />
+          <div className="flex gap-2">
+            <input name="phone" placeholder="Phone" className="flex-1 rounded border px-3 py-2 text-sm" />
+            <input name="email" type="email" placeholder="Email" className="flex-1 rounded border px-3 py-2 text-sm" />
+          </div>
+          <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
+            Create &amp; invite
+          </button>
+        </form>
+      </div>
+
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">

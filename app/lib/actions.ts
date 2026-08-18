@@ -1401,6 +1401,37 @@ export async function inviteTenant(tenantId: string) {
   redirect(`/invites/${invite.id}`);
 }
 
+/**
+ * Invites someone who isn't a tenant on file yet — a prospect, not someone
+ * already housed in a unit. Creates the Tenant record and the invitation in
+ * one step, since asking staff to "add tenant" then separately "invite" for
+ * what is really one action (bringing on a new person) is friction with no
+ * payoff. The tenant still isn't attached to any lease — that happens
+ * normally, once they've actually moved in.
+ */
+export async function inviteNewTenant(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+
+  const name = String(formData.get("name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim() || null;
+  const email = String(formData.get("email") ?? "").trim() || null;
+  if (!name) errorRedirect("/tenants", "Name is required.");
+  if (!phone && !email) errorRedirect("/tenants", "Enter a phone number or email to invite a new tenant.");
+
+  const tenant = await prisma.tenant.create({
+    data: { organizationId: s.organizationId, name, phone, email },
+  });
+
+  const invite = await createInvitation(
+    s.organizationId,
+    "TENANT",
+    { tenantId: tenant.id },
+    { email: email ?? undefined, phone: phone ?? undefined },
+  );
+  redirect(`/invites/${invite.id}`);
+}
+
 export async function inviteVendor(vendorId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
