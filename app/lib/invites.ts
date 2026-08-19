@@ -1,8 +1,11 @@
 import "server-only";
 import crypto from "crypto";
+import { headers } from "next/headers";
 import { prisma } from "./prisma";
 import { hashPassword } from "./auth";
 import { CONSENT_VERSION } from "./consent";
+import { sendEmail } from "./email";
+import { sendWhatsApp } from "./whatsapp";
 
 const INVITE_DAYS = 7;
 
@@ -30,7 +33,7 @@ export async function createInvitation(
 ) {
   const code = generateCode();
   const expiresAt = new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000);
-  return prisma.invitation.create({
+  const invite = await prisma.invitation.create({
     data: {
       organizationId,
       role,
@@ -43,6 +46,21 @@ export async function createInvitation(
       expiresAt,
     },
   });
+
+  // Best-effort — a failed send here doesn't fail the invite itself; staff
+  // can still read the code off the confirmation page, or use its WhatsApp
+  // button by hand. sendEmail/sendWhatsApp are themselves no-ops until their
+  // provider env vars are configured, so this is silent until then.
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
+  const message = `Hi, please register your account here: ${origin}/register — your invitation code is ${code}. It expires ${expiresAt.toLocaleDateString()}.`;
+  await Promise.all([
+    invite.email ? sendEmail(invite.email, "Your registration invite", message).catch(() => false) : Promise.resolve(false),
+    invite.phone ? sendWhatsApp(invite.phone, message).catch(() => false) : Promise.resolve(false),
+  ]);
+
+  return invite;
 }
 
 export type RedeemResult =
