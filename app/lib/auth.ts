@@ -92,7 +92,22 @@ export async function hashPassword(plain: string) {
 export async function verifyCredentials(identifier: string, password: string) {
   const where = identify(identifier);
   if (!where) return null;
-  const user = await prisma.user.findUnique({ where });
+  // Explicit select (rather than the model default of every column) so this
+  // keeps working the moment a new nullable column is added to User in code
+  // but a production deploy briefly lands before its migration is applied —
+  // see getSession()'s matching fallback below for the same reasoning.
+  const user = await prisma.user.findUnique({
+    where,
+    select: {
+      id: true,
+      organizationId: true,
+      email: true,
+      phone: true,
+      role: true,
+      passwordHash: true,
+      disabledAt: true,
+    },
+  });
   if (!user) return null;
   const ok = await bcrypt.compare(password, user.passwordHash);
   return ok ? user : null;
@@ -308,10 +323,33 @@ export const getSession = cache(async (): Promise<Session | null> => {
       }
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: String(payload.sub) },
-      select: { id: true, organizationId: true, email: true, phone: true, role: true, tenantId: true, vendorId: true, propertyId: true, disabledAt: true },
-    });
+    // propertyId is read with its own fallback query: a deploy adding it as a
+    // Prisma-schema column lands before the matching production ALTER TABLE
+    // is run (see app/api/internal/migrate-caretaker-role), and until that
+    // runs, selecting a column the live table doesn't have yet would fail
+    // this query for every signed-in user, not just caretakers.
+    const baseSelect = { id: true, organizationId: true, email: true, phone: true, role: true, tenantId: true, vendorId: true, disabledAt: true } as const;
+    let user: {
+      id: string;
+      organizationId: string | null;
+      email: string | null;
+      phone: string | null;
+      role: string;
+      tenantId: string | null;
+      vendorId: string | null;
+      disabledAt: Date | null;
+      propertyId: string | null;
+    } | null;
+    try {
+      const withProperty = await prisma.user.findUnique({
+        where: { id: String(payload.sub) },
+        select: { ...baseSelect, propertyId: true },
+      });
+      user = withProperty;
+    } catch {
+      const fallback = await prisma.user.findUnique({ where: { id: String(payload.sub) }, select: baseSelect });
+      user = fallback ? { ...fallback, propertyId: null } : null;
+    }
     // No account, or access individually revoked — either way the session is dead.
     if (!user || user.disabledAt) return null;
     // An org's suspension shuts out its staff and tenants immediately —
