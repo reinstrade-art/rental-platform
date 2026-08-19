@@ -1725,20 +1725,34 @@ export async function inviteStaff(formData: FormData) {
   const s = await getSession();
   if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can invite staff.");
 
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const role = String(formData.get("role") ?? "VIEWER");
+  if (!email) errorRedirect("/users", "Email is required.");
+
+  // A caretaker is scoped to one property, not a staff seat on the wider
+  // org — kept out of the seat-limited MANAGER/VIEWER count below, same as
+  // inviteCaretaker() on the property page (which this replaces as the only
+  // way to invite one — that page-level form was hard to find).
+  if (role === "CARETAKER") {
+    const propertyId = String(formData.get("propertyId") ?? "");
+    if (!propertyId) errorRedirect("/users", "Select a property for the caretaker.");
+    const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
+    if (!property) errorRedirect("/users", "Property not found.");
+    const invite = await createInvitation(s.organizationId, "CARETAKER", { propertyId }, { email });
+    redirect(`/invites/${invite.id}`);
+  }
+
+  if (role !== "MANAGER" && role !== "VIEWER") errorRedirect("/users", "Invalid role.");
+
   const limit = staffSeatLimit(await getOrgTier(s.organizationId));
   if (limit !== null) {
     const seats = await prisma.user.count({
       where: { organizationId: s.organizationId, role: { in: ["ADMIN", "MANAGER", "VIEWER"] }, disabledAt: null },
     });
     if (seats >= limit) {
-      throw new Error(`Your plan is limited to ${limit} staff seat${limit === 1 ? "" : "s"} — upgrade to add teammates.`);
+      errorRedirect("/users", `Your plan is limited to ${limit} staff seat${limit === 1 ? "" : "s"} — upgrade to add teammates.`);
     }
   }
-
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const role = String(formData.get("role") ?? "VIEWER");
-  if (!email) throw new Error("Email is required.");
-  if (role !== "MANAGER" && role !== "VIEWER") throw new Error("Invalid role.");
 
   const invite = await createInvitation(s.organizationId, role, {}, { email });
   redirect(`/invites/${invite.id}`);

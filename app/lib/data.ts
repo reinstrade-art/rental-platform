@@ -319,7 +319,8 @@ export async function getTransactions(organizationId: string) {
 
 export async function getStaff(organizationId: string) {
   return prisma.user.findMany({
-    where: { organizationId, role: { in: ["ADMIN", "MANAGER", "VIEWER"] } },
+    where: { organizationId, role: { in: ["ADMIN", "MANAGER", "VIEWER", "CARETAKER"] } },
+    include: { property: { select: { id: true, name: true } } },
     orderBy: { createdAt: "asc" },
   });
 }
