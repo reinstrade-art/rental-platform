@@ -100,11 +100,13 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
               <td className="py-2">
                 {t.user ? (
                   <span className="text-xs text-green-700">Registered</span>
+                ) : !t.email && !t.phone ? (
+                  <span className="text-xs text-silver-dark" title="Add a phone number or email to this tenant first">
+                    Needs phone or email to invite
+                  </span>
                 ) : (
                   <form action={inviteTenant.bind(null, t.id)}>
-                    <button className="text-xs underline" disabled={!t.email && !t.phone}>
-                      Invite to register
-                    </button>
+                    <button className="text-xs underline">Invite to register</button>
                   </form>
                 )}
               </td>
