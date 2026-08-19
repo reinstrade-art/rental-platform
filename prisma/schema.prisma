@@ -338,6 +338,7 @@ model Property {
   expenses      Expense[]
   recurringJobs RecurringJob[]
   caretakers    User[]
+  tenants       Tenant[]
 
   createdAt DateTime @default(now())
 }
@@ -372,6 +373,14 @@ model Tenant {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // Set only when this tenant was onboarded by a caretaker (who works a
+  // single property) and has no lease yet — it's what lets a caretaker's
+  // tenant list stay scoped to their own property before there's a Lease to
+  // scope by. Staff-onboarded tenants leave this null; once a lease exists,
+  // the tenant's real property comes from lease -> unit -> property anyway.
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id])
 
   name  String
   phone String?

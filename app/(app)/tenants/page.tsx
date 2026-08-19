@@ -10,7 +10,7 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
   const s = await getSession();
   if (!requireTenantsAccess(s)) redirect("/login");
   const caretaker = isCaretaker(s.role);
-  const tenants = await getTenants(s.organizationId);
+  const tenants = await getTenants(s.organizationId, caretaker ? (s.propertyId ?? undefined) : undefined);
   const canImport = !caretaker && hasFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
   const { error } = await searchParams;
 

@@ -14,6 +14,7 @@ import {
   requirePlatformAdmin,
   requireTenant,
   requireTenantsAccess,
+  isCaretaker,
   verifyCredentials,
   getSession,
   impersonate,
@@ -566,7 +567,10 @@ export async function createTenant(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim() || null;
   if (!name) errorRedirect("/tenants/new", "Tenant name is required.");
 
-  const tenant = await prisma.tenant.create({ data: { organizationId: s.organizationId, name, phone, email } });
+  // A caretaker works one property, never the whole org — tag the tenant
+  // with it now, since there's no lease yet to scope by later.
+  const propertyId = isCaretaker(s.role) ? s.propertyId : null;
+  const tenant = await prisma.tenant.create({ data: { organizationId: s.organizationId, propertyId, name, phone, email } });
 
   // A prospective tenant who isn't in the system yet — add the record and
   // send the registration invite in the same step, rather than making staff
@@ -1553,8 +1557,11 @@ export async function inviteNewTenant(formData: FormData) {
   if (!name) errorRedirect("/tenants", "Name is required.");
   if (!phone && !email) errorRedirect("/tenants", "Enter a phone number or email to invite a new tenant.");
 
+  // A caretaker works one property, never the whole org — tag the tenant
+  // with it now, since there's no lease yet to scope by later.
+  const propertyId = isCaretaker(s.role) ? s.propertyId : null;
   const tenant = await prisma.tenant.create({
-    data: { organizationId: s.organizationId, name, phone, email },
+    data: { organizationId: s.organizationId, propertyId, name, phone, email },
   });
 
   const invite = await createInvitation(
@@ -1896,9 +1903,16 @@ export async function sendTenantMessage(formData: FormData) {
 /** The office replying in a tenant's thread — never a tenant's own session. */
 export async function replyToTenant(tenantId: string, formData: FormData) {
   const s = await getSession();
-  if (!requireStaff(s)) throw new Error("Not authorized.");
+  if (!requireTenantsAccess(s)) throw new Error("Not authorized.");
 
-  const tenant = await prisma.tenant.findFirst({ where: { id: tenantId, organizationId: s.organizationId } });
+  const propertyId = isCaretaker(s.role) ? s.propertyId : null;
+  const tenant = await prisma.tenant.findFirst({
+    where: {
+      id: tenantId,
+      organizationId: s.organizationId,
+      ...(propertyId ? { OR: [{ propertyId }, { leases: { some: { unit: { propertyId } } } }] } : {}),
+    },
+  });
   if (!tenant) throw new Error("Tenant not found.");
 
   const body = String(formData.get("body") ?? "").trim();

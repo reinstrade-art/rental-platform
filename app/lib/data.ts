@@ -35,17 +35,28 @@ export async function getProperty(organizationId: string, propertyId: string) {
   });
 }
 
-export async function getTenants(organizationId: string) {
+// propertyId, when passed, is the caretaker's own property (they work one
+// property, never the whole org) — a tenant matches either by being onboarded
+// directly for that property (no lease yet) or by having a lease on one of
+// its units. Omitted entirely for staff, who aren't scoped to a property.
+export async function getTenants(organizationId: string, propertyId?: string) {
   return prisma.tenant.findMany({
-    where: { organizationId },
+    where: {
+      organizationId,
+      ...(propertyId ? { OR: [{ propertyId }, { leases: { some: { unit: { propertyId } } } }] } : {}),
+    },
     include: { leases: { include: { unit: { include: { property: true } } } }, user: true },
     orderBy: { name: "asc" },
   });
 }
 
-export async function getTenant(organizationId: string, tenantId: string) {
+export async function getTenant(organizationId: string, tenantId: string, propertyId?: string) {
   return prisma.tenant.findFirst({
-    where: { id: tenantId, organizationId },
+    where: {
+      id: tenantId,
+      organizationId,
+      ...(propertyId ? { OR: [{ propertyId }, { leases: { some: { unit: { propertyId } } } }] } : {}),
+    },
     include: {
       leases: {
         orderBy: { startDate: "desc" },

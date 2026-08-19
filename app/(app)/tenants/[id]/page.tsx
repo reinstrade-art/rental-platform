@@ -21,7 +21,7 @@ export default async function TenantDetailPage({
   const caretaker = isCaretaker(s.role);
   const { id } = await params;
   const { error } = await searchParams;
-  const tenant = await getTenant(s.organizationId, id);
+  const tenant = await getTenant(s.organizationId, id, caretaker ? (s.propertyId ?? undefined) : undefined);
   if (!tenant) notFound();
 
   const totalOwed = tenant.leases
