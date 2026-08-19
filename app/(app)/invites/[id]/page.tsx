@@ -1,16 +1,20 @@
 import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireTenantsAccess } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { waLink } from "@/app/lib/phone";
 
 export default async function InviteConfirmationPage({ params }: { params: Promise<{ id: string }> }) {
   const s = await getSession();
-  if (!requireStaff(s)) redirect("/login");
+  if (!requireTenantsAccess(s)) redirect("/login");
   const { id } = await params;
 
   const invite = await prisma.invitation.findFirst({ where: { id, organizationId: s.organizationId } });
   if (!invite) notFound();
+  // A caretaker's access to this page is scoped to the one invite flow they
+  // can actually raise — a tenant invite. Anything else (a staff invite
+  // code, say) is refused even though it's in the same org.
+  if (s.role === "CARETAKER" && invite.role !== "TENANT") notFound();
 
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");

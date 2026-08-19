@@ -30,6 +30,7 @@ export async function getProperty(organizationId: string, propertyId: string) {
         orderBy: { label: "asc" },
         include: { leases: { include: { tenant: true, charges: true, payments: true } } },
       },
+      caretakers: { orderBy: { createdAt: "asc" } },
     },
   });
 }

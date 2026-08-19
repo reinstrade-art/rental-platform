@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
-import { isPlatformAdmin, isStaff, isTenant, isTradesman } from "./roles";
+import { isPlatformAdmin, isStaff, isCaretaker, isTenant, isTradesman } from "./roles";
 import { isLicenseActive } from "./licensing";
 
 const COOKIE = "rp_session";
@@ -70,6 +70,8 @@ export type Session = {
   tenantId: string | null;
   /** Set only on TRADESMAN/CASUAL_LABOURER logins: their own vendor record. */
   vendorId: string | null;
+  /** Set only on CARETAKER logins: the single property they onboard tenants for. */
+  propertyId: string | null;
   /** Set when a staff member is signed in as this account rather than the account itself. */
   impersonatedBy: { id: string; email: string | null } | null;
 };
@@ -308,7 +310,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
 
     const user = await prisma.user.findUnique({
       where: { id: String(payload.sub) },
-      select: { id: true, organizationId: true, email: true, phone: true, role: true, tenantId: true, vendorId: true, disabledAt: true },
+      select: { id: true, organizationId: true, email: true, phone: true, role: true, tenantId: true, vendorId: true, propertyId: true, disabledAt: true },
     });
     // No account, or access individually revoked — either way the session is dead.
     if (!user || user.disabledAt) return null;
@@ -330,6 +332,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
     // rather than leaving it pointing at whatever it likes.
     if (isTenant(user.role) && !user.tenantId) return null;
     if (isTradesman(user.role) && !user.vendorId) return null;
+    if (isCaretaker(user.role) && !user.propertyId) return null;
     return {
       userId: user.id,
       organizationId: user.organizationId,
@@ -338,6 +341,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
       role: user.role,
       tenantId: user.tenantId,
       vendorId: user.vendorId,
+      propertyId: user.propertyId,
       impersonatedBy,
     };
   } catch {
@@ -350,11 +354,26 @@ export async function needsPlatformSetup() {
   return (await prisma.user.count({ where: { role: "PLATFORM_ADMIN" } })) === 0;
 }
 
-export { isPlatformAdmin, isStaff, isTenant, isTradesman } from "./roles";
+export { isPlatformAdmin, isStaff, isCaretaker, isTenant, isTradesman } from "./roles";
 
 /** Refuses anyone who isn't signed in as staff (ADMIN/MANAGER/VIEWER) of an organization. */
 export function requireStaff(s: Session | null): s is Session & { organizationId: string } {
   return Boolean(s) && isStaff(s!.role) && Boolean(s!.organizationId);
+}
+
+/** Refuses anyone who isn't a property caretaker — narrows propertyId to non-null. */
+export function requireCaretaker(s: Session | null): s is Session & { organizationId: string; propertyId: string } {
+  return Boolean(s) && isCaretaker(s!.role) && Boolean(s!.organizationId) && Boolean(s!.propertyId);
+}
+
+/**
+ * The Tenants module's own gate — the one place in the app a caretaker is
+ * let in, alongside full staff. Every other page keeps using requireStaff
+ * alone, so a caretaker is refused everywhere by default; this is the single
+ * explicit opt-in, not a broadening of requireStaff itself.
+ */
+export function requireTenantsAccess(s: Session | null): s is Session & { organizationId: string } {
+  return requireStaff(s) || requireCaretaker(s);
 }
 
 /** Refuses anyone who isn't signed in as an organization ADMIN — for actions only the org owner may take (inviting/disabling staff, impersonation). */

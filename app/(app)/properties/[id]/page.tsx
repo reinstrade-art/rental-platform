@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getProperty, leaseBalance } from "@/app/lib/data";
-import { createUnit, updateUnit, deleteProperty } from "@/app/lib/actions";
+import { createUnit, updateUnit, deleteProperty, inviteCaretaker, disableStaff, enableStaff } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
 
 function money(n: number) {
@@ -176,6 +176,43 @@ export default async function PropertyDetailPage({
           </button>
         </form>
       </div>
+
+      {s.role === "ADMIN" && (
+        <div className="max-w-md">
+          <h2 className="text-lg font-semibold">Caretakers</h2>
+          <p className="mt-1 text-xs text-silver-dark">
+            A caretaker&apos;s account can only see and onboard tenants for this property — nothing else in the app.
+          </p>
+          {property.caretakers.length > 0 && (
+            <ul className="mt-3 flex flex-col gap-2">
+              {property.caretakers.map((c) => (
+                <li key={c.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                  <span>
+                    {c.email ?? c.phone}
+                    {c.disabledAt && <span className="ml-2 text-xs text-silver-dark">Disabled</span>}
+                  </span>
+                  {c.disabledAt ? (
+                    <form action={enableStaff.bind(null, c.id)}>
+                      <button className="text-xs underline">Restore access</button>
+                    </form>
+                  ) : (
+                    <form action={disableStaff.bind(null, c.id)}>
+                      <button className="text-xs text-red-700 underline">Disable</button>
+                    </form>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <form action={inviteCaretaker.bind(null, property.id)} className="mt-3 flex flex-col gap-2">
+            <input name="phone" placeholder="Phone" className="rounded border px-3 py-2 text-sm" />
+            <input name="email" type="email" placeholder="Email" className="rounded border px-3 py-2 text-sm" />
+            <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
+              Invite a caretaker
+            </button>
+          </form>
+        </div>
+      )}
 
       {property.units.length === 0 && (
         <div className="max-w-sm border-t pt-6">

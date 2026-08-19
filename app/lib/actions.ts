@@ -13,6 +13,7 @@ import {
   requireOrgAdmin,
   requirePlatformAdmin,
   requireTenant,
+  requireTenantsAccess,
   verifyCredentials,
   getSession,
   impersonate,
@@ -88,7 +89,7 @@ export async function login(formData: FormData) {
     role: user.role,
   });
 
-  redirect(user.role === "PLATFORM_ADMIN" ? "/platform" : "/dashboard");
+  redirect(user.role === "PLATFORM_ADMIN" ? "/platform" : user.role === "CARETAKER" ? "/tenants" : "/dashboard");
 }
 
 export async function logout() {
@@ -558,7 +559,7 @@ export async function updateUnit(unitId: string, formData: FormData) {
 
 export async function createTenant(formData: FormData) {
   const s = await getSession();
-  if (!requireStaff(s)) throw new Error("Not authorized.");
+  if (!requireTenantsAccess(s)) throw new Error("Not authorized.");
 
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim() || null;
@@ -1544,7 +1545,7 @@ export async function inviteTenant(tenantId: string) {
  */
 export async function inviteNewTenant(formData: FormData) {
   const s = await getSession();
-  if (!requireStaff(s)) throw new Error("Not authorized.");
+  if (!requireTenantsAccess(s)) throw new Error("Not authorized.");
 
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim() || null;
@@ -1582,6 +1583,26 @@ export async function inviteVendor(vendorId: string, formData: FormData) {
     { vendorId },
     { email: vendor.email ?? undefined, phone: vendor.phone ?? undefined },
   );
+  redirect(`/invites/${invite.id}`);
+}
+
+/**
+ * Invites someone to caretake one property — the only module their account
+ * will ever see is Tenants (see requireTenantsAccess), so nothing else about
+ * this org is exposed by handing out this invite.
+ */
+export async function inviteCaretaker(propertyId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Not authorized.");
+
+  const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
+  if (!property) throw new Error("Property not found.");
+
+  const email = String(formData.get("email") ?? "").trim() || undefined;
+  const phone = String(formData.get("phone") ?? "").trim() || undefined;
+  if (!email && !phone) errorRedirect(`/properties/${propertyId}`, "Enter a phone number or email to invite a caretaker.");
+
+  const invite = await createInvitation(s.organizationId, "CARETAKER", { propertyId }, { email, phone });
   redirect(`/invites/${invite.id}`);
 }
 

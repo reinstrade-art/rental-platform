@@ -16,15 +16,16 @@ function generateCode(): string {
 
 /**
  * Issues an invite. For TENANT/TRADESMAN/CASUAL_LABOURER it attaches to an
- * existing Tenant or Vendor record (never creates one). For MANAGER/VIEWER
- * — a staff invite — target is empty; there is no pre-existing row to
- * attach to. Never ADMIN: the one bootstrap admin per org comes from
- * platform-admin provisioning, not this flow.
+ * existing Tenant or Vendor record (never creates one); CARETAKER attaches
+ * to an existing Property the same way. For MANAGER/VIEWER — a staff invite
+ * — target is empty; there is no pre-existing row to attach to. Never ADMIN:
+ * the one bootstrap admin per org comes from platform-admin provisioning,
+ * not this flow.
  */
 export async function createInvitation(
   organizationId: string,
-  role: "MANAGER" | "VIEWER" | "TENANT" | "TRADESMAN" | "CASUAL_LABOURER",
-  target: { tenantId?: string; vendorId?: string },
+  role: "MANAGER" | "VIEWER" | "CARETAKER" | "TENANT" | "TRADESMAN" | "CASUAL_LABOURER",
+  target: { tenantId?: string; vendorId?: string; propertyId?: string },
   identifier: { email?: string; phone?: string },
 ) {
   const code = generateCode();
@@ -35,6 +36,7 @@ export async function createInvitation(
       role,
       tenantId: target.tenantId ?? null,
       vendorId: target.vendorId ?? null,
+      propertyId: target.propertyId ?? null,
       email: identifier.email?.trim().toLowerCase() || null,
       phone: identifier.phone?.trim() || null,
       code,
@@ -83,6 +85,7 @@ export async function redeemInvitation(
         role: invite.role,
         tenantId: invite.tenantId,
         vendorId: invite.vendorId,
+        propertyId: invite.propertyId,
         consentedAt: new Date(),
         consentVersion: CONSENT_VERSION,
       },

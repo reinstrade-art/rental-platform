@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getSession, requireStaff } from "@/app/lib/auth";
-import { isTenant, isTradesman } from "@/app/lib/roles";
+import { getSession, requireTenantsAccess } from "@/app/lib/auth";
+import { isTenant, isTradesman, isCaretaker } from "@/app/lib/roles";
 import { logout, endImpersonationAction } from "@/app/lib/actions";
 import { prisma } from "@/app/lib/prisma";
 import { licenseState } from "@/app/lib/licensing";
@@ -29,7 +29,7 @@ const NAV: { href: string; label: string; feature?: Feature }[] = [
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const s = await getSession();
   if (!s) redirect("/login");
-  if (!requireStaff(s)) {
+  if (!requireTenantsAccess(s)) {
     // An outside role landing here (e.g. a stale bookmark) goes to their own
     // home, not to a login wall they'd just bounce off again — but nothing
     // about this branch grants them anything beyond their own portal.
@@ -45,7 +45,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const license = org ? licenseState(org) : null;
   const showLicenseWarning = license && license.state !== "EXPIRED" && license.daysLeft !== null && license.daysLeft <= 7;
   const tier = org?.tier ?? "BASIC";
-  const nav = NAV.filter((item) => !item.feature || hasFeature(tier, item.feature));
+  // A caretaker's whole nav is the one module they're let into — every other
+  // page in the app still gates on requireStaff alone, so this trimmed list
+  // is a convenience, not the actual security boundary.
+  const nav = isCaretaker(s.role)
+    ? NAV.filter((item) => item.href === "/tenants")
+    : NAV.filter((item) => !item.feature || hasFeature(tier, item.feature));
 
   return (
     <div className="flex min-h-screen">

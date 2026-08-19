@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireTenantsAccess, isCaretaker } from "@/app/lib/auth";
 import { getTenant, leaseBalance } from "@/app/lib/data";
 import { deleteTenant, inviteTenant, replyToTenant } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
@@ -17,7 +17,8 @@ export default async function TenantDetailPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const s = await getSession();
-  if (!requireStaff(s)) redirect("/login");
+  if (!requireTenantsAccess(s)) redirect("/login");
+  const caretaker = isCaretaker(s.role);
   const { id } = await params;
   const { error } = await searchParams;
   const tenant = await getTenant(s.organizationId, id);
@@ -41,14 +42,16 @@ export default async function TenantDetailPage({
               {[tenant.phone, tenant.email].filter(Boolean).join(" · ") || "No contact details on file"}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Link href={`/leases/new?tenantId=${tenant.id}`} className="text-xs underline text-silver-dark">
-              Add lease
-            </Link>
-            <Link href={`/tenants/${tenant.id}/edit`} className="text-xs underline text-silver-dark">
-              Edit
-            </Link>
-          </div>
+          {!caretaker && (
+            <div className="flex items-center gap-3">
+              <Link href={`/leases/new?tenantId=${tenant.id}`} className="text-xs underline text-silver-dark">
+                Add lease
+              </Link>
+              <Link href={`/tenants/${tenant.id}/edit`} className="text-xs underline text-silver-dark">
+                Edit
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 
@@ -70,6 +73,8 @@ export default async function TenantDetailPage({
           <div className="mt-1 text-sm font-semibold">
             {tenant.user ? (
               <span className="text-green-700">Registered</span>
+            ) : caretaker ? (
+              <span className="text-silver-dark">—</span>
             ) : (
               <form action={inviteTenant.bind(null, tenant.id)}>
                 <button className="text-xs underline" disabled={!tenant.email && !tenant.phone}>
@@ -85,7 +90,16 @@ export default async function TenantDetailPage({
         <h2 className="font-semibold">Leases</h2>
         {tenant.leases.length === 0 ? (
           <p className="mt-2 text-sm text-silver-dark">
-            No lease yet. <Link href={`/leases/new?tenantId=${tenant.id}`} className="underline">Create one</Link>.
+            No lease yet.
+            {!caretaker && (
+              <>
+                {" "}
+                <Link href={`/leases/new?tenantId=${tenant.id}`} className="underline">
+                  Create one
+                </Link>
+                .
+              </>
+            )}
           </p>
         ) : (
           <table className="mt-2 w-full border-collapse text-sm">
@@ -145,7 +159,7 @@ export default async function TenantDetailPage({
         </form>
       </div>
 
-      {tenant.leases.length === 0 && !tenant.user && (
+      {!caretaker && tenant.leases.length === 0 && !tenant.user && (
         <div className="max-w-sm border-t pt-6">
           <h2 className="font-semibold text-red-600">Delete tenant</h2>
           <p className="mt-1 text-xs text-silver-dark">

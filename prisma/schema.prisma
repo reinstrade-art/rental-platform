@@ -250,7 +250,7 @@ model User {
   email        String?  @unique
   phone        String?  @unique
   passwordHash String
-  role         String   // PLATFORM_ADMIN | ADMIN | MANAGER | VIEWER | TENANT | TRADESMAN | CASUAL_LABOURER
+  role         String   // PLATFORM_ADMIN | ADMIN | MANAGER | VIEWER | CARETAKER | TENANT | TRADESMAN | CASUAL_LABOURER
 
   // Outside-role links: a session resolves to exactly one of these, never both.
   // getSession() kills the session if role and link disagree (e.g. role TENANT
@@ -259,6 +259,10 @@ model User {
   tenant   Tenant? @relation(fields: [tenantId], references: [id])
   vendorId String? @unique
   vendor   Vendor? @relation(fields: [vendorId], references: [id])
+  // Set only for CARETAKER — the single property they onboard tenants for.
+  // Not unique: a property can have more than one caretaker.
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id])
 
   // Authority to sign an approval chain — a dimension separate from `role`.
   // Only staff (ADMIN/MANAGER/VIEWER) may hold a seat; a VIEWER could in
@@ -333,6 +337,7 @@ model Property {
   repairs       Repair[]
   expenses      Expense[]
   recurringJobs RecurringJob[]
+  caretakers    User[]
 
   createdAt DateTime @default(now())
 }
@@ -829,7 +834,7 @@ model Invitation {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
 
-  role String // MANAGER | VIEWER | TENANT | TRADESMAN | CASUAL_LABOURER
+  role String // MANAGER | VIEWER | CARETAKER | TENANT | TRADESMAN | CASUAL_LABOURER
 
   // Set only for TENANT/TRADESMAN/CASUAL_LABOURER — a staff invite (MANAGER
   // or VIEWER) attaches to no pre-existing record, since staff aren't
@@ -840,6 +845,8 @@ model Invitation {
   // round).
   tenantId String?
   vendorId String?
+  // Set only for CARETAKER — which property they're being onboarded to caretake.
+  propertyId String?
 
   // The address/number this invite was issued to — redemption must match it,
   // so a code leaked to the wrong person can't attach to someone else's record.

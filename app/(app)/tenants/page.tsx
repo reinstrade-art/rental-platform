@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireTenantsAccess, isCaretaker } from "@/app/lib/auth";
 import { getTenants } from "@/app/lib/data";
 import { inviteTenant, inviteNewTenant, deleteTenant, importTenantsCsv } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
@@ -8,9 +8,10 @@ import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
 export default async function TenantsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
-  if (!requireStaff(s)) redirect("/login");
+  if (!requireTenantsAccess(s)) redirect("/login");
+  const caretaker = isCaretaker(s.role);
   const tenants = await getTenants(s.organizationId);
-  const canImport = hasFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
+  const canImport = !caretaker && hasFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
   const { error } = await searchParams;
 
   return (
@@ -100,6 +101,8 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
               <td className="py-2">
                 {t.user ? (
                   <span className="text-xs text-green-700">Registered</span>
+                ) : caretaker ? (
+                  <span className="text-xs text-silver-dark">—</span>
                 ) : !t.email && !t.phone ? (
                   <span className="text-xs text-silver-dark" title="Add a phone number or email to this tenant first">
                     Needs phone or email to invite
@@ -111,17 +114,19 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
                 )}
               </td>
               <td className="py-2">
-                <div className="flex items-center justify-end gap-3">
-                  <Link href={`/leases/new?tenantId=${t.id}`} className="text-xs underline">
-                    Add lease
-                  </Link>
-                  <Link href={`/tenants/${t.id}/edit`} className="text-xs underline text-silver-dark">
-                    Edit
-                  </Link>
-                  <form action={deleteTenant.bind(null, t.id)}>
-                    <DeleteButton confirmText={`Delete ${t.name}? This cannot be undone.`} />
-                  </form>
-                </div>
+                {caretaker ? null : (
+                  <div className="flex items-center justify-end gap-3">
+                    <Link href={`/leases/new?tenantId=${t.id}`} className="text-xs underline">
+                      Add lease
+                    </Link>
+                    <Link href={`/tenants/${t.id}/edit`} className="text-xs underline text-silver-dark">
+                      Edit
+                    </Link>
+                    <form action={deleteTenant.bind(null, t.id)}>
+                      <DeleteButton confirmText={`Delete ${t.name}? This cannot be undone.`} />
+                    </form>
+                  </div>
+                )}
               </td>
             </tr>
             );
