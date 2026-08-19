@@ -122,6 +122,7 @@ model Organization {
   mpesaRequests    MpesaRequest[]
   evictions        Eviction[]
   licensePayments  LicensePayment[]
+  tierChangeRequests TierChangeRequest[]
   recurringJobs    RecurringJob[]
 }
 
@@ -154,6 +155,54 @@ model LicensePayment {
   recordedBy String
 
   createdAt DateTime @default(now())
+
+  @@index([organizationId])
+}
+
+// What each package costs — global, not per-org, since it's the platform's
+// own price list rather than something negotiated per customer (that's what
+// Organization.licenseFeeKes is for). One row per tier; a tier with no row
+// here simply has no price shown yet, rather than a guessed number.
+model TierPrice {
+  id       String @id @default(cuid())
+  tier     String @unique // BASIC | INTERMEDIATE | ADVANCED | FULL
+  priceKes Float
+
+  updatedAt DateTime @updatedAt
+}
+
+// A landlord's own request to move to a different package — self-served,
+// unlike LicensePayment above which only a platform admin ever raises. An
+// upgrade needs money to change hands first; a downgrade is free and applied
+// immediately, but still recorded here (amount 0, method DOWNGRADE) so the
+// tier's whole history reads from one table. Only a SUCCESS row ever changes
+// Organization.tier — see app/lib/tier-requests.ts.
+model TierChangeRequest {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  fromTier String
+  toTier   String
+  amount   Float
+  method   String // MPESA_STK | BANK | CASH | OTHER | DOWNGRADE
+  reference String?
+
+  status String @default("PENDING") // PENDING | SUCCESS | FAILED | REJECTED
+
+  merchantRequestId  String?
+  checkoutRequestId  String? @unique
+  resultCode         Int?
+  resultDesc         String?
+  mpesaReceiptNumber String?
+
+  // The org staff userId who made the request, and — for a manual
+  // (non-M-Pesa) payment a platform admin had to confirm — who confirmed it.
+  requestedBy String
+  confirmedBy String?
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
 
   @@index([organizationId])
 }
