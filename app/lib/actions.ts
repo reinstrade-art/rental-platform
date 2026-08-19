@@ -1726,22 +1726,31 @@ export async function inviteStaff(formData: FormData) {
   if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can invite staff.");
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const phone = String(formData.get("phone") ?? "").trim();
   const role = String(formData.get("role") ?? "VIEWER");
-  if (!email) errorRedirect("/users", "Email is required.");
 
   // A caretaker is scoped to one property, not a staff seat on the wider
   // org — kept out of the seat-limited MANAGER/VIEWER count below, same as
   // inviteCaretaker() on the property page (which this replaces as the only
-  // way to invite one — that page-level form was hard to find).
+  // way to invite one — that page-level form was hard to find). Email isn't
+  // in common use among caretakers, so — unlike MANAGER/VIEWER below — a
+  // phone number alone is enough, same as a tenant invite.
   if (role === "CARETAKER") {
+    if (!email && !phone) errorRedirect("/users", "Enter a phone number or email for the caretaker.");
     const propertyId = String(formData.get("propertyId") ?? "");
     if (!propertyId) errorRedirect("/users", "Select a property for the caretaker.");
     const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
     if (!property) errorRedirect("/users", "Property not found.");
-    const invite = await createInvitation(s.organizationId, "CARETAKER", { propertyId }, { email });
+    const invite = await createInvitation(
+      s.organizationId,
+      "CARETAKER",
+      { propertyId },
+      { email: email || undefined, phone: phone || undefined },
+    );
     redirect(`/invites/${invite.id}`);
   }
 
+  if (!email) errorRedirect("/users", "Email is required.");
   if (role !== "MANAGER" && role !== "VIEWER") errorRedirect("/users", "Invalid role.");
 
   const limit = staffSeatLimit(await getOrgTier(s.organizationId));

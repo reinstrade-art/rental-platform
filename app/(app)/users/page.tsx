@@ -78,11 +78,13 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         <div className="max-w-sm">
           <h2 className="text-lg font-semibold">Invite a teammate</h2>
           <p className="text-xs text-silver-dark">
-            New Viewer/Manager invites can see and act on everything in the org. A Caretaker only gets the Tenants
-            module, scoped to the one property you pick below.
+            New Viewer/Manager invites can see and act on everything in the org, and need an email address. A
+            Caretaker only gets the Tenants module, scoped to the property you pick below — a phone number is
+            enough for them, since email isn&apos;t in common use among caretakers.
           </p>
           <form action={inviteStaff} className="mt-3 flex flex-col gap-3">
-            <input name="email" type="email" required placeholder="Email" className="rounded border px-3 py-2" />
+            <input name="email" type="email" placeholder="Email (required for Viewer/Manager)" className="rounded border px-3 py-2" />
+            <input name="phone" placeholder="Phone (Caretaker only)" className="rounded border px-3 py-2" />
             <select name="role" defaultValue="VIEWER" className="rounded border px-3 py-2">
               <option value="VIEWER">Viewer</option>
               <option value="MANAGER">Manager</option>
