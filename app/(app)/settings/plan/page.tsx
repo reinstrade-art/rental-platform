@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
-import { getTierPrices, platformMpesaConfigured } from "@/app/lib/tier-requests";
+import { getTierPrices, getOrgTierPrices, platformMpesaConfigured } from "@/app/lib/tier-requests";
 import { downgradeTierAction, requestTierUpgrade } from "@/app/lib/actions";
 import { ORG_TIERS, LICENSE_PAYMENT_METHODS, FEATURE_TIER, type OrgTier } from "@/app/lib/constants";
 import { tierRank } from "@/app/lib/tier";
@@ -46,14 +46,18 @@ export default async function PlanPage({
   if (!requireStaff(s)) redirect("/login");
   const { requested, downgraded, error } = await searchParams;
 
-  const [org, prices, pendingRequests] = await Promise.all([
+  const [org, listPrices, orgPrices, pendingRequests] = await Promise.all([
     prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } }),
     getTierPrices(),
+    getOrgTierPrices(s.organizationId),
     prisma.tierChangeRequest.findMany({
       where: { organizationId: s.organizationId, status: "PENDING" },
       orderBy: { createdAt: "desc" },
     }),
   ]);
+  // A negotiated price for this org overrides the standard list — see getEffectiveTierPrice, which the actual
+  // upgrade charge uses; this just has to agree with it so what's shown here is what actually gets charged.
+  const prices = Object.fromEntries(ORG_TIERS.map((t) => [t, orgPrices[t] ?? listPrices[t]])) as Record<OrgTier, number | null>;
   const currentTier = org.tier as OrgTier;
   const canRequest = s.role === "ADMIN";
   const mpesaReady = platformMpesaConfigured();
@@ -110,6 +114,9 @@ export default async function PlanPage({
                 {price ? `KES ${money(price)}` : "Contact us"}
                 {price && <span className="text-sm font-normal text-silver-dark"> / month</span>}
               </p>
+              {orgPrices[tier] !== undefined && (
+                <p className="text-xs text-green-700">Special pricing for your account</p>
+              )}
               <p className="mt-2 text-sm text-silver-dark">{TIER_BLURB[tier]}</p>
               {featuresAt(tier).length > 0 && (
                 <ul className="mt-3 flex flex-col gap-1 text-xs text-silver-dark">

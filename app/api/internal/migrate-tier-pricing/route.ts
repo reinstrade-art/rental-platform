@@ -47,5 +47,20 @@ export async function GET() {
     `CREATE INDEX IF NOT EXISTS "TierChangeRequest_organizationId_idx" ON "TierChangeRequest"("organizationId")`,
   );
 
-  return NextResponse.json({ status: "ok", message: "TierPrice and TierChangeRequest tables are present." });
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "OrgTierPrice" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "organizationId" TEXT NOT NULL,
+    "tier" TEXT NOT NULL,
+    "priceKes" REAL NOT NULL,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "OrgTierPrice_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`);
+  await prisma.$executeRawUnsafe(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "OrgTierPrice_organizationId_tier_key" ON "OrgTierPrice"("organizationId", "tier")`,
+  );
+
+  return NextResponse.json({
+    status: "ok",
+    message: "TierPrice, TierChangeRequest, and OrgTierPrice tables are present.",
+  });
 }

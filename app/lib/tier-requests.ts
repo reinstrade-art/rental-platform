@@ -34,6 +34,32 @@ export async function setTierPrice(tier: OrgTier, priceKes: number) {
   });
 }
 
+/** This org's negotiated prices, keyed by tier — only the tiers with an override present. */
+export async function getOrgTierPrices(organizationId: string): Promise<Partial<Record<OrgTier, number>>> {
+  const rows = await prisma.orgTierPrice.findMany({ where: { organizationId } });
+  return Object.fromEntries(rows.map((r) => [r.tier, r.priceKes])) as Partial<Record<OrgTier, number>>;
+}
+
+export async function setOrgTierPrice(organizationId: string, tier: OrgTier, priceKes: number) {
+  await prisma.orgTierPrice.upsert({
+    where: { organizationId_tier: { organizationId, tier } },
+    create: { organizationId, tier, priceKes },
+    update: { priceKes },
+  });
+}
+
+export async function clearOrgTierPrice(organizationId: string, tier: OrgTier) {
+  await prisma.orgTierPrice.deleteMany({ where: { organizationId, tier } });
+}
+
+/** What this org actually pays to reach `tier` — their own negotiated price if one exists, else the standard list price. */
+export async function getEffectiveTierPrice(organizationId: string, tier: OrgTier): Promise<number | null> {
+  const override = await prisma.orgTierPrice.findUnique({ where: { organizationId_tier: { organizationId, tier } } });
+  if (override) return override.priceKes;
+  const row = await prisma.tierPrice.findUnique({ where: { tier } });
+  return row?.priceKes ?? null;
+}
+
 /** Applies a downgrade immediately — no payment, no confirmation step. Still logged for a complete history. */
 export async function downgradeTier(organizationId: string, toTier: OrgTier, requestedBy: string) {
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId } });

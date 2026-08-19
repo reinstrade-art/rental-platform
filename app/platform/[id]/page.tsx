@@ -13,7 +13,9 @@ import {
   platformImpersonateAction,
   confirmTierRequestAction,
   rejectTierRequestAction,
+  setOrgTierPriceAction,
 } from "@/app/lib/actions";
+import { getOrgTierPrices } from "@/app/lib/tier-requests";
 import { ORG_TIERS } from "@/app/lib/constants";
 
 const STATE_COLOR: Record<string, string> = {
@@ -26,12 +28,19 @@ function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-export default async function PlatformOrgDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PlatformOrgDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ priceSaved?: string; error?: string }>;
+}) {
   const s = await getSession();
   if (!s) redirect("/login");
   if (!requirePlatformAdmin(s)) redirect("/dashboard");
 
   const { id } = await params;
+  const { priceSaved, error } = await searchParams;
   const org = await prisma.organization.findUnique({
     where: { id },
     include: {
@@ -49,11 +58,12 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
   // trigger.
   await logPlatformAccess(s.userId, org.id, "VIEW_ORG_DETAIL", `Viewed by ${s.email ?? s.userId}`);
 
-  const [payments, charges, licensePayments, pendingTierRequests] = await Promise.all([
+  const [payments, charges, licensePayments, pendingTierRequests, orgTierPrices] = await Promise.all([
     prisma.payment.aggregate({ where: { organizationId: org.id }, _sum: { amount: true } }),
     prisma.charge.aggregate({ where: { organizationId: org.id }, _sum: { amount: true } }),
     prisma.licensePayment.findMany({ where: { organizationId: org.id }, orderBy: { createdAt: "desc" }, take: 20 }),
     prisma.tierChangeRequest.findMany({ where: { organizationId: org.id, status: "PENDING" }, orderBy: { createdAt: "desc" } }),
+    getOrgTierPrices(org.id),
   ]);
   const license = licenseState(org);
 
@@ -80,6 +90,9 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
         You are viewing this organization&apos;s data as the Platform Administrator, for support purposes. This visit
         has been recorded in the audit log.
       </div>
+
+      {priceSaved && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Saved.</div>}
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
       <div>
         <h2 className="font-semibold">Package</h2>
@@ -117,6 +130,29 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
             ))}
           </div>
         )}
+
+        <div className="mt-4">
+          <p className="text-xs text-silver-dark">
+            Negotiated upgrade prices for this customer — overrides the standard list price on Settings → Plan for
+            just this org. Leave blank and save to remove an override and go back to the standard price.
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {ORG_TIERS.map((t) => (
+              <form key={t} action={setOrgTierPriceAction.bind(null, org.id, t)} className="flex flex-col gap-1 rounded border p-2">
+                <span className="text-xs font-medium text-silver-dark">{t}</span>
+                <input
+                  name="priceKes"
+                  type="number"
+                  step="0.01"
+                  defaultValue={orgTierPrices[t] ?? ""}
+                  placeholder="Standard"
+                  className="rounded border px-2 py-1 text-sm"
+                />
+                <button className="rounded border px-2 py-1 text-xs transition-colors hover:bg-silver-light">Save</button>
+              </form>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div>

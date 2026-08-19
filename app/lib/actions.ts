@@ -34,8 +34,10 @@ import { postRepairExpense } from "./expenses";
 import { newTrialEndsAt, extendLicense, sendLicenseStkPush } from "./licensing";
 import { requireFeature, getOrgTier, staffSeatLimit, tierRank } from "./tier";
 import {
-  getTierPrices,
   setTierPrice,
+  setOrgTierPrice,
+  clearOrgTierPrice,
+  getEffectiveTierPrice,
   downgradeTier,
   sendTierUpgradeStk,
   requestTierChangeManual,
@@ -265,13 +267,32 @@ export async function sendLicenseStkAction(organizationId: string, formData: For
 export async function setTierPriceAction(tier: string, formData: FormData) {
   const s = await getSession();
   if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
-  if (!(ORG_TIERS as readonly string[]).includes(tier)) throw new Error("Unknown package.");
+  if (!(ORG_TIERS as readonly string[]).includes(tier)) errorRedirect("/platform", "Unknown package.");
 
   const priceKes = Number(formData.get("priceKes") ?? 0);
-  if (!priceKes || priceKes < 0) throw new Error("Enter a valid price.");
+  if (!priceKes || priceKes < 0) errorRedirect("/platform", "Enter a valid price.");
 
   await setTierPrice(tier as OrgTier, priceKes);
-  redirect("/platform");
+  redirect("/platform?priceSaved=1");
+}
+
+/** Platform admin sets (or clears) a negotiated price for one org's upgrade to a specific tier — overrides the global price list for that org only. */
+export async function setOrgTierPriceAction(organizationId: string, tier: string, formData: FormData) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+  if (!(ORG_TIERS as readonly string[]).includes(tier)) errorRedirect(`/platform/${organizationId}`, "Unknown package.");
+
+  const raw = String(formData.get("priceKes") ?? "").trim();
+  if (!raw) {
+    await clearOrgTierPrice(organizationId, tier as OrgTier);
+    redirect(`/platform/${organizationId}?priceSaved=1`);
+  }
+
+  const priceKes = Number(raw);
+  if (!priceKes || priceKes < 0) errorRedirect(`/platform/${organizationId}`, "Enter a valid price, or leave it blank to remove the override.");
+
+  await setOrgTierPrice(organizationId, tier as OrgTier, priceKes);
+  redirect(`/platform/${organizationId}?priceSaved=1`);
 }
 
 /** An org admin dropping to a cheaper (or free) package — free, applied immediately. */
@@ -304,8 +325,7 @@ export async function requestTierUpgrade(formData: FormData) {
   const toTier = String(formData.get("toTier") ?? "");
   if (!(ORG_TIERS as readonly string[]).includes(toTier)) errorRedirect("/settings/plan", "Unknown package.");
 
-  const prices = await getTierPrices();
-  const amount = prices[toTier as OrgTier];
+  const amount = await getEffectiveTierPrice(s.organizationId, toTier as OrgTier);
   if (!amount) errorRedirect("/settings/plan", "This package doesn't have a price set yet — contact us to upgrade.");
 
   const method = String(formData.get("method") ?? "MPESA_STK");

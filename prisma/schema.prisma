@@ -123,6 +123,7 @@ model Organization {
   evictions        Eviction[]
   licensePayments  LicensePayment[]
   tierChangeRequests TierChangeRequest[]
+  orgTierPrices    OrgTierPrice[]
   recurringJobs    RecurringJob[]
 }
 
@@ -159,16 +160,35 @@ model LicensePayment {
   @@index([organizationId])
 }
 
-// What each package costs — global, not per-org, since it's the platform's
-// own price list rather than something negotiated per customer (that's what
-// Organization.licenseFeeKes is for). One row per tier; a tier with no row
-// here simply has no price shown yet, rather than a guessed number.
+// What each package costs by default — the platform's standard price list.
+// One row per tier; a tier with no row here simply has no price shown yet,
+// rather than a guessed number. A specific customer negotiated to pay more
+// (or less) isn't a change to this list — see OrgTierPrice below, which
+// overrides this per organization without touching what everyone else pays.
 model TierPrice {
   id       String @id @default(cuid())
   tier     String @unique // BASIC | INTERMEDIATE | ADVANCED | FULL
   priceKes Float
 
   updatedAt DateTime @updatedAt
+}
+
+// A negotiated price for one organization's upgrade to a specific tier —
+// "this customer pays more/less than the standard list price." Looked up
+// first when an org requests an upgrade; falls back to TierPrice when no
+// override exists for that org+tier pair. Deleting the row (not zeroing the
+// price) is how an admin clears an override back to the standard price.
+model OrgTierPrice {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  tier     String // BASIC | INTERMEDIATE | ADVANCED | FULL
+  priceKes Float
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, tier])
 }
 
 // A landlord's own request to move to a different package — self-served,

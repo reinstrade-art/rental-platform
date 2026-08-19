@@ -25,13 +25,13 @@ const STATE_COLOR: Record<string, string> = {
 export default async function PlatformPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; priceSaved?: string }>;
 }) {
   const [orgs, tierPrices] = await Promise.all([
     prisma.organization.findMany({ orderBy: { createdAt: "desc" } }),
     getTierPrices(),
   ]);
-  const { error } = await searchParams;
+  const { error, priceSaved } = await searchParams;
 
   return (
     <div className="flex flex-col gap-8">
@@ -41,6 +41,7 @@ export default async function PlatformPage({
           What landlords see and pay for on Settings → Plan when they self-serve an upgrade. A package with no price
           set reads as &quot;contact us&quot; instead of an amount.
         </p>
+        {priceSaved && <p className="mt-2 text-sm text-green-700">Saved.</p>}
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {ORG_TIERS.map((t) => (
             <form key={t} action={setTierPriceAction.bind(null, t)} className="flex flex-col gap-1 rounded border p-2">
