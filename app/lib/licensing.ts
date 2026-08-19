@@ -66,7 +66,7 @@ export async function extendLicense(
   return licenseExpiresAt;
 }
 
-function platformMpesaCredentials(): DarajaCredentials {
+export function platformMpesaCredentials(): DarajaCredentials {
   return {
     env: process.env.PLATFORM_MPESA_ENV ?? null,
     shortcode: process.env.PLATFORM_MPESA_SHORTCODE ?? null,

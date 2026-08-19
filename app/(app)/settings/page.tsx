@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireStaff, deviceLabel } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
@@ -20,6 +21,16 @@ export default async function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-10">
+    <div className="max-w-sm rounded border p-4">
+      <h2 className="font-semibold">Plan</h2>
+      <p className="mt-1 text-sm text-silver-dark">
+        You&apos;re on <strong>{org.tier}</strong>. Upgrade or downgrade your package.
+      </p>
+      <Link href="/settings/plan" className="mt-3 inline-block rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
+        Manage plan
+      </Link>
+    </div>
+
     <div className="max-w-sm">
       <h1 className="text-lg font-semibold">Document branding</h1>
       <p className="mt-1 text-sm text-silver-dark">

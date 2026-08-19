@@ -9,6 +9,9 @@ function rank(tier: string): number {
   return i === -1 ? 0 : i;
 }
 
+/** Exported for callers comparing two tiers directly — e.g. "is this an upgrade or a downgrade?" */
+export const tierRank = rank;
+
 /** True once `tier` reaches at least the package `feature` first appears in. */
 export function hasFeature(tier: string, feature: Feature): boolean {
   return rank(tier) >= rank(FEATURE_TIER[feature]);

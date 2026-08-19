@@ -5,7 +5,15 @@ import { prisma } from "@/app/lib/prisma";
 import { logPlatformAccess } from "@/app/lib/audit";
 import { licenseState, platformMpesaConfigured } from "@/app/lib/licensing";
 import { LICENSE_PAYMENT_METHODS } from "@/app/lib/constants";
-import { updateLicenseFee, recordLicensePayment, sendLicenseStkAction, updateOrgTier, platformImpersonateAction } from "@/app/lib/actions";
+import {
+  updateLicenseFee,
+  recordLicensePayment,
+  sendLicenseStkAction,
+  updateOrgTier,
+  platformImpersonateAction,
+  confirmTierRequestAction,
+  rejectTierRequestAction,
+} from "@/app/lib/actions";
 import { ORG_TIERS } from "@/app/lib/constants";
 
 const STATE_COLOR: Record<string, string> = {
@@ -41,10 +49,11 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
   // trigger.
   await logPlatformAccess(s.userId, org.id, "VIEW_ORG_DETAIL", `Viewed by ${s.email ?? s.userId}`);
 
-  const [payments, charges, licensePayments] = await Promise.all([
+  const [payments, charges, licensePayments, pendingTierRequests] = await Promise.all([
     prisma.payment.aggregate({ where: { organizationId: org.id }, _sum: { amount: true } }),
     prisma.charge.aggregate({ where: { organizationId: org.id }, _sum: { amount: true } }),
     prisma.licensePayment.findMany({ where: { organizationId: org.id }, orderBy: { createdAt: "desc" }, take: 20 }),
+    prisma.tierChangeRequest.findMany({ where: { organizationId: org.id, status: "PENDING" }, orderBy: { createdAt: "desc" } }),
   ]);
   const license = licenseState(org);
 
@@ -87,6 +96,27 @@ export default async function PlatformOrgDetailPage({ params }: { params: Promis
           </select>
           <button className="rounded border px-3 py-2 text-sm transition-colors hover:bg-silver-light">Save package</button>
         </form>
+
+        {pendingTierRequests.length > 0 && (
+          <div className="mt-4 flex flex-col gap-2">
+            {pendingTierRequests.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center gap-3 rounded border border-orange-300 bg-orange-50 px-3 py-2 text-sm">
+                <span>
+                  Requested {r.fromTier} → {r.toTier} for {money(r.amount)} via {r.method}
+                  {r.reference ? ` (ref ${r.reference})` : ""}
+                </span>
+                <div className="ml-auto flex items-center gap-2">
+                  <form action={confirmTierRequestAction.bind(null, r.id)}>
+                    <button className="rounded bg-ink px-2 py-1 text-xs text-lily">Confirm &amp; apply</button>
+                  </form>
+                  <form action={rejectTierRequestAction.bind(null, r.id)}>
+                    <button className="text-xs text-red-700 underline">Reject</button>
+                  </form>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div>

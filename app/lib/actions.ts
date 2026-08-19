@@ -32,8 +32,17 @@ import { GROUNDS_LIST, joinGrounds, validNoticeDeadline } from "./eviction";
 import { applyBilling } from "./billing";
 import { postRepairExpense } from "./expenses";
 import { newTrialEndsAt, extendLicense, sendLicenseStkPush } from "./licensing";
-import { requireFeature, getOrgTier, staffSeatLimit } from "./tier";
-import { ORG_TIERS } from "./constants";
+import { requireFeature, getOrgTier, staffSeatLimit, tierRank } from "./tier";
+import {
+  getTierPrices,
+  setTierPrice,
+  downgradeTier,
+  sendTierUpgradeStk,
+  requestTierChangeManual,
+  confirmTierRequest,
+  rejectTierRequest,
+} from "./tier-requests";
+import { ORG_TIERS, type OrgTier } from "./constants";
 
 // --- auth --------------------------------------------------------------
 
@@ -247,6 +256,110 @@ export async function sendLicenseStkAction(organizationId: string, formData: For
   const result = await sendLicenseStkPush(organizationId, phone, amount, periodDays, s.userId, callbackUrl);
   if (!result.ok) throw new Error(result.reason);
   await logPlatformAccess(s.userId, organizationId, "SEND_LICENSE_STK", `KES ${amount} to ${phone}`);
+  redirect("/platform");
+}
+
+// --- tier pricing & self-service upgrades/downgrades --------------------
+
+/** Platform admin sets the platform's own price list — global, not per-org. */
+export async function setTierPriceAction(tier: string, formData: FormData) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+  if (!(ORG_TIERS as readonly string[]).includes(tier)) throw new Error("Unknown package.");
+
+  const priceKes = Number(formData.get("priceKes") ?? 0);
+  if (!priceKes || priceKes < 0) throw new Error("Enter a valid price.");
+
+  await setTierPrice(tier as OrgTier, priceKes);
+  redirect("/platform");
+}
+
+/** An org admin dropping to a cheaper (or free) package — free, applied immediately. */
+export async function downgradeTierAction(formData: FormData) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Not authorized.");
+
+  const toTier = String(formData.get("toTier") ?? "");
+  if (!(ORG_TIERS as readonly string[]).includes(toTier)) errorRedirect("/settings/plan", "Unknown package.");
+
+  try {
+    await downgradeTier(s.organizationId, toTier as OrgTier, s.userId);
+  } catch (e) {
+    errorRedirect("/settings/plan", e instanceof Error ? e.message : "Could not downgrade.");
+  }
+  redirect("/settings/plan?downgraded=1");
+}
+
+/**
+ * An org admin requesting an upgrade. M-Pesa raises an STK prompt they pay
+ * themselves, confirmed automatically by the callback. Any other method
+ * (bank/cash/other) is recorded PENDING — real money changed hands outside
+ * this app, so a platform admin has to confirm it actually landed before the
+ * package changes; nothing here can verify that on its own.
+ */
+export async function requestTierUpgrade(formData: FormData) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Not authorized.");
+
+  const toTier = String(formData.get("toTier") ?? "");
+  if (!(ORG_TIERS as readonly string[]).includes(toTier)) errorRedirect("/settings/plan", "Unknown package.");
+
+  const prices = await getTierPrices();
+  const amount = prices[toTier as OrgTier];
+  if (!amount) errorRedirect("/settings/plan", "This package doesn't have a price set yet — contact us to upgrade.");
+
+  const method = String(formData.get("method") ?? "MPESA_STK");
+
+  if (method === "MPESA_STK") {
+    const phone = String(formData.get("phone") ?? "").trim();
+    if (!phone) errorRedirect("/settings/plan", "Enter a phone number to send the prompt to.");
+
+    const h = await headers();
+    const host = h.get("host");
+    const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+    const callbackUrl = process.env.NEXT_PUBLIC_APP_URL
+      ? `${process.env.NEXT_PUBLIC_APP_URL}/api/mpesa/tier-callback`
+      : `${proto}://${host}/api/mpesa/tier-callback`;
+
+    try {
+      const result = await sendTierUpgradeStk(s.organizationId, toTier as OrgTier, phone, amount, s.userId, callbackUrl);
+      if (!result.ok) errorRedirect("/settings/plan", result.reason);
+    } catch (e) {
+      errorRedirect("/settings/plan", e instanceof Error ? e.message : "Could not send the prompt.");
+    }
+    redirect("/settings/plan?requested=1");
+  }
+
+  const reference = String(formData.get("reference") ?? "").trim() || null;
+  try {
+    await requestTierChangeManual(s.organizationId, toTier as OrgTier, amount, method, reference, s.userId);
+  } catch (e) {
+    errorRedirect("/settings/plan", e instanceof Error ? e.message : "Could not record the request.");
+  }
+  redirect("/settings/plan?requested=1");
+}
+
+/** Platform admin confirms a manually-paid upgrade request landed — applies the tier. */
+export async function confirmTierRequestAction(requestId: string) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+  try {
+    await confirmTierRequest(requestId, s.userId);
+  } catch (e) {
+    errorRedirect("/platform", e instanceof Error ? e.message : "Could not confirm this request.");
+  }
+  redirect("/platform");
+}
+
+/** Platform admin declines a manually-paid upgrade request. */
+export async function rejectTierRequestAction(requestId: string) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+  try {
+    await rejectTierRequest(requestId, s.userId);
+  } catch (e) {
+    errorRedirect("/platform", e instanceof Error ? e.message : "Could not reject this request.");
+  }
   redirect("/platform");
 }
 

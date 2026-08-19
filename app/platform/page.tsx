@@ -1,8 +1,20 @@
 import Link from "next/link";
 import { prisma } from "@/app/lib/prisma";
-import { createOrganization, setOrganizationStatus, updateOrganization, deleteOrganization } from "@/app/lib/actions";
+import {
+  createOrganization,
+  setOrganizationStatus,
+  updateOrganization,
+  deleteOrganization,
+  setTierPriceAction,
+} from "@/app/lib/actions";
 import { licenseState } from "@/app/lib/licensing";
+import { getTierPrices } from "@/app/lib/tier-requests";
+import { ORG_TIERS } from "@/app/lib/constants";
 import { DeleteButton } from "@/app/components/delete-button";
+
+function money(n: number) {
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
 
 const STATE_COLOR: Record<string, string> = {
   TRIAL: "text-orange-600",
@@ -15,11 +27,38 @@ export default async function PlatformPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const orgs = await prisma.organization.findMany({ orderBy: { createdAt: "desc" } });
+  const [orgs, tierPrices] = await Promise.all([
+    prisma.organization.findMany({ orderBy: { createdAt: "desc" } }),
+    getTierPrices(),
+  ]);
   const { error } = await searchParams;
 
   return (
     <div className="flex flex-col gap-8">
+      <section className="max-w-lg">
+        <h2 className="text-lg font-semibold">Package pricing</h2>
+        <p className="mt-1 text-sm text-silver-dark">
+          What landlords see and pay for on Settings → Plan when they self-serve an upgrade. A package with no price
+          set reads as &quot;contact us&quot; instead of an amount.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {ORG_TIERS.map((t) => (
+            <form key={t} action={setTierPriceAction.bind(null, t)} className="flex flex-col gap-1 rounded border p-2">
+              <span className="text-xs font-medium text-silver-dark">{t}</span>
+              <input
+                name="priceKes"
+                type="number"
+                step="0.01"
+                defaultValue={tierPrices[t] ?? ""}
+                placeholder="KES/mo"
+                className="rounded border px-2 py-1 text-sm"
+              />
+              <button className="rounded border px-2 py-1 text-xs transition-colors hover:bg-silver-light">Save</button>
+            </form>
+          ))}
+        </div>
+      </section>
+
       <section>
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold">Organizations</h1>
