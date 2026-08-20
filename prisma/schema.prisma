@@ -145,6 +145,8 @@ model Organization {
   payouts          Payout[]
   apiKeys          ApiKey[]
   webhooks         Webhook[]
+  accountingConnections AccountingConnection[]
+  accountingSyncLogs    AccountingSyncLog[]
 }
 
 // A landlord's own credential for pulling their org's data out through the
@@ -640,6 +642,7 @@ model Payment {
   transaction Transaction?
   mpesaRequest MpesaRequest?
   payout      Payout?
+  accountingSyncLogs AccountingSyncLog[]
 
   // How much of this one payment the office has said goes to which charge —
   // e.g. 4,000 of a 4,900 M-Pesa receipt is rent, 200 is water, 700 is
@@ -1070,4 +1073,61 @@ model Webhook {
   createdAt       DateTime  @default(now())
 
   @@index([organizationId])
+}
+
+// A landlord's own QuickBooks (or eventually Xero) company, connected via
+// OAuth2 -- accessToken/refreshToken are Intuit's, refreshed automatically
+// as they near expiry (see app/lib/quickbooks.ts). One row per org per
+// provider: @@unique([organizationId, provider]) rather than a single
+// connection field, since Xero support is meant to slot in as a second
+// provider row without touching this shape. incomeAccountId/bankAccountId
+// are QuickBooks account IDs the org enters after connecting -- there is no
+// way to guess which of a company's own chart-of-accounts entries should
+// receive rent income, so this app never tries to.
+model AccountingConnection {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  provider String // QUICKBOOKS | XERO
+
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+
+  // QuickBooks calls this the realmId (the company's own id); Xero calls
+  // the equivalent a tenantId -- kept as one column since exactly one
+  // applies per row, selected by `provider`.
+  realmId String
+
+  incomeAccountId String?
+  bankAccountId   String?
+
+  connectedBy String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([organizationId, provider])
+}
+
+// One row per payment that was (or is being) pushed to a connected
+// accounting system -- same "visible ledger row before the fact" discipline
+// as Payout, so a sync that fails is a FAILED row a landlord can see and
+// retry, never a payment that silently never made it into their books.
+model AccountingSyncLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  provider   String // QUICKBOOKS | XERO
+  externalId String? // the JournalEntry id QuickBooks/Xero assigned, once SUCCESS
+  status     String  @default("PENDING") // PENDING | SUCCESS | FAILED
+  error      String?
+  syncedAt   DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([paymentId, provider])
 }

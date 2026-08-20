@@ -14,24 +14,42 @@ import {
   revokeApiKeyAction,
   createWebhookAction,
   revokeWebhookAction,
+  disconnectQuickbooksAction,
+  setQuickbooksAccountsAction,
+  syncQuickbooksNowAction,
 } from "@/app/lib/actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
+import { quickbooksAppConfigured } from "@/app/lib/quickbooks";
 import { listApiKeys } from "@/app/lib/api-keys";
 import { listWebhooks } from "@/app/lib/webhooks";
 import { CreateApiKeyForm } from "@/app/components/create-api-key-form";
 import { CreateWebhookForm } from "@/app/components/create-webhook-form";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; qbConnected?: string; qbSynced?: string }>;
+}) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  const { error, qbConnected, qbSynced } = await searchParams;
 
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } });
   const sessions = await getOwnOtherSessions(s.userId);
   const apiKeys = s.role === "ADMIN" ? await listApiKeys(s.organizationId) : [];
   const webhooks = s.role === "ADMIN" ? await listWebhooks(s.organizationId) : [];
+  const qbConnection =
+    s.role === "ADMIN"
+      ? await prisma.accountingConnection.findUnique({
+          where: { organizationId_provider: { organizationId: s.organizationId, provider: "QUICKBOOKS" } },
+        })
+      : null;
 
   return (
     <div className="flex flex-col gap-10">
+    {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+    {qbConnected && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">QuickBooks settings saved.</div>}
+    {qbSynced && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Synced {qbSynced} payment(s) to QuickBooks.</div>}
     <div className="max-w-sm rounded border p-4">
       <h2 className="font-semibold">Plan</h2>
       <p className="mt-1 text-sm text-silver-dark">
@@ -270,6 +288,55 @@ export default async function SettingsPage() {
       <div className="mt-3">
         <CreateWebhookForm action={createWebhookAction} />
       </div>
+    </div>
+    )}
+
+    {s.role === "ADMIN" && (
+    <div className="max-w-sm">
+      <h2 className="text-lg font-semibold">QuickBooks</h2>
+      {!quickbooksAppConfigured() ? (
+        <p className="mt-1 text-sm text-silver-dark">Not available on this platform yet.</p>
+      ) : qbConnection ? (
+        <>
+          <p className="mt-1 text-sm text-silver-dark">
+            Connected — every rent payment posts automatically as a journal entry once both account IDs below are
+            set. Find an account&apos;s ID in QuickBooks under Accounting → Chart of Accounts.
+          </p>
+          <form action={setQuickbooksAccountsAction} className="mt-3 flex flex-col gap-3">
+            <input
+              name="incomeAccountId"
+              defaultValue={qbConnection.incomeAccountId ?? ""}
+              placeholder="Rental income account ID"
+              className="rounded border px-3 py-2 text-sm"
+            />
+            <input
+              name="bankAccountId"
+              defaultValue={qbConnection.bankAccountId ?? ""}
+              placeholder="Bank / Undeposited Funds account ID"
+              className="rounded border px-3 py-2 text-sm"
+            />
+            <button className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">Save account IDs</button>
+          </form>
+          <div className="mt-3 flex items-center gap-3">
+            <form action={syncQuickbooksNowAction}>
+              <button className="rounded border px-3 py-1.5 text-xs transition-colors hover:bg-silver-light">Sync now</button>
+            </form>
+            <form action={disconnectQuickbooksAction}>
+              <button className="text-xs text-red-700 underline">Disconnect</button>
+            </form>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-silver-dark">Not connected — payments won&apos;t post to your books until you connect.</p>
+          <a
+            href="/api/accounting/quickbooks/connect"
+            className="mt-3 inline-block rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft"
+          >
+            Connect QuickBooks
+          </a>
+        </>
+      )}
     </div>
     )}
 

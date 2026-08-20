@@ -51,6 +51,7 @@ import { ORG_TIERS, type OrgTier } from "./constants";
 import { setPlatformCommissionPercent } from "./commission";
 import { createApiKey, revokeApiKey } from "./api-keys";
 import { createWebhook, revokeWebhook, dispatchWebhookEvent } from "./webhooks";
+import { syncPayment, syncAllUnsyncedPayments } from "./accounting-sync";
 
 // --- auth --------------------------------------------------------------
 
@@ -566,6 +567,36 @@ export async function revokeWebhookAction(webhookId: string) {
   redirect("/settings");
 }
 
+export async function disconnectQuickbooksAction() {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can disconnect QuickBooks.");
+  await prisma.accountingConnection.deleteMany({ where: { organizationId: s.organizationId, provider: "QUICKBOOKS" } });
+  redirect("/settings");
+}
+
+/** The QuickBooks account IDs journal entries post against — see quickbooks.ts's syncPaymentToQuickbooks for why this can't be guessed. */
+export async function setQuickbooksAccountsAction(formData: FormData) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can configure QuickBooks accounts.");
+
+  const incomeAccountId = String(formData.get("incomeAccountId") ?? "").trim() || null;
+  const bankAccountId = String(formData.get("bankAccountId") ?? "").trim() || null;
+
+  await prisma.accountingConnection.updateMany({
+    where: { organizationId: s.organizationId, provider: "QUICKBOOKS" },
+    data: { incomeAccountId, bankAccountId },
+  });
+  redirect("/settings?qbConnected=1");
+}
+
+/** Manually catches up any payment that never made it into QuickBooks — the same sync every new payment triggers automatically, run on demand. */
+export async function syncQuickbooksNowAction() {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can trigger a sync.");
+  const { attempted } = await syncAllUnsyncedPayments(s.organizationId);
+  redirect(`/settings?qbSynced=${attempted}`);
+}
+
 // --- staff: property / unit / tenant / lease / billing -------------------
 
 export async function createProperty(formData: FormData) {
@@ -956,6 +987,7 @@ export async function recordPayment(leaseId: string, formData: FormData) {
       paidAt: paidAt.toISOString(),
     }),
   );
+  after(() => syncPayment(s.organizationId, payment.id));
   redirect(`/leases/${leaseId}`);
 }
 
