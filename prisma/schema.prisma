@@ -147,6 +147,7 @@ model Organization {
   webhooks         Webhook[]
   accountingConnections AccountingConnection[]
   accountingSyncLogs    AccountingSyncLog[]
+  messageAttachments    MessageAttachment[]
 }
 
 // A landlord's own credential for pulling their org's data out through the
@@ -495,9 +496,15 @@ model Message {
   tenantId String
   tenant   Tenant @relation(fields: [tenantId], references: [id])
 
+  // Sanitized HTML (see app/lib/sanitize.ts) — every write path runs it
+  // through the same allowlist before this column is touched, so anything
+  // rendered from here via dangerouslySetInnerHTML is already safe; nothing
+  // else ever writes to this table.
   body       String
   fromTenant Boolean @default(false)
   authorName String
+
+  attachments MessageAttachment[]
 
   createdAt DateTime @default(now())
 
@@ -1130,4 +1137,28 @@ model AccountingSyncLog {
   createdAt  DateTime  @default(now())
 
   @@unique([paymentId, provider])
+}
+
+// A file (image, PDF, or document) attached to one Message -- stored in
+// Vercel Blob under a private, unguessable pathname; served only through
+// app/api/attachments/[id], which re-checks the requester actually has
+// access to this message's thread (staff/caretaker-in-scope/the tenant
+// themselves) before streaming it, rather than relying on the blob URL's
+// obscurity alone.
+model MessageAttachment {
+  id             String  @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  pathname String
+  filename String
+  mimeType String
+  size     Int
+
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
 }

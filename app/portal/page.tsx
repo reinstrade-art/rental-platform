@@ -8,6 +8,7 @@ import { payMpesaSelf } from "@/app/lib/mpesa-actions";
 import { MpesaPay } from "@/app/components/mpesa-pay";
 import { signLease, sendTenantMessage } from "@/app/lib/actions";
 import { SignaturePad } from "@/app/components/signature-pad";
+import { RichTextEditor } from "@/app/components/rich-text-editor";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -18,9 +19,10 @@ function periodParam(d: Date) {
   return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-export default async function TenantPortalPage() {
+export default async function TenantPortalPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireTenant(s)) redirect("/login");
+  const { error } = await searchParams;
 
   const [tenant, org] = await Promise.all([
     getTenantPortal(s.tenantId),
@@ -37,6 +39,7 @@ export default async function TenantPortalPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <h1 className="text-lg font-semibold">Hello, {tenant.name}</h1>
 
       {tenant.leases.map((lease) => {
@@ -190,7 +193,18 @@ export default async function TenantPortalPage() {
               key={msg.id}
               className={`max-w-[85%] rounded border px-3 py-2 text-sm ${msg.fromTenant ? "ml-auto bg-silver-light" : ""}`}
             >
-              <p className="whitespace-pre-wrap">{msg.body}</p>
+              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: msg.body }} />
+              {msg.attachments.length > 0 && (
+                <ul className="mt-2 flex flex-col gap-1">
+                  {msg.attachments.map((a) => (
+                    <li key={a.id}>
+                      <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="text-xs underline">
+                        📎 {a.filename} ({Math.round(a.size / 1024)}KB)
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <p className="mt-1 text-xs text-silver-dark">
                 {msg.fromTenant ? tenant.name : msg.authorName} · {new Date(msg.createdAt).toLocaleString()}
               </p>
@@ -199,8 +213,9 @@ export default async function TenantPortalPage() {
           {tenant.messages.length === 0 && <p className="text-xs text-silver-dark">No messages yet.</p>}
         </ul>
 
-        <form action={sendTenantMessage} className="mt-3 flex flex-col gap-2 border-t pt-3">
-          <textarea name="body" rows={2} required maxLength={2000} placeholder="Write a message…" className="rounded border px-3 py-2 text-sm" />
+        <form action={sendTenantMessage} encType="multipart/form-data" className="mt-3 flex flex-col gap-2 border-t pt-3">
+          <RichTextEditor name="body" placeholder="Write a message…" />
+          <input name="attachments" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" className="text-xs" />
           <button type="submit" className="self-start rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
             Send
           </button>

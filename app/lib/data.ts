@@ -63,7 +63,7 @@ export async function getTenant(organizationId: string, tenantId: string, proper
         include: { unit: { include: { property: true } }, charges: true, payments: true },
       },
       user: { select: { email: true, phone: true, disabledAt: true } },
-      messages: { orderBy: { createdAt: "desc" }, take: 20 },
+      messages: { orderBy: { createdAt: "desc" }, take: 20, include: { attachments: true } },
     },
   });
 }
@@ -278,7 +278,7 @@ export async function getTenantPortal(tenantId: string) {
         },
         orderBy: { createdAt: "desc" },
       },
-      messages: { orderBy: { createdAt: "asc" } },
+      messages: { orderBy: { createdAt: "asc" }, include: { attachments: true } },
     },
   });
 }
@@ -293,7 +293,7 @@ export async function getMessageThreads(organizationId: string) {
   const tenants = await prisma.tenant.findMany({
     where: { organizationId, messages: { some: {} } },
     include: {
-      messages: { orderBy: { createdAt: "asc" } },
+      messages: { orderBy: { createdAt: "asc" }, include: { attachments: true } },
       leases: { where: { status: "ACTIVE" }, take: 1, include: { unit: { include: { property: true } } } },
     },
   });

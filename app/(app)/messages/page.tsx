@@ -3,16 +3,19 @@ import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getMessageThreads } from "@/app/lib/data";
 import { replyToTenant } from "@/app/lib/actions";
+import { RichTextEditor } from "@/app/components/rich-text-editor";
 
-export default async function MessagesPage() {
+export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  const { error } = await searchParams;
 
   const threads = await getMessageThreads(s.organizationId);
   const waiting = threads.filter((t) => t.waiting).length;
 
   return (
     <div className="flex flex-col gap-6">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div>
         <h1 className="text-lg font-semibold">Messages</h1>
         <p className="text-sm text-silver-dark">Conversations with tenants — those waiting on a reply come first.</p>
@@ -62,7 +65,18 @@ export default async function MessagesPage() {
                   key={msg.id}
                   className={`max-w-[85%] rounded border px-3 py-2 text-sm ${msg.fromTenant ? "" : "ml-auto bg-silver-light"}`}
                 >
-                  <p className="whitespace-pre-wrap">{msg.body}</p>
+                  <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: msg.body }} />
+                  {msg.attachments.length > 0 && (
+                    <ul className="mt-2 flex flex-col gap-1">
+                      {msg.attachments.map((a) => (
+                        <li key={a.id}>
+                          <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="text-xs underline">
+                            📎 {a.filename} ({Math.round(a.size / 1024)}KB)
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   <p className="mt-1 text-xs text-silver-dark">
                     {msg.fromTenant ? tenant.name : msg.authorName} · {new Date(msg.createdAt).toLocaleString()}
                   </p>
@@ -70,15 +84,9 @@ export default async function MessagesPage() {
               ))}
             </ul>
 
-            <form action={replyToTenant.bind(null, tenant.id)} className="mt-3 flex flex-col gap-2 border-t pt-3">
-              <textarea
-                name="body"
-                rows={2}
-                required
-                maxLength={2000}
-                placeholder={`Reply to ${tenant.name.split(" ")[0]}…`}
-                className="rounded border px-3 py-2 text-sm"
-              />
+            <form action={replyToTenant.bind(null, tenant.id)} encType="multipart/form-data" className="mt-3 flex flex-col gap-2 border-t pt-3">
+              <RichTextEditor name="body" placeholder={`Reply to ${tenant.name.split(" ")[0]}…`} />
+              <input name="attachments" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" className="text-xs" />
               <button type="submit" className="self-start rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
                 Send reply
               </button>

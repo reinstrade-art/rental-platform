@@ -52,6 +52,8 @@ import { setPlatformCommissionPercent } from "./commission";
 import { createApiKey, revokeApiKey } from "./api-keys";
 import { createWebhook, revokeWebhook, dispatchWebhookEvent } from "./webhooks";
 import { syncPayment, syncAllUnsyncedPayments } from "./accounting-sync";
+import { sanitizeMessageBody } from "./sanitize";
+import { attachFilesToMessage } from "./attachments";
 
 // --- auth --------------------------------------------------------------
 
@@ -2092,14 +2094,18 @@ export async function sendTenantMessage(formData: FormData) {
   const s = await getSession();
   if (!requireTenant(s)) throw new Error("Not authorized.");
 
-  const body = String(formData.get("body") ?? "").trim();
-  if (!body) throw new Error("Write a message first.");
-  if (body.length > 2000) throw new Error("Please keep it under 2000 characters.");
+  const body = sanitizeMessageBody(String(formData.get("body") ?? ""));
+  if (!body) errorRedirect("/portal", "Write a message first.");
+  if (body.length > 4000) errorRedirect("/portal", "Please keep it shorter.");
 
   const tenant = await prisma.tenant.findUniqueOrThrow({ where: { id: s.tenantId! } });
-  await prisma.message.create({
+  const message = await prisma.message.create({
     data: { organizationId: s.organizationId, tenantId: tenant.id, body, fromTenant: true, authorName: tenant.name },
   });
+  const uploadErrors = await attachFilesToMessage(s.organizationId, message.id, formData);
+  if (uploadErrors.length > 0) {
+    errorRedirect("/portal", uploadErrors.map((e) => `${e.file}: ${e.reason}`).join(" "));
+  }
   redirect("/portal");
 }
 
@@ -2118,17 +2124,21 @@ export async function replyToTenant(tenantId: string, formData: FormData) {
   });
   if (!tenant) throw new Error("Tenant not found.");
 
-  const body = String(formData.get("body") ?? "").trim();
+  const body = sanitizeMessageBody(String(formData.get("body") ?? "")).slice(0, 4000);
   if (!body) throw new Error("Write a message first.");
 
-  await prisma.message.create({
+  const message = await prisma.message.create({
     data: {
       organizationId: s.organizationId,
       tenantId,
-      body: body.slice(0, 2000),
+      body,
       fromTenant: false,
       authorName: s.email ?? s.phone ?? "Staff",
     },
   });
+  const uploadErrors = await attachFilesToMessage(s.organizationId, message.id, formData);
+  if (uploadErrors.length > 0) {
+    errorRedirect("/messages", uploadErrors.map((e) => `${e.file}: ${e.reason}`).join(" "));
+  }
   redirect("/messages");
 }

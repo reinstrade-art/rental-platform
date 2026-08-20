@@ -4,6 +4,7 @@ import { getSession, requireTenantsAccess, isCaretaker } from "@/app/lib/auth";
 import { getTenant, leaseBalance } from "@/app/lib/data";
 import { deleteTenant, inviteTenant, replyToTenant } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
+import { RichTextEditor } from "@/app/components/rich-text-editor";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -143,7 +144,18 @@ export default async function TenantDetailPage({
           <ul className="mt-3 flex flex-col gap-2">
             {[...tenant.messages].reverse().map((m) => (
               <li key={m.id} className={`max-w-[85%] rounded border px-3 py-2 text-sm ${m.fromTenant ? "" : "ml-auto bg-silver-light"}`}>
-                <p className="whitespace-pre-wrap">{m.body}</p>
+                <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: m.body }} />
+                {m.attachments.length > 0 && (
+                  <ul className="mt-2 flex flex-col gap-1">
+                    {m.attachments.map((a) => (
+                      <li key={a.id}>
+                        <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="text-xs underline">
+                          📎 {a.filename} ({Math.round(a.size / 1024)}KB)
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <p className="mt-1 text-xs text-silver-dark">
                   {m.fromTenant ? tenant.name : m.authorName} · {new Date(m.createdAt).toLocaleString()}
                 </p>
@@ -151,9 +163,10 @@ export default async function TenantDetailPage({
             ))}
           </ul>
         )}
-        <form action={replyToTenant.bind(null, tenant.id)} className="mt-3 flex flex-col gap-2">
-          <textarea name="body" rows={2} required maxLength={2000} placeholder="Reply to the tenant…" className="rounded border px-3 py-2 text-sm" />
-          <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
+        <form action={replyToTenant.bind(null, tenant.id)} encType="multipart/form-data" className="mt-3 flex flex-col gap-2">
+          <RichTextEditor name="body" placeholder="Reply to the tenant…" />
+          <input name="attachments" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" className="text-xs" />
+          <button type="submit" className="self-start rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
             Send reply
           </button>
         </form>

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /*
  * Platform-wide palette: matte black, silver, lily white — three colors,
