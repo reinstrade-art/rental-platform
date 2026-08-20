@@ -1,4 +1,5 @@
 import "server-only";
+import crypto from "crypto";
 import { mpesaNumber } from "./phone";
 
 /**
@@ -139,4 +140,113 @@ export function parseCallbackMetadata(cb: StkCallback) {
     amount: get("Amount") as number | undefined,
     mpesaReceiptNumber: get("MpesaReceiptNumber") as string | undefined,
   };
+}
+
+// --- B2C disbursement — forwarding a landlord's share of a commission-
+// routed rent payment out of the platform's own paybill. A different Daraja
+// product from STK Push above: it needs an "initiator" identity (a Daraja
+// API operator on the shortcode) and a SecurityCredential, which Safaricom
+// defines as the initiator's password RSA-encrypted against a certificate
+// Safaricom issues per environment — never the plain password on the wire.
+
+export type B2cCredentials = DarajaCredentials & {
+  initiatorName: string | null;
+  initiatorPassword: string | null;
+  /** Safaricom's public certificate (PEM), used to encrypt initiatorPassword per-request — never stored encrypted, so a cert rotation needs no re-encryption step. */
+  certPem: string | null;
+};
+
+export function b2cConfigured(c: B2cCredentials): boolean {
+  return mpesaConfigured(c) && Boolean(c.initiatorName && c.initiatorPassword && c.certPem);
+}
+
+function securityCredential(initiatorPassword: string, certPem: string): string {
+  const encrypted = crypto.publicEncrypt(
+    { key: certPem, padding: crypto.constants.RSA_PKCS1_PADDING },
+    Buffer.from(initiatorPassword, "utf8"),
+  );
+  return encrypted.toString("base64");
+}
+
+export type B2cResult =
+  | { ok: true; conversationId: string; originatorConversationId: string }
+  | { ok: false; reason: string };
+
+/**
+ * Sends `amount` from the platform's own shortcode to `phone`. CommandID
+ * "BusinessPayment" is the general-purpose one Safaricom expects for a
+ * business paying an individual outside payroll/promotions — this is a
+ * landlord's rent share, not either of those.
+ */
+export async function b2cPayout(
+  credentials: B2cCredentials,
+  opts: { phone: string; amount: number; remarks: string; resultUrl: string; timeoutUrl: string },
+): Promise<B2cResult> {
+  if (!b2cConfigured(credentials)) {
+    return { ok: false, reason: "B2C payouts are not configured for the platform yet." };
+  }
+
+  const phone = mpesaNumber(opts.phone);
+  if (!phone) return { ok: false, reason: "No usable payout phone number on file." };
+
+  const amount = Math.round(opts.amount);
+  if (amount < 1) return { ok: false, reason: "Nothing to pay out." };
+
+  const originatorConversationId = crypto.randomUUID();
+
+  try {
+    const token = await accessToken(credentials);
+    const res = await fetch(`${host(credentials.env)}/mpesa/b2c/v3/paymentrequest`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        OriginatorConversationID: originatorConversationId,
+        InitiatorName: credentials.initiatorName,
+        SecurityCredential: securityCredential(credentials.initiatorPassword!, credentials.certPem!),
+        CommandID: "BusinessPayment",
+        Amount: amount,
+        PartyA: credentials.shortcode,
+        PartyB: phone,
+        Remarks: opts.remarks.slice(0, 100),
+        QueueTimeOutURL: opts.timeoutUrl,
+        ResultURL: opts.resultUrl,
+        Occasion: "Rent payout",
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    const data = (await res.json().catch(() => ({}))) as {
+      ConversationID?: string;
+      OriginatorConversationID?: string;
+      ResponseCode?: string;
+      errorMessage?: string;
+      ResponseDescription?: string;
+    };
+
+    if (!res.ok || data.ResponseCode !== "0" || !data.ConversationID) {
+      return { ok: false, reason: data.errorMessage ?? data.ResponseDescription ?? `${res.status}: the request was refused` };
+    }
+    return { ok: true, conversationId: data.ConversationID, originatorConversationId };
+  } catch (e) {
+    const err = e as Error;
+    return { ok: false, reason: err.name === "TimeoutError" ? "Safaricom timed out." : err.message };
+  }
+}
+
+/** The shape Safaricom posts back to a B2C ResultURL. */
+export type B2cCallback = {
+  Result: {
+    ResultType: number;
+    ResultCode: number;
+    ResultDesc: string;
+    OriginatorConversationID: string;
+    ConversationID: string;
+    ResultParameters?: { ResultParameter: { Key: string; Value?: string | number }[] };
+  };
+};
+
+export function parseB2cResult(cb: B2cCallback) {
+  const items = cb.Result.ResultParameters?.ResultParameter ?? [];
+  const get = (name: string) => items.find((i) => i.Key === name)?.Value;
+  return { mpesaReceiptNumber: get("TransactionReceipt") as string | undefined };
 }

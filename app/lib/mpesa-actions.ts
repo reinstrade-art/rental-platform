@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { prisma } from "./prisma";
 import { getSession, requireStaff, requireTenant } from "./auth";
 import { stkPush } from "./mpesa";
+import { platformMpesaCredentials } from "./licensing";
 
 export type MpesaState = { error?: string; requestId?: string } | undefined;
 
@@ -40,15 +41,24 @@ async function raise(
   ]);
   if (!lease) return { error: "No such lease." };
 
+  // Commission-routed orgs collect rent through the PLATFORM's own
+  // shortcode instead of their own — that's the only way the platform can
+  // see and split the payment at all; see app/lib/commission.ts. Every
+  // other org keeps using its own credentials exactly as before, unaffected
+  // by this flag existing.
+  const credentials = org.commissionRouted
+    ? platformMpesaCredentials()
+    : {
+        env: org.mpesaEnv,
+        shortcode: org.mpesaShortcode,
+        accountType: org.mpesaAccountType,
+        consumerKey: org.mpesaConsumerKey,
+        consumerSecret: org.mpesaConsumerSecret,
+        passkey: org.mpesaPasskey,
+      };
+
   const result = await stkPush(
-    {
-      env: org.mpesaEnv,
-      shortcode: org.mpesaShortcode,
-      accountType: org.mpesaAccountType,
-      consumerKey: org.mpesaConsumerKey,
-      consumerSecret: org.mpesaConsumerSecret,
-      passkey: org.mpesaPasskey,
-    },
+    credentials,
     {
       phone,
       amount,

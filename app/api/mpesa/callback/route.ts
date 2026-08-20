@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { parseCallbackMetadata, type StkCallback } from "@/app/lib/mpesa";
 import { matchTransaction } from "@/app/lib/payments";
+import { createPayoutForPayment } from "@/app/lib/commission";
 
 /**
  * Where Safaricom tells us what happened to a prompt.
@@ -63,6 +64,20 @@ export async function POST(req: NextRequest) {
       paymentId: matched.matchedPaymentId,
     },
   });
+
+  // Only orgs that opted into commission routing get a Payout row — this is
+  // the platform forwarding a landlord's share of a payment that landed in
+  // the platform's OWN paybill, not something every org's rent collection
+  // goes through.
+  if (matched.matchedPaymentId) {
+    const org = await prisma.organization.findUnique({
+      where: { id: request.organizationId },
+      select: { commissionRouted: true },
+    });
+    if (org?.commissionRouted) {
+      await createPayoutForPayment(request.organizationId, matched.matchedPaymentId, amount);
+    }
+  }
 
   return ACK;
 }

@@ -7,6 +7,7 @@ import {
   updateBranding,
   updateLeaseTerms,
   updateMpesaSettings,
+  updatePayoutMpesaNumber,
   revokeSessionAction,
   revokeOtherSessionsAction,
 } from "@/app/lib/actions";
@@ -160,6 +161,28 @@ export default async function SettingsPage() {
           type="password"
           defaultValue={org.mpesaPasskey ?? ""}
           placeholder="Passkey"
+          className="rounded border px-3 py-2"
+        />
+        <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">
+          Save
+        </button>
+      </form>
+    </div>
+    )}
+
+    {s.role === "ADMIN" && (
+    <div className="max-w-sm">
+      <h2 className="text-lg font-semibold">Payout number</h2>
+      <p className="mt-1 text-sm text-silver-dark">
+        {org.commissionRouted
+          ? "The platform is sharing tenant rent revenue with you — this is the M-Pesa number your share is sent to after each payment."
+          : "Where the platform sends your share of tenant rent revenue, if and once it enrolls this account in commission routing. Harmless to set now — unused until then."}
+      </p>
+      <form action={updatePayoutMpesaNumber} className="mt-3 flex flex-col gap-3">
+        <input
+          name="payoutMpesaNumber"
+          defaultValue={org.payoutMpesaNumber ?? ""}
+          placeholder="M-Pesa number (07... or 254...)"
           className="rounded border px-3 py-2"
         />
         <button type="submit" className="rounded bg-ink px-3 py-2 text-lily transition-colors hover:bg-ink-soft">

@@ -99,6 +99,23 @@ model Organization {
   mpesaConsumerSecret String?
   mpesaPasskey        String?
 
+  // The platform's own cut of this org's tenant rent payments. Null reads as
+  // "use PlatformSetting's platform-wide default" — the same
+  // default-plus-override shape as OrgTierPrice, just for a rate instead of
+  // a price. Purely a ledger figure until commissionRouted (below) is on:
+  // Payout rows get computed either way, but nothing is disbursed while
+  // rent still lands in this org's own paybill.
+  commissionPercent Float?
+  // Where this org's share gets sent once commissionRouted is on — their own
+  // M-Pesa number, set by the org's own ADMIN in Settings, never chosen by
+  // the platform on their behalf.
+  payoutMpesaNumber String?
+  // Off by default, and only ever flipped on deliberately per org once B2C
+  // payouts are confirmed working — see app/lib/mpesa.ts. While off, this
+  // org's tenant rent STK Push still goes straight to its OWN shortcode
+  // exactly as before; nothing about adding this field changes that.
+  commissionRouted Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -125,6 +142,50 @@ model Organization {
   tierChangeRequests TierChangeRequest[]
   orgTierPrices    OrgTierPrice[]
   recurringJobs    RecurringJob[]
+  payouts          Payout[]
+}
+
+// A single row (id "default") holding the platform-wide commission rate —
+// same singleton-settings shape as TierPrice's list, but one number instead
+// of one per tier, since there's only one thing to default here.
+model PlatformSetting {
+  id                String   @id @default("default")
+  commissionPercent Float    @default(0)
+  updatedAt         DateTime @updatedAt
+}
+
+// One row per tenant rent payment that was (or is being) split — created the
+// moment a commission-routed org's payment lands, before the B2C transfer is
+// even attempted, so a disbursement that never completes is still a visible
+// PENDING row rather than money that silently vanished from the ledger.
+model Payout {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  paymentId String  @unique
+  payment   Payment @relation(fields: [paymentId], references: [id])
+
+  grossAmount      Float
+  commissionAmount Float
+  netAmount        Float
+
+  status String @default("PENDING") // PENDING | SUCCESS | FAILED
+
+  // Safaricom B2C's own two request ids (distinct from STK's
+  // merchantRequestId/checkoutRequestId) — ConversationID is returned
+  // immediately, OriginatorConversationID is the app's own idempotency key
+  // sent on the request.
+  conversationId           String?
+  originatorConversationId String?
+  resultCode               Int?
+  resultDesc                String?
+  mpesaReceiptNumber        String?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([organizationId])
 }
 
 // One row per license payment — whether recorded by hand (bank transfer,
@@ -551,6 +612,7 @@ model Payment {
 
   transaction Transaction?
   mpesaRequest MpesaRequest?
+  payout      Payout?
 
   // How much of this one payment the office has said goes to which charge —
   // e.g. 4,000 of a 4,900 M-Pesa receipt is rent, 200 is water, 700 is

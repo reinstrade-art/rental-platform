@@ -6,9 +6,11 @@ import {
   updateOrganization,
   deleteOrganization,
   setTierPriceAction,
+  setPlatformCommissionAction,
 } from "@/app/lib/actions";
 import { licenseState } from "@/app/lib/licensing";
 import { getTierPrices } from "@/app/lib/tier-requests";
+import { getPlatformCommissionPercent } from "@/app/lib/commission";
 import { ORG_TIERS } from "@/app/lib/constants";
 import { DeleteButton } from "@/app/components/delete-button";
 
@@ -27,9 +29,10 @@ export default async function PlatformPage({
 }: {
   searchParams: Promise<{ error?: string; priceSaved?: string }>;
 }) {
-  const [orgs, tierPrices] = await Promise.all([
+  const [orgs, tierPrices, commissionPercent] = await Promise.all([
     prisma.organization.findMany({ orderBy: { createdAt: "desc" } }),
     getTierPrices(),
+    getPlatformCommissionPercent(),
   ]);
   const { error, priceSaved } = await searchParams;
 
@@ -58,6 +61,27 @@ export default async function PlatformPage({
             </form>
           ))}
         </div>
+      </section>
+
+      <section className="max-w-xs">
+        <h2 className="text-lg font-semibold">Rent commission</h2>
+        <p className="mt-1 text-sm text-silver-dark">
+          Default % of a tenant rent payment kept by the platform, for organizations opted into commission routing.
+          Only takes effect once you turn routing on for a specific org — see its own page.
+        </p>
+        <form action={setPlatformCommissionAction} className="mt-3 flex items-center gap-2">
+          <input
+            name="commissionPercent"
+            type="number"
+            step="0.1"
+            min={0}
+            max={100}
+            defaultValue={commissionPercent}
+            className="w-24 rounded border px-2 py-1 text-sm"
+          />
+          <span className="text-sm text-silver-dark">%</span>
+          <button className="rounded border px-2 py-1 text-xs transition-colors hover:bg-silver-light">Save</button>
+        </form>
       </section>
 
       <section>

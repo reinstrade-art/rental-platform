@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "./prisma";
-import { stkPush, mpesaConfigured, type DarajaCredentials } from "./mpesa";
+import { stkPush, mpesaConfigured, b2cConfigured, type DarajaCredentials, type B2cCredentials } from "./mpesa";
 import { TRIAL_DAYS } from "./constants";
 
 export type LicenseState = "TRIAL" | "LICENSED" | "EXPIRED";
@@ -79,6 +79,29 @@ export function platformMpesaCredentials(): DarajaCredentials {
 
 export function platformMpesaConfigured(): boolean {
   return mpesaConfigured(platformMpesaCredentials());
+}
+
+/**
+ * The platform's own B2C identity — for forwarding a landlord's share of a
+ * commission-routed rent payment out of the platform's shortcode. Shares
+ * the same shortcode/consumer key/secret/env as the STK credentials above
+ * (both are Daraja products on the one platform paybill), plus the three
+ * B2C-specific values Safaricom requires: an initiator name, that
+ * initiator's password, and Safaricom's own public certificate used to
+ * encrypt it per-request. Unset by default — commission payouts stay
+ * PENDING (never silently sent) until these are configured.
+ */
+export function platformB2cCredentials(): B2cCredentials {
+  return {
+    ...platformMpesaCredentials(),
+    initiatorName: process.env.PLATFORM_MPESA_INITIATOR_NAME ?? null,
+    initiatorPassword: process.env.PLATFORM_MPESA_INITIATOR_PASSWORD ?? null,
+    certPem: process.env.PLATFORM_MPESA_B2C_CERT ?? null,
+  };
+}
+
+export function platformB2cConfigured(): boolean {
+  return b2cConfigured(platformB2cCredentials());
 }
 
 /**

@@ -14,8 +14,11 @@ import {
   confirmTierRequestAction,
   rejectTierRequestAction,
   setOrgTierPriceAction,
+  setOrgCommissionAction,
+  setCommissionRoutedAction,
 } from "@/app/lib/actions";
 import { getOrgTierPrices } from "@/app/lib/tier-requests";
+import { getPlatformCommissionPercent, getEffectiveCommissionPercent } from "@/app/lib/commission";
 import { ORG_TIERS } from "@/app/lib/constants";
 
 const STATE_COLOR: Record<string, string> = {
@@ -58,14 +61,18 @@ export default async function PlatformOrgDetailPage({
   // trigger.
   await logPlatformAccess(s.userId, org.id, "VIEW_ORG_DETAIL", `Viewed by ${s.email ?? s.userId}`);
 
-  const [payments, charges, licensePayments, pendingTierRequests, orgTierPrices] = await Promise.all([
-    prisma.payment.aggregate({ where: { organizationId: org.id }, _sum: { amount: true } }),
-    prisma.charge.aggregate({ where: { organizationId: org.id }, _sum: { amount: true } }),
-    prisma.licensePayment.findMany({ where: { organizationId: org.id }, orderBy: { createdAt: "desc" }, take: 20 }),
-    prisma.tierChangeRequest.findMany({ where: { organizationId: org.id, status: "PENDING" }, orderBy: { createdAt: "desc" } }),
-    getOrgTierPrices(org.id),
-  ]);
+  const [payments, charges, licensePayments, pendingTierRequests, orgTierPrices, platformCommissionPercent, payouts] =
+    await Promise.all([
+      prisma.payment.aggregate({ where: { organizationId: org.id }, _sum: { amount: true } }),
+      prisma.charge.aggregate({ where: { organizationId: org.id }, _sum: { amount: true } }),
+      prisma.licensePayment.findMany({ where: { organizationId: org.id }, orderBy: { createdAt: "desc" }, take: 20 }),
+      prisma.tierChangeRequest.findMany({ where: { organizationId: org.id, status: "PENDING" }, orderBy: { createdAt: "desc" } }),
+      getOrgTierPrices(org.id),
+      getPlatformCommissionPercent(),
+      prisma.payout.findMany({ where: { organizationId: org.id }, orderBy: { createdAt: "desc" }, take: 20 }),
+    ]);
   const license = licenseState(org);
+  const effectiveCommissionPercent = await getEffectiveCommissionPercent(org);
 
   return (
     <div className="flex flex-col gap-8">
@@ -223,6 +230,74 @@ export default async function PlatformOrgDetailPage({
                   <td className="py-1">{money(p.amount)}</td>
                   <td className="py-1">{p.method}</td>
                   <td className="py-1">{p.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div>
+        <h2 className="font-semibold">Rent commission</h2>
+        <p className="text-xs text-silver-dark">
+          {org.commissionRouted
+            ? "Routing is ON — this org's tenants pay into the platform's own paybill, and their share is forwarded automatically after each payment."
+            : "Routing is OFF — this org's tenants keep paying its own paybill exactly as before; no split happens."}
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-6">
+          <form action={setOrgCommissionAction.bind(null, org.id)} className="flex flex-col gap-1">
+            <label className="text-xs text-silver-dark">Negotiated rate (blank = platform default, {platformCommissionPercent}%)</label>
+            <div className="flex items-center gap-2">
+              <input
+                name="commissionPercent"
+                type="number"
+                step="0.1"
+                min={0}
+                max={100}
+                defaultValue={org.commissionPercent ?? ""}
+                placeholder={String(platformCommissionPercent)}
+                className="w-24 rounded border px-2 py-1 text-sm"
+              />
+              <span className="text-sm text-silver-dark">% · effective {effectiveCommissionPercent}%</span>
+              <button className="rounded border px-2 py-1 text-xs transition-colors hover:bg-silver-light">Save</button>
+            </div>
+          </form>
+          <form action={setCommissionRoutedAction.bind(null, org.id, !org.commissionRouted)}>
+            <button
+              className={`rounded px-3 py-2 text-xs transition-colors ${
+                org.commissionRouted ? "border border-red-300 text-red-700 hover:bg-red-50" : "bg-ink text-lily hover:bg-ink-soft"
+              }`}
+            >
+              {org.commissionRouted ? "Turn routing OFF" : "Turn routing ON"}
+            </button>
+          </form>
+          <p className="text-xs text-silver-dark">
+            Payout number on file: {org.payoutMpesaNumber ?? "none — set by the org's own ADMIN in Settings"}
+          </p>
+        </div>
+
+        {payouts.length > 0 && (
+          <table className="mt-4 w-full max-w-2xl border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
+                <th className="py-1">Date</th>
+                <th className="py-1">Gross</th>
+                <th className="py-1">Commission</th>
+                <th className="py-1">Net</th>
+                <th className="py-1">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payouts.map((p) => (
+                <tr key={p.id} className="border-b">
+                  <td className="py-1">{new Date(p.createdAt).toLocaleDateString()}</td>
+                  <td className="py-1">{money(p.grossAmount)}</td>
+                  <td className="py-1">{money(p.commissionAmount)}</td>
+                  <td className="py-1">{money(p.netAmount)}</td>
+                  <td className={`py-1 ${p.status === "SUCCESS" ? "text-green-700" : p.status === "FAILED" ? "text-red-600" : "text-orange-600"}`}>
+                    {p.status}
+                    {p.status === "FAILED" && p.resultDesc ? ` — ${p.resultDesc}` : ""}
+                  </td>
                 </tr>
               ))}
             </tbody>

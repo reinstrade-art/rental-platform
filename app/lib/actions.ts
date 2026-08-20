@@ -47,6 +47,7 @@ import {
   rejectTierRequest,
 } from "./tier-requests";
 import { ORG_TIERS, type OrgTier } from "./constants";
+import { setPlatformCommissionPercent } from "./commission";
 
 // --- auth --------------------------------------------------------------
 
@@ -297,6 +298,54 @@ export async function setOrgTierPriceAction(organizationId: string, tier: string
   redirect(`/platform/${organizationId}?priceSaved=1`);
 }
 
+/** Platform admin sets the platform-wide default commission rate on tenant rent payments — see app/lib/commission.ts. */
+export async function setPlatformCommissionAction(formData: FormData) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+
+  const percent = Number(formData.get("commissionPercent") ?? "");
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+    errorRedirect("/platform", "Enter a commission rate between 0 and 100.");
+  }
+
+  await setPlatformCommissionPercent(percent);
+  redirect("/platform?priceSaved=1");
+}
+
+/** Platform admin sets (or clears) a negotiated commission rate for one org — overrides the platform default for that org only. */
+export async function setOrgCommissionAction(organizationId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+
+  const raw = String(formData.get("commissionPercent") ?? "").trim();
+  if (!raw) {
+    await prisma.organization.update({ where: { id: organizationId }, data: { commissionPercent: null } });
+    redirect(`/platform/${organizationId}?priceSaved=1`);
+  }
+
+  const percent = Number(raw);
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+    errorRedirect(`/platform/${organizationId}`, "Enter a commission rate between 0 and 100, or leave it blank to use the platform default.");
+  }
+
+  await prisma.organization.update({ where: { id: organizationId }, data: { commissionPercent: percent } });
+  redirect(`/platform/${organizationId}?priceSaved=1`);
+}
+
+/**
+ * Platform admin flips whether this org's tenant rent collection routes
+ * through the platform's own shortcode (so it can be split) or stays on the
+ * org's own paybill (the ordinary, unmodified behavior). Deliberately never
+ * self-serve — see the commissionRouted field comment in schema.prisma for
+ * why this is an explicit, one-org-at-a-time decision.
+ */
+export async function setCommissionRoutedAction(organizationId: string, routed: boolean) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+  await prisma.organization.update({ where: { id: organizationId }, data: { commissionRouted: routed } });
+  redirect(`/platform/${organizationId}?priceSaved=1`);
+}
+
 /** An org admin dropping to a cheaper (or free) package — free, applied immediately. */
 export async function downgradeTierAction(formData: FormData) {
   const s = await getSession();
@@ -445,6 +494,23 @@ export async function updateMpesaSettings(formData: FormData) {
       mpesaConsumerSecret: String(formData.get("mpesaConsumerSecret") ?? "").trim() || null,
       mpesaPasskey: String(formData.get("mpesaPasskey") ?? "").trim() || null,
     },
+  });
+  redirect("/settings");
+}
+
+/**
+ * Where the platform sends this org's share once (and if) a platform admin
+ * turns commission routing on for them — set by the org's own ADMIN, never
+ * chosen on their behalf. Harmless to fill in ahead of time: unused until
+ * that switch is flipped.
+ */
+export async function updatePayoutMpesaNumber(formData: FormData) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can set the payout number.");
+
+  await prisma.organization.update({
+    where: { id: s.organizationId },
+    data: { payoutMpesaNumber: String(formData.get("payoutMpesaNumber") ?? "").trim() || null },
   });
   redirect("/settings");
 }
