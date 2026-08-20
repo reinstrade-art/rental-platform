@@ -32,6 +32,8 @@ export default async function ReportsPage({
 
   const pdfHref = `/api/report?period=${period}${propertyId ? `&property=${propertyId}` : ""}`;
   const qs = (p: string, prop?: string) => `/reports?period=${p}${prop ? `&property=${prop}` : ""}`;
+  const monthStart = `${period}-01`;
+  const monthEnd = new Date(Date.UTC(year, through + 1, 0)).toISOString().slice(0, 10);
 
   return (
     <div className="flex flex-col gap-8">
@@ -43,6 +45,34 @@ export default async function ReportsPage({
         <a href={pdfHref} target="_blank" rel="noreferrer" className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
           Download PDF
         </a>
+      </div>
+
+      <div>
+        <h2 className="font-semibold">Export for bookkeeping</h2>
+        <p className="text-xs text-silver-dark">
+          CSV files for the period shown above ({data.periodLabel}) — import into QuickBooks, Xero, Sage, Zoho
+          Books, or any spreadsheet.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <a
+            href={`/api/export/payments?from=${monthStart}&to=${monthEnd}`}
+            className="rounded border px-3 py-1.5 text-sm transition-colors hover:bg-silver-light"
+          >
+            Payments CSV
+          </a>
+          <a
+            href={`/api/export/charges?from=${monthStart}&to=${monthEnd}`}
+            className="rounded border px-3 py-1.5 text-sm transition-colors hover:bg-silver-light"
+          >
+            Charges CSV
+          </a>
+          <a
+            href={`/api/export/expenses?from=${monthStart}&to=${monthEnd}`}
+            className="rounded border px-3 py-1.5 text-sm transition-colors hover:bg-silver-light"
+          >
+            Expenses CSV
+          </a>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
