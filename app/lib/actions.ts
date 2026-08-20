@@ -48,6 +48,7 @@ import {
 } from "./tier-requests";
 import { ORG_TIERS, type OrgTier } from "./constants";
 import { setPlatformCommissionPercent } from "./commission";
+import { createApiKey, revokeApiKey } from "./api-keys";
 
 // --- auth --------------------------------------------------------------
 
@@ -512,6 +513,32 @@ export async function updatePayoutMpesaNumber(formData: FormData) {
     where: { id: s.organizationId },
     data: { payoutMpesaNumber: String(formData.get("payoutMpesaNumber") ?? "").trim() || null },
   });
+  redirect("/settings");
+}
+
+export type ApiKeyState = { error?: string; rawKey?: string; name?: string } | undefined;
+
+/**
+ * Returns the raw key in the action's own result rather than redirecting —
+ * a secret has no business ever appearing in a URL (browser history, server
+ * logs, a Referer header), so this is rendered by a client component using
+ * useActionState instead of the usual redirect-and-reread pattern.
+ */
+export async function createApiKeyAction(_prev: ApiKeyState, formData: FormData): Promise<ApiKeyState> {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) return { error: "Only an organization admin can create API keys." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Give the key a name so you can tell it apart later." };
+
+  const { raw } = await createApiKey(s.organizationId, name, s.userId);
+  return { rawKey: raw, name };
+}
+
+export async function revokeApiKeyAction(keyId: string) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can revoke API keys.");
+  await revokeApiKey(s.organizationId, keyId);
   redirect("/settings");
 }
 

@@ -10,8 +10,12 @@ import {
   updatePayoutMpesaNumber,
   revokeSessionAction,
   revokeOtherSessionsAction,
+  createApiKeyAction,
+  revokeApiKeyAction,
 } from "@/app/lib/actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
+import { listApiKeys } from "@/app/lib/api-keys";
+import { CreateApiKeyForm } from "@/app/components/create-api-key-form";
 
 export default async function SettingsPage() {
   const s = await getSession();
@@ -19,6 +23,7 @@ export default async function SettingsPage() {
 
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } });
   const sessions = await getOwnOtherSessions(s.userId);
+  const apiKeys = s.role === "ADMIN" ? await listApiKeys(s.organizationId) : [];
 
   return (
     <div className="flex flex-col gap-10">
@@ -189,6 +194,40 @@ export default async function SettingsPage() {
           Save
         </button>
       </form>
+    </div>
+    )}
+
+    {s.role === "ADMIN" && (
+    <div className="max-w-md">
+      <h2 className="text-lg font-semibold">API keys</h2>
+      <p className="mt-1 text-sm text-silver-dark">
+        For an accountant or ERP system to pull this org&apos;s tenants, leases, payments, and charges directly — see{" "}
+        <code className="font-mono text-xs">/api/v1</code>. Each key can only read this organization&apos;s own data.
+      </p>
+      {apiKeys.length > 0 && (
+        <ul className="mt-3 flex flex-col gap-2">
+          {apiKeys.map((k) => (
+            <li key={k.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+              <span>
+                {k.name} <span className="font-mono text-xs text-silver-dark">{k.keyPrefix}…</span>
+                {k.revokedAt && <span className="ml-2 text-xs text-silver-dark">Revoked</span>}
+                {!k.revokedAt && k.lastUsedAt && (
+                  <span className="ml-2 text-xs text-silver-dark">Last used {new Date(k.lastUsedAt).toLocaleDateString()}</span>
+                )}
+                {!k.revokedAt && !k.lastUsedAt && <span className="ml-2 text-xs text-silver-dark">Never used</span>}
+              </span>
+              {!k.revokedAt && (
+                <form action={revokeApiKeyAction.bind(null, k.id)}>
+                  <button className="text-xs text-red-700 underline">Revoke</button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3">
+        <CreateApiKeyForm action={createApiKeyAction} />
+      </div>
     </div>
     )}
 

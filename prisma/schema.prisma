@@ -143,6 +143,32 @@ model Organization {
   orgTierPrices    OrgTierPrice[]
   recurringJobs    RecurringJob[]
   payouts          Payout[]
+  apiKeys          ApiKey[]
+}
+
+// A landlord's own credential for pulling their org's data out through the
+// read-only REST API (see app/api/v1) — accounting/ERP integration that
+// doesn't wait on a person exporting a CSV by hand. The raw key is shown
+// once, at creation, then only its SHA-256 hash is kept — same trust model
+// as a password, since this grants read access to everything in the org
+// scoped to it. keyPrefix (the key's first 8 chars) is stored in the clear
+// purely so the list UI can show "which key is this" without ever
+// re-displaying — or being able to re-derive — the secret itself.
+model ApiKey {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  name      String
+  keyHash   String @unique
+  keyPrefix String
+
+  createdBy  String
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([organizationId])
 }
 
 // A single row (id "default") holding the platform-wide commission rate —
