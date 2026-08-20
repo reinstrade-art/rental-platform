@@ -3,8 +3,12 @@ import { redirect, notFound } from "next/navigation";
 import { getSession, requireTenantsAccess, isCaretaker } from "@/app/lib/auth";
 import { getTenant, leaseBalance } from "@/app/lib/data";
 import { deleteTenant, inviteTenant, replyToTenant } from "@/app/lib/actions";
+import { sendMpesaPrompt } from "@/app/lib/mpesa-actions";
+import { mpesaConfigured } from "@/app/lib/mpesa";
+import { prisma } from "@/app/lib/prisma";
 import { DeleteButton } from "@/app/components/delete-button";
 import { RichTextEditor } from "@/app/components/rich-text-editor";
+import { MpesaPay } from "@/app/components/mpesa-pay";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -28,6 +32,20 @@ export default async function TenantDetailPage({
   const totalOwed = tenant.leases
     .filter((l) => l.status === "ACTIVE")
     .reduce((sum, l) => sum + leaseBalance(l), 0);
+
+  const activeLease = tenant.leases.find((l) => l.status === "ACTIVE") ?? null;
+  const org = !caretaker && activeLease ? await prisma.organization.findUnique({ where: { id: s.organizationId } }) : null;
+  const mpesaReady = Boolean(
+    org &&
+      mpesaConfigured({
+        env: org.mpesaEnv,
+        shortcode: org.mpesaShortcode,
+        accountType: org.mpesaAccountType,
+        consumerKey: org.mpesaConsumerKey,
+        consumerSecret: org.mpesaConsumerSecret,
+        passkey: org.mpesaPasskey,
+      }),
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -86,6 +104,22 @@ export default async function TenantDetailPage({
           </div>
         </div>
       </div>
+
+      {activeLease && mpesaReady && (
+        <div className="max-w-xs">
+          <h2 className="font-semibold">Send M-Pesa prompt</h2>
+          <p className="text-xs text-silver-dark">Raises the payment prompt straight to {tenant.name.split(" ")[0]}&apos;s phone.</p>
+          <div className="mt-2">
+            <MpesaPay
+              action={sendMpesaPrompt}
+              leaseId={activeLease.id}
+              defaultAmount={leaseBalance(activeLease) > 0 ? leaseBalance(activeLease) : activeLease.monthlyRent}
+              phone={tenant.phone}
+              editablePhone
+            />
+          </div>
+        </div>
+      )}
 
       <div>
         <h2 className="font-semibold">Leases</h2>
