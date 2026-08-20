@@ -12,10 +12,14 @@ import {
   revokeOtherSessionsAction,
   createApiKeyAction,
   revokeApiKeyAction,
+  createWebhookAction,
+  revokeWebhookAction,
 } from "@/app/lib/actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 import { listApiKeys } from "@/app/lib/api-keys";
+import { listWebhooks } from "@/app/lib/webhooks";
 import { CreateApiKeyForm } from "@/app/components/create-api-key-form";
+import { CreateWebhookForm } from "@/app/components/create-webhook-form";
 
 export default async function SettingsPage() {
   const s = await getSession();
@@ -24,6 +28,7 @@ export default async function SettingsPage() {
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } });
   const sessions = await getOwnOtherSessions(s.userId);
   const apiKeys = s.role === "ADMIN" ? await listApiKeys(s.organizationId) : [];
+  const webhooks = s.role === "ADMIN" ? await listWebhooks(s.organizationId) : [];
 
   return (
     <div className="flex flex-col gap-10">
@@ -227,6 +232,43 @@ export default async function SettingsPage() {
       )}
       <div className="mt-3">
         <CreateApiKeyForm action={createApiKeyAction} />
+      </div>
+    </div>
+    )}
+
+    {s.role === "ADMIN" && (
+    <div className="max-w-md">
+      <h2 className="text-lg font-semibold">Webhooks</h2>
+      <p className="mt-1 text-sm text-silver-dark">
+        Push events (a payment recorded, a charge added, a lease signed) to your own URL the moment they happen —
+        for Zapier, your ERP&apos;s webhook receiver, or a custom integration. No retry queue: a delivery that fails
+        is not retried, so check back here if an endpoint stops working.
+      </p>
+      {webhooks.length > 0 && (
+        <ul className="mt-3 flex flex-col gap-2">
+          {webhooks.map((w) => (
+            <li key={w.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+              <span className="truncate">
+                {w.url}
+                {w.disabledAt && <span className="ml-2 text-xs text-silver-dark">Revoked</span>}
+                {!w.disabledAt && w.lastTriggeredAt && (
+                  <span className="ml-2 text-xs text-silver-dark">
+                    Last delivery {new Date(w.lastTriggeredAt).toLocaleDateString()} · {w.lastStatus ?? "no response"}
+                  </span>
+                )}
+                {!w.disabledAt && !w.lastTriggeredAt && <span className="ml-2 text-xs text-silver-dark">Never triggered</span>}
+              </span>
+              {!w.disabledAt && (
+                <form action={revokeWebhookAction.bind(null, w.id)}>
+                  <button className="text-xs text-red-700 underline">Revoke</button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3">
+        <CreateWebhookForm action={createWebhookAction} />
       </div>
     </div>
     )}

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { prisma } from "./prisma";
 import { Prisma } from "@/app/generated/prisma/client";
 import { headers } from "next/headers";
@@ -49,6 +50,7 @@ import {
 import { ORG_TIERS, type OrgTier } from "./constants";
 import { setPlatformCommissionPercent } from "./commission";
 import { createApiKey, revokeApiKey } from "./api-keys";
+import { createWebhook, revokeWebhook, dispatchWebhookEvent } from "./webhooks";
 
 // --- auth --------------------------------------------------------------
 
@@ -542,6 +544,28 @@ export async function revokeApiKeyAction(keyId: string) {
   redirect("/settings");
 }
 
+export type WebhookState = { error?: string; secret?: string; url?: string } | undefined;
+
+/** Same reasoning as createApiKeyAction — the secret is returned in the action's own result, never a redirect URL. */
+export async function createWebhookAction(_prev: WebhookState, formData: FormData): Promise<WebhookState> {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) return { error: "Only an organization admin can add a webhook." };
+
+  const url = String(formData.get("url") ?? "").trim();
+  if (!url) return { error: "Enter a URL to send events to." };
+  if (!/^https:\/\//.test(url)) return { error: "The URL must be https:// — a plain http endpoint can't be trusted with a signed secret." };
+
+  const hook = await createWebhook(s.organizationId, url, s.userId);
+  return { url, secret: hook.secret };
+}
+
+export async function revokeWebhookAction(webhookId: string) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can revoke a webhook.");
+  await revokeWebhook(s.organizationId, webhookId);
+  redirect("/settings");
+}
+
 // --- staff: property / unit / tenant / lease / billing -------------------
 
 export async function createProperty(formData: FormData) {
@@ -883,9 +907,18 @@ export async function addCharge(leaseId: string, formData: FormData) {
     errorRedirect(`/leases/${leaseId}`, "Amount and period month are required.");
   }
 
-  await prisma.charge.create({
+  const charge = await prisma.charge.create({
     data: { organizationId: s.organizationId, leaseId, type, amount, description, periodMonth },
   });
+  after(() =>
+    dispatchWebhookEvent(s.organizationId, "charge.added", {
+      id: charge.id,
+      leaseId,
+      type,
+      amount,
+      periodMonth: periodMonth.toISOString().slice(0, 7),
+    }),
+  );
   redirect(`/leases/${leaseId}`);
 }
 
@@ -902,8 +935,9 @@ export async function recordPayment(leaseId: string, formData: FormData) {
   const paidAt = new Date(String(formData.get("paidAt") ?? new Date().toISOString()));
   if (!amount) errorRedirect(`/leases/${leaseId}`, "Amount is required.");
 
+  let payment;
   try {
-    await prisma.payment.create({
+    payment = await prisma.payment.create({
       data: { organizationId: s.organizationId, leaseId, amount, method, reference, paidAt },
     });
   } catch (e) {
@@ -912,6 +946,16 @@ export async function recordPayment(leaseId: string, formData: FormData) {
     }
     throw e;
   }
+  after(() =>
+    dispatchWebhookEvent(s.organizationId, "payment.recorded", {
+      id: payment.id,
+      leaseId,
+      amount,
+      method,
+      reference,
+      paidAt: paidAt.toISOString(),
+    }),
+  );
   redirect(`/leases/${leaseId}`);
 }
 
@@ -1995,6 +2039,17 @@ export async function signLease(leaseId: string, formData: FormData) {
       authorName: lease.tenant.name,
     },
   });
+
+  after(() =>
+    dispatchWebhookEvent(s.organizationId, "lease.signed", {
+      id: lease.id,
+      tenant: lease.tenant.name,
+      property: lease.unit.property.name,
+      unit: lease.unit.label,
+      signedByName,
+      signedAt: new Date().toISOString(),
+    }),
+  );
 }
 
 // --- messages ---------------------------------------------------------------

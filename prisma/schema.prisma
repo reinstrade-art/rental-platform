@@ -144,6 +144,7 @@ model Organization {
   recurringJobs    RecurringJob[]
   payouts          Payout[]
   apiKeys          ApiKey[]
+  webhooks         Webhook[]
 }
 
 // A landlord's own credential for pulling their org's data out through the
@@ -1044,4 +1045,29 @@ model MpesaRequest {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// A landlord's own endpoint for real-time push -- the app POSTs an event the
+// moment it happens (payment.recorded, lease.signed) instead of the org
+// having to poll the REST API or wait for a CSV export. secret signs every
+// delivery (HMAC-SHA256 over the raw body, in an X-Webhook-Signature
+// header) so the receiving end can tell a real delivery from anyone who
+// found the URL. lastTriggeredAt/lastStatus are the only "did this work"
+// signal shown in the UI -- there is no retry queue; a failed delivery is
+// simply not retried, which is why they're visible rather than hidden.
+model Webhook {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  url    String
+  secret String
+
+  createdBy       String
+  lastTriggeredAt DateTime?
+  lastStatus      Int?
+  disabledAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([organizationId])
 }
