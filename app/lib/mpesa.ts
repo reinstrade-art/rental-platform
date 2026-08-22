@@ -132,6 +132,46 @@ export type StkCallback = {
   };
 };
 
+export type C2bRegisterResult = { ok: true } | { ok: false; reason: string };
+
+/**
+ * One-time call telling Safaricom where to POST C2B payments for this
+ * shortcode. ResponseType "Completed" means Safaricom treats every
+ * transaction as pre-validated and calls ConfirmationURL only — there's no
+ * separate accept/reject decision this app needs to make, so the same URL
+ * is registered for both. Re-running this simply overwrites the previous
+ * registration, which is exactly what's wanted if the webhook's signed key
+ * ever changes (see webhook-secret.ts).
+ */
+export async function registerC2bUrls(credentials: DarajaCredentials, confirmationUrl: string): Promise<C2bRegisterResult> {
+  if (!mpesaConfigured(credentials)) {
+    return { ok: false, reason: "Configure M-Pesa STK credentials for this organization first." };
+  }
+
+  try {
+    const token = await accessToken(credentials);
+    const res = await fetch(`${host(credentials.env)}/mpesa/c2b/v2/registerurl`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ShortCode: credentials.shortcode,
+        ResponseType: "Completed",
+        ConfirmationURL: confirmationUrl,
+        ValidationURL: confirmationUrl,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const data = (await res.json().catch(() => ({}))) as { ResponseCode?: string; errorMessage?: string; ResponseDescription?: string };
+    if (!res.ok || (data.ResponseCode !== undefined && data.ResponseCode !== "0")) {
+      return { ok: false, reason: data.errorMessage ?? data.ResponseDescription ?? `${res.status}: the request was refused` };
+    }
+    return { ok: true };
+  } catch (e) {
+    const err = e as Error;
+    return { ok: false, reason: err.name === "TimeoutError" ? "Safaricom timed out." : err.message };
+  }
+}
+
 /** Pulls the handful of fields worth keeping out of the metadata array. */
 export function parseCallbackMetadata(cb: StkCallback) {
   const items = cb.Body.stkCallback.CallbackMetadata?.Item ?? [];

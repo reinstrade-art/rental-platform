@@ -52,6 +52,8 @@ import { setPlatformCommissionPercent } from "./commission";
 import { createApiKey, revokeApiKey } from "./api-keys";
 import { createWebhook, revokeWebhook, dispatchWebhookEvent } from "./webhooks";
 import { syncPayment, syncAllUnsyncedPayments } from "./accounting-sync";
+import { registerC2bUrls } from "./mpesa";
+import { mpesaWebhookKey } from "./webhook-secret";
 import { sanitizeMessageBody } from "./sanitize";
 import { attachFilesToMessage } from "./attachments";
 
@@ -502,6 +504,39 @@ export async function updateMpesaSettings(formData: FormData) {
     },
   });
   redirect("/settings");
+}
+
+/**
+ * One-time call telling Safaricom to POST every C2B payment on this org's
+ * paybill to its own signed webhook URL — see registerC2bUrls in mpesa.ts
+ * and the key in webhook-secret.ts. Once registered, a tenant paying with
+ * their unit's payment code as the M-Pesa account number gets matched and
+ * recorded automatically, the same way an STK Push payment already is.
+ */
+export async function registerMpesaC2bAction() {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can register M-Pesa C2B.");
+
+  const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } });
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
+  const confirmationUrl = `${origin}/api/webhooks/mpesa/${s.organizationId}/${mpesaWebhookKey(s.organizationId)}`;
+
+  const result = await registerC2bUrls(
+    {
+      env: org.mpesaEnv,
+      shortcode: org.mpesaShortcode,
+      accountType: org.mpesaAccountType,
+      consumerKey: org.mpesaConsumerKey,
+      consumerSecret: org.mpesaConsumerSecret,
+      passkey: org.mpesaPasskey,
+    },
+    confirmationUrl,
+  );
+
+  if (!result.ok) errorRedirect("/settings", result.reason);
+  redirect("/settings?c2bRegistered=1");
 }
 
 /**

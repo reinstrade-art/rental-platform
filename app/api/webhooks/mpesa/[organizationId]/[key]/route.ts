@@ -1,22 +1,28 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { ingestTransaction } from "@/app/lib/payments";
+import { mpesaWebhookKey } from "@/app/lib/webhook-secret";
 
 /**
- * Shaped to match Safaricom's Daraja C2B confirmation callback so that
- * wiring an organization's real paybill later is "point Safaricom at this
- * URL", not a redesign of ingestion. Nothing here is live — no organization
- * has its own paybill yet (the reason HM Kariuki's own integration is
- * blocked: they pay into a paybill they don't own, see project notes).
+ * Shaped to match Safaricom's Daraja C2B confirmation callback. `key` is a
+ * per-org HMAC (see webhook-secret.ts) rather than a session or a shared
+ * platform secret — Safaricom does not sign these callbacks at all, so this
+ * is the only thing standing between "an org registered this URL as its
+ * paybill's ConfirmationURL" and "anyone on the internet can fabricate a
+ * rent payment." A wrong or missing key is refused before the payload is
+ * even parsed.
  *
- * Security note (Phase 1 gap, flagged deliberately rather than hidden):
- * Safaricom does not sign C2B callbacks, so production use needs either IP
- * allowlisting at the edge or a shared secret in the URL/query string —
- * neither is wired up here yet. Do not point a real paybill at this route
- * before that is addressed.
+ * One route serves as both ConfirmationURL and ValidationURL — Safaricom
+ * skips calling ValidationURL entirely once C2B is registered with
+ * ResponseType "Completed" (see registerC2bUrls in app/lib/mpesa.ts), so
+ * there's no separate accept/reject decision to make here.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ organizationId: string }> }) {
-  const { organizationId } = await params;
+export async function POST(req: Request, { params }: { params: Promise<{ organizationId: string; key: string }> }) {
+  const { organizationId, key } = await params;
+
+  if (key !== mpesaWebhookKey(organizationId)) {
+    return NextResponse.json({ ResultCode: 1, ResultDesc: "Rejected." }, { status: 403 });
+  }
 
   const org = await prisma.organization.findUnique({ where: { id: organizationId } });
   if (!org || org.status !== "ACTIVE") {

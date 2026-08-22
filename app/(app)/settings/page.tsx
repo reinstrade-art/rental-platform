@@ -17,9 +17,11 @@ import {
   disconnectQuickbooksAction,
   setQuickbooksAccountsAction,
   syncQuickbooksNowAction,
+  registerMpesaC2bAction,
 } from "@/app/lib/actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 import { quickbooksAppConfigured } from "@/app/lib/quickbooks";
+import { mpesaWebhookKey } from "@/app/lib/webhook-secret";
 import { listApiKeys } from "@/app/lib/api-keys";
 import { listWebhooks } from "@/app/lib/webhooks";
 import { CreateApiKeyForm } from "@/app/components/create-api-key-form";
@@ -28,11 +30,11 @@ import { CreateWebhookForm } from "@/app/components/create-webhook-form";
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; qbConnected?: string; qbSynced?: string }>;
+  searchParams: Promise<{ error?: string; qbConnected?: string; qbSynced?: string; c2bRegistered?: string }>;
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  const { error, qbConnected, qbSynced } = await searchParams;
+  const { error, qbConnected, qbSynced, c2bRegistered } = await searchParams;
 
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } });
   const sessions = await getOwnOtherSessions(s.userId);
@@ -50,6 +52,7 @@ export default async function SettingsPage({
     {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
     {qbConnected && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">QuickBooks settings saved.</div>}
     {qbSynced && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Synced {qbSynced} payment(s) to QuickBooks.</div>}
+    {c2bRegistered && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Registered with Safaricom — payments to your paybill will now auto-match by unit payment code.</div>}
     <div className="max-w-sm rounded border p-4">
       <h2 className="font-semibold">Plan</h2>
       <p className="mt-1 text-sm text-silver-dark">
@@ -195,6 +198,42 @@ export default async function SettingsPage({
           Save
         </button>
       </form>
+    </div>
+    )}
+
+    {s.role === "ADMIN" && (
+    <div className="max-w-lg">
+      <h2 className="text-lg font-semibold">M-Pesa paybill auto-matching (C2B)</h2>
+      <p className="mt-1 text-sm text-silver-dark">
+        For tenants who pay your paybill directly (rather than through an app prompt) — give each unit a Payment
+        code on its Properties page (e.g. A1, B2), tell tenants to enter it as the M-Pesa Account Number when they
+        pay, and a matching payment is recorded against that unit&apos;s active lease automatically.
+      </p>
+      {mpesaConfigured({
+        env: org.mpesaEnv,
+        shortcode: org.mpesaShortcode,
+        accountType: org.mpesaAccountType,
+        consumerKey: org.mpesaConsumerKey,
+        consumerSecret: org.mpesaConsumerSecret,
+        passkey: org.mpesaPasskey,
+      }) ? (
+        <>
+          <p className="mt-3 text-xs text-silver-dark">
+            Your webhook URL (Safaricom needs this registered as this paybill&apos;s Confirmation/Validation URL —
+            the button below does that for you):
+          </p>
+          <code className="mt-1 block break-all rounded border bg-silver-light px-2 py-1.5 font-mono text-xs text-ink">
+            {process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/webhooks/mpesa/{s.organizationId}/{mpesaWebhookKey(s.organizationId)}
+          </code>
+          <form action={registerMpesaC2bAction} className="mt-2">
+            <button className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
+              Register with Safaricom
+            </button>
+          </form>
+        </>
+      ) : (
+        <p className="mt-2 text-xs text-silver-dark">Set up M-Pesa (STK Push) above first — C2B uses the same paybill and credentials.</p>
+      )}
     </div>
     )}
 
