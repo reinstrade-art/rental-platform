@@ -325,6 +325,18 @@ export async function getStaff(organizationId: string) {
   });
 }
 
+// Staff/caretaker invites specifically — never tenant/vendor invites, which
+// have their own "Invite to register" affordance on the Tenants/Vendors
+// pages instead. Expired-but-unused rows are still returned (not filtered
+// out) so an admin can see why a link stopped working, rather than it just
+// quietly vanishing from the list.
+export async function getPendingInvitations(organizationId: string) {
+  return prisma.invitation.findMany({
+    where: { organizationId, role: { in: ["MANAGER", "VIEWER", "CARETAKER"] }, usedAt: null },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 export async function getOwnOtherSessions(userId: string) {
   return otherSessions(userId);
 }

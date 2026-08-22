@@ -1,7 +1,16 @@
 import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
-import { getStaff, getProperties } from "@/app/lib/data";
-import { inviteStaff, setStaffRole, disableStaff, enableStaff, impersonateAction } from "@/app/lib/actions";
+import { getStaff, getProperties, getPendingInvitations } from "@/app/lib/data";
+import {
+  inviteStaff,
+  setStaffRole,
+  disableStaff,
+  enableStaff,
+  deleteStaffAction,
+  revokeInvitationAction,
+  impersonateAction,
+} from "@/app/lib/actions";
+import { DeleteButton } from "@/app/components/delete-button";
 
 export default async function UsersPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
@@ -9,10 +18,12 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const isAdmin = s.role === "ADMIN";
   const { error } = await searchParams;
 
-  const [staff, properties] = await Promise.all([
+  const [staff, properties, pendingInvitations] = await Promise.all([
     getStaff(s.organizationId),
     isAdmin ? getProperties(s.organizationId) : Promise.resolve([]),
+    isAdmin ? getPendingInvitations(s.organizationId) : Promise.resolve([]),
   ]);
+  const propertyName = (id: string | null) => properties.find((p) => p.id === id)?.name ?? "—";
 
   return (
     <div className="flex flex-col gap-8">
@@ -64,6 +75,9 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                             </form>
                           </>
                         )}
+                        <form action={deleteStaffAction.bind(null, u.id)}>
+                          <DeleteButton confirmText={`Delete ${u.email ?? u.phone}? This cannot be undone.`} />
+                        </form>
                       </>
                     )}
                   </td>
@@ -73,6 +87,44 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           </tbody>
         </table>
       </div>
+
+      {isAdmin && pendingInvitations.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold">Pending invitations</h2>
+          <table className="mt-3 w-full max-w-2xl border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
+                <th className="py-2">Contact</th>
+                <th className="py-2">Role</th>
+                <th className="py-2">Property</th>
+                <th className="py-2">Expires</th>
+                <th className="py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingInvitations.map((inv) => {
+                const expired = inv.expiresAt < new Date();
+                return (
+                  <tr key={inv.id} className="border-b">
+                    <td className="py-2">{inv.email ?? inv.phone}</td>
+                    <td className="py-2">{inv.role}</td>
+                    <td className="py-2">{inv.role === "CARETAKER" ? propertyName(inv.propertyId) : "—"}</td>
+                    <td className={`py-2 ${expired ? "text-red-600" : ""}`}>
+                      {new Date(inv.expiresAt).toLocaleDateString()}
+                      {expired ? " (expired)" : ""}
+                    </td>
+                    <td className="py-2">
+                      <form action={revokeInvitationAction.bind(null, inv.id)}>
+                        <button className="text-xs text-red-700 underline">Revoke</button>
+                      </form>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {isAdmin && (
         <div className="max-w-sm">

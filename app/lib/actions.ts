@@ -2008,6 +2008,41 @@ export async function enableStaff(userId: string) {
   await prisma.user.update({ where: { id: userId }, data: { disabledAt: null } });
 }
 
+/**
+ * A hard delete, not another disable — for a teammate who should never have
+ * been added, as opposed to one whose access should simply stop. Blocked
+ * when the user has ever signed an approval: ApprovalStep is append-only
+ * history (see its schema comment) and has no cascade on User, so removing
+ * a signer would either break that record or silently rewrite what actually
+ * happened — disabling is the correct tool for that case instead.
+ */
+export async function deleteStaffAction(userId: string) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can delete a teammate.");
+
+  const user = await prisma.user.findFirst({ where: { id: userId, organizationId: s.organizationId } });
+  if (!user) throw new Error("Not found.");
+  if (user.role === "ADMIN") errorRedirect("/users", "Cannot delete the admin.");
+  if (userId === s.userId) errorRedirect("/users", "You cannot delete your own account.");
+
+  const approvalSteps = await prisma.approvalStep.count({ where: { userId } });
+  if (approvalSteps > 0) {
+    errorRedirect("/users", "This teammate has signed approvals on file and can't be deleted — disable their access instead.");
+  }
+
+  await prisma.user.delete({ where: { id: userId } });
+  redirect("/users");
+}
+
+/** Cancels an invite before it's used — the email/phone/code stop working immediately. Never touches a redeemed one; that's a fact of what happened, not left in a "pending" state to clean up. */
+export async function revokeInvitationAction(invitationId: string) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can revoke an invitation.");
+
+  await prisma.invitation.deleteMany({ where: { id: invitationId, organizationId: s.organizationId, usedAt: null } });
+  redirect("/users");
+}
+
 // --- staff: impersonation ------------------------------------------------
 
 /** Opens a session as another user in the same organization — see app/lib/auth.ts `impersonate()` for the rules. */
