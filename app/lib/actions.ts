@@ -834,18 +834,32 @@ export async function createLease(formData: FormData) {
   if (!requireStaff(s)) throw new Error("Not authorized.");
 
   const unitId = String(formData.get("unitId") ?? "");
-  const tenantId = String(formData.get("tenantId") ?? "");
+  let tenantId = String(formData.get("tenantId") ?? "");
+  const newTenantName = String(formData.get("newTenantName") ?? "").trim();
   const monthlyRent = Number(formData.get("monthlyRent") ?? 0);
   const startDate = new Date(String(formData.get("startDate") ?? ""));
-  if (!unitId || !tenantId || !monthlyRent || isNaN(startDate.getTime())) {
-    throw new Error("Unit, tenant, monthly rent, and a valid start date are required.");
+  if (!unitId || (!tenantId && !newTenantName) || !monthlyRent || isNaN(startDate.getTime())) {
+    errorRedirect(`/leases/new?unitId=${unitId}`, "Unit, a tenant (existing or new), monthly rent, and a valid start date are required.");
   }
 
-  const [unit, tenant] = await Promise.all([
-    prisma.unit.findFirst({ where: { id: unitId, organizationId: s.organizationId } }),
-    prisma.tenant.findFirst({ where: { id: tenantId, organizationId: s.organizationId } }),
-  ]);
-  if (!unit || !tenant) throw new Error("Unit or tenant not found.");
+  const unit = await prisma.unit.findFirst({ where: { id: unitId, organizationId: s.organizationId } });
+  if (!unit) errorRedirect("/leases/new", "Unit not found.");
+
+  // A brand-new tenant, named right here rather than requiring a separate
+  // trip to Tenants → Add tenant first — the two-step version was the
+  // actual gap: this page's tenant field was a dropdown of tenants who
+  // already existed, with no way to type a new one's name in.
+  if (!tenantId && newTenantName) {
+    const newTenantPhone = String(formData.get("newTenantPhone") ?? "").trim() || null;
+    const newTenantEmail = String(formData.get("newTenantEmail") ?? "").trim() || null;
+    const tenant = await prisma.tenant.create({
+      data: { organizationId: s.organizationId, name: newTenantName, phone: newTenantPhone, email: newTenantEmail },
+    });
+    tenantId = tenant.id;
+  } else {
+    const tenant = await prisma.tenant.findFirst({ where: { id: tenantId, organizationId: s.organizationId } });
+    if (!tenant) errorRedirect(`/leases/new?unitId=${unitId}`, "Tenant not found.");
+  }
 
   await prisma.lease.create({
     data: { organizationId: s.organizationId, unitId, tenantId, monthlyRent, startDate, status: "ACTIVE" },

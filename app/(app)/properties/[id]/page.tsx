@@ -119,7 +119,12 @@ export default async function PropertyDetailPage({
                         {active.tenant.name}
                       </Link>
                     ) : (
-                      <span className="text-silver-dark">Vacant</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-silver-dark">Vacant</span>
+                        <Link href={`/leases/new?unitId=${u.id}`} className="text-xs underline">
+                          Add tenant
+                        </Link>
+                      </div>
                     )}
                   </td>
                   <td className={`py-2 ${active && leaseBalance(active) > 0 ? "text-red-600" : ""}`}>
