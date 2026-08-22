@@ -77,18 +77,21 @@ export async function platformSetup(formData: FormData) {
 export async function login(formData: FormData) {
   const identifier = String(formData.get("identifier") ?? "");
   const password = String(formData.get("password") ?? "");
-  if (!identifier || !password) throw new Error("Enter your email/phone and password.");
+  if (!identifier || !password) errorRedirect("/login", "Enter your email/phone and password.");
 
   const lock = await checkLock(identifier);
-  if (lock.locked) throw new Error(`Too many attempts. Try again in ${lock.minutesLeft} minute(s).`);
+  if (lock.locked) errorRedirect("/login", `Too many attempts. Try again in ${lock.minutesLeft} minute(s).`);
 
   const user = await verifyCredentials(identifier, password);
   if (!user) {
     const result = await recordFailure(identifier);
-    if (result.locked) throw new Error(`Too many attempts. Try again in ${result.minutesLeft} minute(s).`);
-    throw new Error("Incorrect email/phone or password.");
+    if (result.locked) errorRedirect("/login", `Too many attempts. Try again in ${result.minutesLeft} minute(s).`);
+    // Deliberately the same generic message regardless of which part was
+    // wrong — confirming "that account doesn't exist" vs "wrong password"
+    // separately would let anyone probe which emails/phones are registered.
+    errorRedirect("/login", "Incorrect username or password.");
   }
-  if (user.disabledAt) throw new Error("This account's access has been disabled.");
+  if (user.disabledAt) errorRedirect("/login", "This account's access has been disabled.");
   await clearFailures(identifier);
 
   await createSession({

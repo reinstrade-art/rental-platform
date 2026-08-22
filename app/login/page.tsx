@@ -1,11 +1,15 @@
 import { login } from "@/app/lib/actions";
 
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-ink-photo px-4">
       <img src="/logo.svg" alt="Reins Realty" className="w-48" />
       <div className="w-full max-w-sm rounded-lg border border-ink-soft border-t-2 border-t-gold bg-lily p-8 shadow-xl">
         <h1 className="text-xl font-semibold text-ink">Sign in</h1>
+        {error && (
+          <div className="mt-4 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        )}
         <form action={login} className="mt-6 flex flex-col gap-3">
           <input
             name="identifier"
