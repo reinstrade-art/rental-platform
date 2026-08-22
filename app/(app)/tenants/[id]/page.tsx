@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { getSession, requireTenantsAccess, isCaretaker } from "@/app/lib/auth";
 import { getTenant, leaseBalance } from "@/app/lib/data";
 import { deleteTenant, inviteTenant, replyToTenant } from "@/app/lib/actions";
@@ -9,6 +10,7 @@ import { prisma } from "@/app/lib/prisma";
 import { DeleteButton } from "@/app/components/delete-button";
 import { RichTextEditor } from "@/app/components/rich-text-editor";
 import { MpesaPay } from "@/app/components/mpesa-pay";
+import { waLink } from "@/app/lib/phone";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -35,6 +37,11 @@ export default async function TenantDetailPage({
 
   const activeLease = tenant.leases.find((l) => l.status === "ACTIVE") ?? null;
   const org = !caretaker && activeLease ? await prisma.organization.findUnique({ where: { id: s.organizationId } }) : null;
+
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
+  const firstName = tenant.name.split(" ")[0];
   const mpesaReady = Boolean(
     org &&
       mpesaConfigured({
@@ -144,11 +151,13 @@ export default async function TenantDetailPage({
                 <th className="py-2">Started</th>
                 <th className="py-2">Status</th>
                 <th className="py-2">Balance</th>
+                <th className="py-2">Agreement</th>
               </tr>
             </thead>
             <tbody>
               {tenant.leases.map((l) => {
                 const balance = leaseBalance(l);
+                const agreementWa = waLink(tenant.phone, `Dear ${firstName}, here is your tenancy agreement: ${origin}/api/agreement/${l.id}`);
                 return (
                   <tr key={l.id} className="border-b">
                     <td className="py-2">
@@ -159,6 +168,23 @@ export default async function TenantDetailPage({
                     <td className="py-2">{new Date(l.startDate).toLocaleDateString()}</td>
                     <td className={`py-2 ${l.status === "ACTIVE" ? "text-green-700" : "text-silver-dark"}`}>{l.status}</td>
                     <td className={`py-2 ${balance > 0 ? "text-red-600" : ""}`}>{money(balance)}</td>
+                    <td className="py-2">
+                      <div className="flex flex-col gap-0.5">
+                        <span className={`text-xs ${l.signedAt ? "text-green-700" : "text-silver-dark"}`}>
+                          {l.signedAt ? `Signed ${new Date(l.signedAt).toLocaleDateString()}` : "Not yet signed"}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <a href={`/api/agreement/${l.id}`} target="_blank" rel="noreferrer" className="text-xs underline">
+                            View / print
+                          </a>
+                          {agreementWa && (
+                            <a href={agreementWa} target="_blank" rel="noreferrer" className="text-xs underline text-silver-dark">
+                              WhatsApp
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
