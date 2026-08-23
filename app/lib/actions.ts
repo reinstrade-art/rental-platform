@@ -2108,6 +2108,29 @@ export async function revokeOtherSessionsAction() {
   await revokeOtherSessions(s.userId);
 }
 
+/** An org admin signing a teammate out of one specific device — support for "someone left a shared computer logged in," not something the teammate does to themselves (that's revokeSessionAction above, scoped to your own account). */
+export async function revokeTeammateSessionAction(userId: string, sessionId: string) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can manage a teammate's sessions.");
+
+  const user = await prisma.user.findFirst({ where: { id: userId, organizationId: s.organizationId } });
+  if (!user) throw new Error("Not found.");
+
+  await prisma.session.updateMany({ where: { id: sessionId, userId, revokedAt: null }, data: { revokedAt: new Date() } });
+  redirect(`/users/${userId}/sessions`);
+}
+
+export async function revokeAllTeammateSessionsAction(userId: string) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can manage a teammate's sessions.");
+
+  const user = await prisma.user.findFirst({ where: { id: userId, organizationId: s.organizationId } });
+  if (!user) throw new Error("Not found.");
+
+  await revokeAllSessions(userId);
+  redirect(`/users/${userId}/sessions`);
+}
+
 // --- tenant: sign lease ----------------------------------------------------
 
 /**

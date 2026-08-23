@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
-import { getStaff, getProperties, getPendingInvitations } from "@/app/lib/data";
+import { getStaff, getProperties, getPendingInvitations, getActiveSessionCounts } from "@/app/lib/data";
 import {
   inviteStaff,
   setStaffRole,
@@ -18,10 +19,11 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const isAdmin = s.role === "ADMIN";
   const { error } = await searchParams;
 
-  const [staff, properties, pendingInvitations] = await Promise.all([
+  const [staff, properties, pendingInvitations, sessionCounts] = await Promise.all([
     getStaff(s.organizationId),
     isAdmin ? getProperties(s.organizationId) : Promise.resolve([]),
     isAdmin ? getPendingInvitations(s.organizationId) : Promise.resolve([]),
+    isAdmin ? getActiveSessionCounts(s.organizationId) : Promise.resolve({} as Record<string, number>),
   ]);
   const propertyName = (id: string | null) => properties.find((p) => p.id === id)?.name ?? "—";
 
@@ -37,6 +39,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               <th className="py-2">Role</th>
               <th className="py-2">Property</th>
               <th className="py-2">Status</th>
+              {isAdmin && <th className="py-2">Sessions</th>}
               {isAdmin && <th className="py-2"></th>}
             </tr>
           </thead>
@@ -57,6 +60,13 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                 </td>
                 <td className="py-2">{u.property?.name ?? "—"}</td>
                 <td className="py-2">{u.disabledAt ? "Disabled" : "Active"}</td>
+                {isAdmin && (
+                  <td className="py-2">
+                    <Link href={`/users/${u.id}/sessions`} className="text-xs underline">
+                      {sessionCounts[u.id] ?? 0}
+                    </Link>
+                  </td>
+                )}
                 {isAdmin && (
                   <td className="py-2 flex gap-2">
                     {u.id !== s.userId && u.role !== "ADMIN" && (

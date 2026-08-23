@@ -244,6 +244,19 @@ export async function destroySession() {
   }
 }
 
+/**
+ * Every active session on an account, no exclusion — for an org admin
+ * reviewing a teammate's devices, where there is no "current browser" of
+ * theirs to leave out (unlike otherSessions(), which is for reviewing your
+ * OWN account and always excludes the session making that very request).
+ */
+export async function allActiveSessions(userId: string) {
+  return prisma.session.findMany({
+    where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { lastSeenAt: "desc" },
+  });
+}
+
 /** Every other device this account is signed in on — the id currently in the browser is excluded, not just recognised. */
 export async function otherSessions(userId: string) {
   const excludeId = await currentSessionId();

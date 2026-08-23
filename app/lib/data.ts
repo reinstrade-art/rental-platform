@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "./prisma";
-import { otherSessions } from "./auth";
+import { otherSessions, allActiveSessions } from "./auth";
 
 // Every function here takes organizationId as a required, non-optional first
 // argument and threads it into every query. This is the whole isolation
@@ -339,6 +339,21 @@ export async function getPendingInvitations(organizationId: string) {
 
 export async function getOwnOtherSessions(userId: string) {
   return otherSessions(userId);
+}
+
+/** Every active session on a teammate's account — for an org admin's own session-management page, not the self-service one above. */
+export async function getUserSessions(userId: string) {
+  return allActiveSessions(userId);
+}
+
+/** Active-session counts for every user in an org, one query — the Team page's per-row "Sessions" count. */
+export async function getActiveSessionCounts(organizationId: string): Promise<Record<string, number>> {
+  const rows = await prisma.session.groupBy({
+    by: ["userId"],
+    where: { user: { organizationId }, revokedAt: null, expiresAt: { gt: new Date() } },
+    _count: { _all: true },
+  });
+  return Object.fromEntries(rows.map((r) => [r.userId, r._count._all]));
 }
 
 export async function getVendorPortal(vendorId: string) {
