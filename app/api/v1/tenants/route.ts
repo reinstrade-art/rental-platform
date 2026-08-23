@@ -29,3 +29,29 @@ export async function GET(req: NextRequest) {
     })),
   });
 }
+
+/**
+ * POST /api/v1/tenants — Authorization: Bearer <key>.
+ * Body: { name, phone?, email? }
+ * Creates the Tenant record only — no lease, matching the "Add tenant"
+ * page's own scope. Create-only, same reasoning as the payments/charges
+ * write endpoints.
+ */
+export async function POST(req: NextRequest) {
+  const auth = await authenticateApiKey(req);
+  if (!auth) return NextResponse.json({ error: "Missing or invalid API key." }, { status: 401 });
+
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") return NextResponse.json({ error: "Malformed JSON body." }, { status: 400 });
+
+  const name = String(body.name ?? "").trim();
+  const phone = body.phone ? String(body.phone).trim() : null;
+  const email = body.email ? String(body.email).trim() : null;
+  if (!name) return NextResponse.json({ error: "name is required." }, { status: 400 });
+
+  const tenant = await prisma.tenant.create({
+    data: { organizationId: auth.organizationId, name, phone, email },
+  });
+
+  return NextResponse.json({ id: tenant.id }, { status: 201 });
+}
