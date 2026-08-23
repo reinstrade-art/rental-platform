@@ -24,13 +24,18 @@ function getTransporter() {
   return transporter;
 }
 
-export async function sendEmail(to: string, subject: string, text: string): Promise<boolean> {
+export async function sendEmail(
+  to: string,
+  subject: string,
+  text: string,
+  attachments?: { filename: string; content: Buffer; contentType?: string }[],
+): Promise<boolean> {
   const t = getTransporter();
   const user = process.env.GMAIL_USER;
   if (!t || !user) return false;
 
   try {
-    await t.sendMail({ from: user, to, subject, text });
+    await t.sendMail({ from: user, to, subject, text, attachments });
     return true;
   } catch (e) {
     console.error("sendEmail error", e);

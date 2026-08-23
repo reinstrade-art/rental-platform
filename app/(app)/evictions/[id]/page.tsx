@@ -13,7 +13,15 @@ import {
   recordEnforced,
   recordVacated,
   withdrawEviction,
+  resendNoticeAction,
 } from "@/app/lib/actions";
+
+const DELIVERY_LABEL: Record<string, string> = {
+  HAND_DELIVERED: "hand-delivered",
+  REGISTERED_POST: "registered post",
+  EMAIL: "emailed",
+  WHATSAPP: "sent on WhatsApp",
+};
 
 function fmt(d: Date | string) {
   return new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
@@ -131,7 +139,7 @@ export default async function EvictionDetailPage({
               {ev.noticeServedAt && (
                 <li>
                   Notice served {fmt(ev.noticeServedAt)}
-                  {ev.noticeDeliveryMethod ? ` · ${ev.noticeDeliveryMethod === "HAND_DELIVERED" ? "hand-delivered" : "registered post"}` : ""}
+                  {ev.noticeDeliveryMethod ? ` · ${DELIVERY_LABEL[ev.noticeDeliveryMethod] ?? ev.noticeDeliveryMethod}` : ""}
                   {ev.noticeDeadline ? ` · vacate by ${fmt(ev.noticeDeadline)}` : ""}
                 </li>
               )}
@@ -202,8 +210,9 @@ export default async function EvictionDetailPage({
                 ))}
             </div>
             <p className="mt-2 text-xs text-silver-dark">
-              This is a convenience copy, not the legal service itself — the notice must still be hand-delivered
-              with a signed acknowledgment or sent by registered post.
+              Sent automatically by email or WhatsApp the moment a case opens, and treated as service — a
+              business decision, not a legal certainty; hand-delivery or registered post remain available below if
+              you&apos;d rather rely on those instead.
             </p>
           </div>
         </div>
@@ -213,6 +222,15 @@ export default async function EvictionDetailPage({
             <div className="rounded border p-4">
               <h2 className="font-semibold">Step 1 — Serve the notice</h2>
               <p className="mt-1 text-xs text-silver-dark">
+                No email or phone was on file when this case opened, so nothing went out automatically — try again
+                once the tenant&apos;s contact details are added, or record service by hand below.
+              </p>
+              <form action={resendNoticeAction.bind(null, ev.id)} className="mt-2">
+                <button className="rounded border px-3 py-1.5 text-xs transition-colors hover:bg-silver-light">
+                  Retry automatic send
+                </button>
+              </form>
+              <p className="mt-3 text-xs text-silver-dark">
                 Minimum 30 days from the date served, for a monthly periodic tenancy. A shorter deadline is refused.
               </p>
               <form action={recordNoticeServed} className="mt-3 flex flex-col gap-2">
@@ -226,6 +244,8 @@ export default async function EvictionDetailPage({
                   <select name="deliveryMethod" defaultValue="HAND_DELIVERED" className="mt-1 w-full rounded border px-3 py-2">
                     <option value="HAND_DELIVERED">Hand-delivered, signed for</option>
                     <option value="REGISTERED_POST">Registered post</option>
+                    <option value="EMAIL">Email</option>
+                    <option value="WHATSAPP">WhatsApp</option>
                   </select>
                 </label>
                 <label className="text-xs text-silver-dark">

@@ -3,6 +3,8 @@ import { prisma } from "./prisma";
 import { leaseBalance } from "./data";
 import { newDocument, drawHeader, drawRule, money, textRow, paletteFor, MARGIN, PAGE_WIDTH } from "./pdf-chrome";
 import type { OrgBranding } from "./pdf-chrome";
+import { sendEmail } from "./email";
+import { sendWhatsApp } from "./whatsapp";
 
 /**
  * Eviction under Kenyan law — grounds, the notice period the law sets, and
@@ -218,3 +220,79 @@ export async function buildNoticeDoc(organizationId: string, evictionId: string)
 }
 
 export const noticeDocName = (tenantName: string) => `Notice to Vacate - ${tenantName.replace(/[^\w\s-]/g, "").trim()}.pdf`;
+
+export type NoticeSendResult =
+  | { sent: true; method: "EMAIL" | "WHATSAPP" }
+  | { sent: false; reason: string };
+
+/**
+ * Generates the notice and delivers it electronically the moment a case is
+ * opened, treating a successful email/WhatsApp send as valid service —
+ * email is tried first (the PDF goes as a real attachment; a landlord can
+ * forward it as their own proof), WhatsApp second (a link to the same
+ * notice, matching the manual "Send on WhatsApp" button elsewhere in this
+ * flow). Only ever marks the case NOTICE_SERVED when a send actually
+ * succeeded — never on a guess, and never silently: a failure (no contact
+ * details on file, or the provider not configured) leaves the case at
+ * NOTICE_DRAFT for a staff member to serve by hand instead.
+ *
+ * This is a deliberate business decision to treat electronic delivery as
+ * sufficient service — not a legal certainty. Whether it actually holds up
+ * depends on the tenancy agreement's own terms and the venue a case
+ * eventually reaches; nothing here substitutes for that review.
+ */
+export async function sendAndServeNotice(organizationId: string, evictionId: string, origin: string): Promise<NoticeSendResult> {
+  const ev = await prisma.eviction.findFirst({
+    where: { id: evictionId, organizationId },
+    include: { lease: { include: { tenant: true, unit: { include: { property: true } }, organization: true } } },
+  });
+  if (!ev) return { sent: false, reason: "Case not found." };
+
+  const { tenant, unit } = ev.lease;
+  const where = `${unit.property.name}, unit ${unit.label}`;
+  const noticeUrl = `${origin}/api/eviction-notice/${ev.id}`;
+  const firstName = tenant.name.split(" ")[0];
+
+  let method: "EMAIL" | "WHATSAPP" | null = null;
+
+  if (tenant.email) {
+    const pdf = await buildNoticeDoc(organizationId, evictionId);
+    if (pdf) {
+      const ok = await sendEmail(
+        tenant.email,
+        `Notice to Vacate — ${where}`,
+        `Dear ${firstName},\n\nPlease find attached your Notice to Vacate for ${where}. This notice is also available online at: ${noticeUrl}\n\nRegards,\n${ev.lease.organization.letterheadName ?? ev.lease.organization.name}`,
+        [{ filename: noticeDocName(tenant.name), content: Buffer.from(pdf), contentType: "application/pdf" }],
+      );
+      if (ok) method = "EMAIL";
+    }
+  }
+
+  if (!method && tenant.phone) {
+    const ok = await sendWhatsApp(
+      tenant.phone,
+      `Dear ${firstName}, please find your Notice to Vacate for ${where} here: ${noticeUrl}`,
+    );
+    if (ok) method = "WHATSAPP";
+  }
+
+  if (!method) {
+    return {
+      sent: false,
+      reason: "Could not deliver electronically — no email/phone on file, or email/WhatsApp isn't configured yet. Serve by hand or registered post instead.",
+    };
+  }
+
+  const servedAt = new Date();
+  await prisma.eviction.update({
+    where: { id: ev.id },
+    data: {
+      status: "NOTICE_SERVED",
+      noticeServedAt: servedAt,
+      noticeDeliveryMethod: method,
+      noticeDeadline: earliestDeadline(servedAt),
+    },
+  });
+
+  return { sent: true, method };
+}

@@ -31,7 +31,7 @@ import { createInvitation, redeemInvitation } from "./invites";
 import { ingestTransaction, matchTransaction, ignoreTransaction, parseTransactionsCsv } from "./payments";
 import { logPlatformAccess } from "./audit";
 import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll } from "./import";
-import { GROUNDS_LIST, joinGrounds, validNoticeDeadline } from "./eviction";
+import { GROUNDS_LIST, joinGrounds, validNoticeDeadline, sendAndServeNotice } from "./eviction";
 import { applyBilling } from "./billing";
 import { postRepairExpense } from "./expenses";
 import { newTrialEndsAt, extendLicense, sendLicenseStkPush } from "./licensing";
@@ -1166,7 +1166,33 @@ export async function startEviction(formData: FormData) {
       status: "NOTICE_DRAFT",
     },
   });
+
+  // Auto-serve by email/WhatsApp the instant the case opens — see
+  // sendAndServeNotice's own comment for why this only advances the case
+  // to NOTICE_SERVED on a genuine successful send, never as a guess. A
+  // tenant with no contact details on file (or before email/WhatsApp is
+  // configured) simply stays at NOTICE_DRAFT for staff to serve by hand.
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
+  await sendAndServeNotice(s.organizationId, ev.id, origin);
+
   redirect(`/evictions/${ev.id}`);
+}
+
+/** Retries the automatic email/WhatsApp send — for a case still at NOTICE_DRAFT because the tenant had no contact details on file, or the provider wasn't configured yet when the case was opened. */
+export async function resendNoticeAction(evictionId: string) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+  await requireOpenEviction(s.organizationId, evictionId);
+
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
+  const result = await sendAndServeNotice(s.organizationId, evictionId, origin);
+
+  if (!result.sent) errorRedirect(`/evictions/${evictionId}`, result.reason);
+  redirect(`/evictions/${evictionId}`);
 }
 
 /**
