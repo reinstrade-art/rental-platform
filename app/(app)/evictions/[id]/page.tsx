@@ -28,10 +28,17 @@ const STEPS = [
   { key: "ENFORCED", label: "Enforced" },
 ];
 
-export default async function EvictionDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EvictionDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   const { id } = await params;
+  const { error } = await searchParams;
   const ev = await getEviction(s.organizationId, id);
   if (!ev) notFound();
 
@@ -54,6 +61,7 @@ export default async function EvictionDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="flex flex-col gap-6">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div>
         <Link href="/evictions" className="text-xs underline text-silver-dark">
           All evictions

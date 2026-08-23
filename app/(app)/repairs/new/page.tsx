@@ -6,10 +6,11 @@ import { createRepair } from "@/app/lib/actions";
 import { REPAIR_PRIORITIES } from "@/app/lib/constants";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
-export default async function NewRepairPage() {
+export default async function NewRepairPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/dashboard");
+  const { error } = await searchParams;
   const properties = await getProperties(s.organizationId);
 
   return (
@@ -18,6 +19,7 @@ export default async function NewRepairPage() {
         All repairs
       </Link>
       <h1 className="mt-1 text-lg font-semibold">Report a repair</h1>
+      {error && <div className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
       <form action={createRepair} className="mt-4 flex flex-col gap-3">
         <select name="propertyId" required className="rounded border px-3 py-2">
           <option value="">Select property</option>

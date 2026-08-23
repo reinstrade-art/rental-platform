@@ -31,13 +31,20 @@ function PendingNote({ request }: { request: { steps: unknown[] } | null }) {
   );
 }
 
-export default async function RepairDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RepairDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   const tier = await getOrgTier(s.organizationId);
   if (!hasFeature(tier, "REPAIRS")) redirect("/dashboard");
   const canSuppliers = hasFeature(tier, "SUPPLIERS");
   const { id } = await params;
+  const { error } = await searchParams;
   const [repair, vendors, suppliers] = await Promise.all([
     getRepair(s.organizationId, id),
     getVendors(s.organizationId),
@@ -55,6 +62,7 @@ export default async function RepairDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div>
         <Link href="/repairs" className="text-xs underline text-silver-dark">
           All repairs

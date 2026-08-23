@@ -18,13 +18,14 @@ function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-export default async function RepairsPage() {
+export default async function RepairsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
 
   const tier = await getOrgTier(s.organizationId);
   if (!hasFeature(tier, "REPAIRS")) redirect("/dashboard");
   const canRecur = hasFeature(tier, "RECURRING_JOBS");
+  const { error } = await searchParams;
 
   const [repairs, recurringJobs, properties, vendors] = await Promise.all([
     getRepairs(s.organizationId),
@@ -41,6 +42,7 @@ export default async function RepairsPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Repairs</h1>
         <Link href="/repairs/new" className="rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">

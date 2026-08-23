@@ -5,10 +5,11 @@ import { getEvictions } from "@/app/lib/data";
 import { GROUNDS, STATUS_LABEL, OPEN_STATUSES, splitGrounds } from "@/app/lib/eviction";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
-export default async function EvictionsPage() {
+export default async function EvictionsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "EVICTIONS")) redirect("/dashboard");
+  const { error } = await searchParams;
   const evictions = await getEvictions(s.organizationId);
 
   const open = evictions.filter((e) => OPEN_STATUSES.includes(e.status));
@@ -17,6 +18,7 @@ export default async function EvictionsPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div>
         <h1 className="text-lg font-semibold">Evictions</h1>
         <p className="text-sm text-silver-dark">

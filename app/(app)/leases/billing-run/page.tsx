@@ -17,7 +17,7 @@ function monthLabel(period: string) {
 export default async function BillingRunPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; billed?: string; leases?: string; charges?: string }>;
+  searchParams: Promise<{ period?: string; billed?: string; leases?: string; charges?: string; error?: string }>;
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
@@ -40,6 +40,8 @@ export default async function BillingRunPage({
           safe: anything already billed is passed over.
         </p>
       </div>
+
+      {sp.error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{sp.error}</div>}
 
       {sp.billed === "ok" && (
         <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">

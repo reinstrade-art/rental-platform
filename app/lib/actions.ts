@@ -60,11 +60,11 @@ import { attachFilesToMessage } from "./attachments";
 // --- auth --------------------------------------------------------------
 
 export async function platformSetup(formData: FormData) {
-  if (!(await needsPlatformSetup())) throw new Error("Platform is already set up.");
+  if (!(await needsPlatformSetup())) errorRedirect("/setup", "Platform is already set up.");
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
-  if (!email || password.length < 8) throw new Error("Email and an 8+ character password are required.");
+  if (!email || password.length < 8) errorRedirect("/setup", "Email and an 8+ character password are required.");
 
   const user = await prisma.user.create({
     data: { email, passwordHash: await hashPassword(password), role: "PLATFORM_ADMIN" },
@@ -219,7 +219,7 @@ export async function updateOrgTier(organizationId: string, formData: FormData) 
   if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
 
   const tier = String(formData.get("tier") ?? "");
-  if (!ORG_TIERS.includes(tier as (typeof ORG_TIERS)[number])) throw new Error("Invalid tier.");
+  if (!ORG_TIERS.includes(tier as (typeof ORG_TIERS)[number])) errorRedirect(`/platform/${organizationId}`, "Invalid tier.");
 
   await prisma.organization.update({ where: { id: organizationId }, data: { tier } });
   await logPlatformAccess(s.userId, organizationId, "SET_ORG_TIER", `Tier set to ${tier}`);
@@ -244,7 +244,7 @@ export async function recordLicensePayment(organizationId: string, formData: For
   const method = String(formData.get("method") ?? "BANK");
   const reference = String(formData.get("reference") ?? "").trim() || null;
   const periodDays = Number(formData.get("periodDays") ?? 30) || 30;
-  if (!amount || amount <= 0) throw new Error("Enter a positive amount.");
+  if (!amount || amount <= 0) errorRedirect(`/platform/${organizationId}`, "Enter a positive amount.");
 
   await extendLicense(organizationId, { amount, method, reference, periodDays, recordedBy: s.userId });
   await logPlatformAccess(s.userId, organizationId, "RECORD_LICENSE_PAYMENT", `KES ${amount} via ${method}`);
@@ -259,8 +259,8 @@ export async function sendLicenseStkAction(organizationId: string, formData: For
   const phone = String(formData.get("phone") ?? "").trim();
   const amount = Number(formData.get("amount") ?? 0);
   const periodDays = Number(formData.get("periodDays") ?? 30) || 30;
-  if (!phone) throw new Error("Enter a phone number to send the prompt to.");
-  if (!amount || amount <= 0) throw new Error("Enter a positive amount.");
+  if (!phone) errorRedirect(`/platform/${organizationId}`, "Enter a phone number to send the prompt to.");
+  if (!amount || amount <= 0) errorRedirect(`/platform/${organizationId}`, "Enter a positive amount.");
 
   const h = await headers();
   const host = h.get("host");
@@ -270,7 +270,7 @@ export async function sendLicenseStkAction(organizationId: string, formData: For
     : `${proto}://${host}/api/mpesa/license-callback`;
 
   const result = await sendLicenseStkPush(organizationId, phone, amount, periodDays, s.userId, callbackUrl);
-  if (!result.ok) throw new Error(result.reason);
+  if (!result.ok) errorRedirect(`/platform/${organizationId}`, result.reason);
   await logPlatformAccess(s.userId, organizationId, "SEND_LICENSE_STK", `KES ${amount} to ${phone}`);
   redirect("/platform");
 }
@@ -452,7 +452,7 @@ export async function updateBranding(formData: FormData) {
 
   const brandColor = String(formData.get("brandColor") ?? "").trim();
   if (brandColor && !/^#[0-9a-fA-F]{6}$/.test(brandColor)) {
-    throw new Error("Brand color must be a hex value like #1E3350.");
+    errorRedirect("/settings", "Brand color must be a hex value like #1E3350.");
   }
 
   await prisma.organization.update({
@@ -490,10 +490,10 @@ export async function updateMpesaSettings(formData: FormData) {
   if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can configure M-Pesa.");
 
   const env = String(formData.get("mpesaEnv") ?? "sandbox");
-  if (env !== "sandbox" && env !== "production") throw new Error("Invalid environment.");
+  if (env !== "sandbox" && env !== "production") errorRedirect("/settings", "Invalid environment.");
 
   const accountType = String(formData.get("mpesaAccountType") ?? "PAYBILL");
-  if (accountType !== "PAYBILL" && accountType !== "TILL") throw new Error("Invalid account type.");
+  if (accountType !== "PAYBILL" && accountType !== "TILL") errorRedirect("/settings", "Invalid account type.");
 
   await prisma.organization.update({
     where: { id: s.organizationId },
@@ -1112,7 +1112,7 @@ export async function runMonthlyBilling(formData: FormData) {
   requireFeature(await getOrgTier(s.organizationId), "BILLING_RUN");
 
   const period = String(formData.get("period") ?? "");
-  if (!/^\d{4}-\d{2}$/.test(period)) throw new Error("Select a valid month.");
+  if (!/^\d{4}-\d{2}$/.test(period)) errorRedirect("/leases/billing-run", "Select a valid month.");
 
   const result = await applyBilling(s.organizationId, period);
   redirect(`/leases/billing-run?period=${period}&billed=ok&leases=${result.leases}&charges=${result.charges}`);
@@ -1129,14 +1129,14 @@ const optStr = (fd: FormData, k: string) => str(fd, k) || null;
 
 async function requireOwnedLease(organizationId: string, leaseId: string) {
   const lease = await prisma.lease.findFirst({ where: { id: leaseId, organizationId } });
-  if (!lease) throw new Error("Lease not found.");
+  if (!lease) errorRedirect("/evictions", "Lease not found.");
   return lease;
 }
 
 async function requireOpenEviction(organizationId: string, id: string) {
   const ev = await prisma.eviction.findFirst({ where: { id, organizationId } });
-  if (!ev) throw new Error("Eviction case not found.");
-  if (["ENFORCED", "WITHDRAWN", "VACATED"].includes(ev.status)) throw new Error("This case is already closed.");
+  if (!ev) errorRedirect("/evictions", "Eviction case not found.");
+  if (["ENFORCED", "WITHDRAWN", "VACATED"].includes(ev.status)) errorRedirect(`/evictions/${id}`, "This case is already closed.");
   return ev;
 }
 
@@ -1152,10 +1152,10 @@ export async function startEviction(formData: FormData) {
   const existing = await prisma.eviction.findFirst({
     where: { leaseId, organizationId: s.organizationId, status: { notIn: ["ENFORCED", "WITHDRAWN", "VACATED"] } },
   });
-  if (existing) throw new Error("There is already an open eviction case for this lease.");
+  if (existing) errorRedirect(`/leases/${leaseId}`, "There is already an open eviction case for this lease.");
 
   const codes = GROUNDS_LIST.filter((g) => formData.get(`ground_${g}`) === "on");
-  if (codes.length === 0) throw new Error("Select at least one ground.");
+  if (codes.length === 0) errorRedirect(`/leases/${leaseId}`, "Select at least one ground.");
 
   const ev = await prisma.eviction.create({
     data: {
@@ -1183,8 +1183,8 @@ export async function recordNoticeServed(formData: FormData) {
 
   const servedAt = new Date(str(formData, "servedAt"));
   const deadline = new Date(str(formData, "deadline"));
-  if (isNaN(servedAt.getTime()) || isNaN(deadline.getTime())) throw new Error("Served date and deadline are required.");
-  if (!validNoticeDeadline(servedAt, deadline)) throw new Error("The deadline must be at least 30 days after the served date.");
+  if (isNaN(servedAt.getTime()) || isNaN(deadline.getTime())) errorRedirect(`/evictions/${id}`, "Served date and deadline are required.");
+  if (!validNoticeDeadline(servedAt, deadline)) errorRedirect(`/evictions/${id}`, "The deadline must be at least 30 days after the served date.");
 
   await prisma.eviction.update({
     where: { id: ev.id },
@@ -1227,7 +1227,7 @@ export async function recordCourtFiled(formData: FormData) {
   const ev = await requireOpenEviction(s.organizationId, id);
 
   const courtVenue = str(formData, "courtVenue");
-  if (!["RRT", "MAGISTRATE", "ELC"].includes(courtVenue)) throw new Error("Select a valid venue.");
+  if (!["RRT", "MAGISTRATE", "ELC"].includes(courtVenue)) errorRedirect(`/evictions/${id}`, "Select a valid venue.");
 
   const filedAtStr = str(formData, "filedAt");
   await prisma.eviction.update({
@@ -1252,7 +1252,7 @@ export async function recordOrderObtained(formData: FormData) {
 
   const vacateByStr = str(formData, "vacateBy");
   const vacateBy = new Date(vacateByStr);
-  if (isNaN(vacateBy.getTime())) throw new Error("A vacant-possession date is required.");
+  if (isNaN(vacateBy.getTime())) errorRedirect(`/evictions/${id}`, "A vacant-possession date is required.");
 
   const obtainedAtStr = str(formData, "obtainedAt");
   await prisma.eviction.update({
@@ -1282,7 +1282,7 @@ export async function recordEnforced(formData: FormData) {
 
   const id = str(formData, "id");
   const ev = await requireOpenEviction(s.organizationId, id);
-  if (!ev.orderObtainedAt) throw new Error("An eviction order must be on record before this can be enforced.");
+  if (!ev.orderObtainedAt) errorRedirect(`/evictions/${id}`, "An eviction order must be on record before this can be enforced.");
 
   await prisma.eviction.update({
     where: { id: ev.id },
@@ -1551,13 +1551,13 @@ export async function createRepair(formData: FormData) {
   const propertyId = String(formData.get("propertyId") ?? "");
   const unitId = String(formData.get("unitId") ?? "").trim() || null;
   const title = String(formData.get("title") ?? "").trim();
-  if (!propertyId || !title) throw new Error("Property and title are required.");
+  if (!propertyId || !title) errorRedirect("/repairs/new", "Property and title are required.");
 
   const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
-  if (!property) throw new Error("Property not found.");
+  if (!property) errorRedirect("/repairs/new", "Property not found.");
   if (unitId) {
     const unit = await prisma.unit.findFirst({ where: { id: unitId, organizationId: s.organizationId, propertyId } });
-    if (!unit) throw new Error("Unit not found on that property.");
+    if (!unit) errorRedirect("/repairs/new", "Unit not found on that property.");
   }
 
   await prisma.repair.create({
@@ -1576,7 +1576,7 @@ export async function createRepair(formData: FormData) {
 
 async function requireOwnedRepair(organizationId: string, repairId: string) {
   const repair = await prisma.repair.findFirst({ where: { id: repairId, organizationId } });
-  if (!repair) throw new Error("Repair not found.");
+  if (!repair) errorRedirect("/repairs", "Repair not found.");
   return repair;
 }
 
@@ -1600,10 +1600,10 @@ export async function submitQuote(repairId: string, formData: FormData) {
 
   const vendorId = String(formData.get("vendorId") ?? "");
   const amount = Number(formData.get("amount") ?? 0);
-  if (!vendorId || !amount) throw new Error("Vendor and amount are required.");
+  if (!vendorId || !amount) errorRedirect(`/repairs/${repairId}`, "Vendor and amount are required.");
 
   const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, organizationId: s.organizationId } });
-  if (!vendor) throw new Error("Vendor not found.");
+  if (!vendor) errorRedirect(`/repairs/${repairId}`, "Vendor not found.");
 
   await prisma.quote.upsert({
     where: { repairId_vendorId: { repairId, vendorId } },
@@ -1631,7 +1631,7 @@ export async function acceptQuote(repairId: string, quoteId: string) {
   await requireOwnedRepair(s.organizationId, repairId);
 
   const quote = await prisma.quote.findFirst({ where: { id: quoteId, repairId, organizationId: s.organizationId } });
-  if (!quote) throw new Error("Quote not found.");
+  if (!quote) errorRedirect(`/repairs/${repairId}`, "Quote not found.");
 
   await raiseApproval(s.organizationId, "QUOTE_AWARD", repairId, s.userId, { quoteId });
 }
@@ -1650,10 +1650,10 @@ export async function approveCost(repairId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
   const repair = await requireOwnedRepair(s.organizationId, repairId);
-  if (!repair.workApprovedAt) throw new Error("Work must be approved before cost can be approved.");
+  if (!repair.workApprovedAt) errorRedirect(`/repairs/${repairId}`, "Work must be approved before cost can be approved.");
 
   const approvedCost = Number(formData.get("approvedCost") ?? 0);
-  if (!approvedCost) throw new Error("Approved cost is required.");
+  if (!approvedCost) errorRedirect(`/repairs/${repairId}`, "Approved cost is required.");
 
   await raiseApproval(s.organizationId, "REPAIR_COST", repairId, s.userId, { approvedCost });
 }
@@ -1669,7 +1669,7 @@ export async function markRepairDone(repairId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
   const repair = await requireOwnedRepair(s.organizationId, repairId);
-  if (!repair.costApprovedAt) throw new Error("Cost must be approved before a repair can be marked done.");
+  if (!repair.costApprovedAt) errorRedirect(`/repairs/${repairId}`, "Cost must be approved before a repair can be marked done.");
 
   const finalCost = Number(formData.get("finalCost") ?? repair.approvedCost ?? 0);
   await prisma.repair.update({
@@ -1696,16 +1696,16 @@ export async function createRecurringJob(formData: FormData) {
   const cost = Number(formData.get("cost") ?? 0);
   const frequencyDays = Number(formData.get("frequencyDays") ?? 0);
   if (!title || !propertyId || cost <= 0 || frequencyDays <= 0) {
-    throw new Error("Fill in the job, property, cost, and frequency.");
+    errorRedirect("/repairs", "Fill in the job, property, cost, and frequency.");
   }
 
   const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
-  if (!property) throw new Error("Property not found.");
+  if (!property) errorRedirect("/repairs", "Property not found.");
 
   const vendorId = optStr(formData, "vendorId");
   if (vendorId) {
     const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, organizationId: s.organizationId } });
-    if (!vendor) throw new Error("Vendor not found.");
+    if (!vendor) errorRedirect("/repairs", "Vendor not found.");
   }
 
   await prisma.recurringJob.create({
@@ -1751,8 +1751,8 @@ export async function inviteTenant(tenantId: string) {
   if (!requireStaff(s)) throw new Error("Not authorized.");
 
   const tenant = await prisma.tenant.findFirst({ where: { id: tenantId, organizationId: s.organizationId } });
-  if (!tenant) throw new Error("Tenant not found.");
-  if (!tenant.email && !tenant.phone) throw new Error("Tenant needs an email or phone on file before inviting.");
+  if (!tenant) errorRedirect("/tenants", "Tenant not found.");
+  if (!tenant.email && !tenant.phone) errorRedirect(`/tenants/${tenantId}`, "Tenant needs an email or phone on file before inviting.");
 
   const invite = await createInvitation(
     s.organizationId,
@@ -2003,8 +2003,8 @@ export async function setStaffRole(userId: string, role: "MANAGER" | "VIEWER") {
   if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can change staff roles.");
 
   const user = await prisma.user.findFirst({ where: { id: userId, organizationId: s.organizationId } });
-  if (!user) throw new Error("Not found.");
-  if (user.role === "ADMIN") throw new Error("Cannot change the admin's role.");
+  if (!user) errorRedirect("/users", "Not found.");
+  if (user.role === "ADMIN") errorRedirect("/users", "Cannot change the admin's role.");
 
   await prisma.user.update({ where: { id: userId }, data: { role } });
 }
@@ -2015,8 +2015,8 @@ export async function disableStaff(userId: string) {
   if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can disable staff.");
 
   const user = await prisma.user.findFirst({ where: { id: userId, organizationId: s.organizationId } });
-  if (!user) throw new Error("Not found.");
-  if (user.role === "ADMIN") throw new Error("Cannot disable the admin.");
+  if (!user) errorRedirect("/users", "Not found.");
+  if (user.role === "ADMIN") errorRedirect("/users", "Cannot disable the admin.");
 
   await prisma.user.update({ where: { id: userId }, data: { disabledAt: new Date() } });
   await revokeAllSessions(userId);
