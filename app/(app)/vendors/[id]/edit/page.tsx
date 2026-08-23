@@ -5,12 +5,19 @@ import { prisma } from "@/app/lib/prisma";
 import { updateVendor } from "@/app/lib/actions";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
-export default async function EditVendorPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditVendorPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/dashboard");
 
   const { id } = await params;
+  const { error } = await searchParams;
   const vendor = await prisma.vendor.findFirst({ where: { id, organizationId: s.organizationId } });
   if (!vendor) notFound();
 
@@ -20,6 +27,7 @@ export default async function EditVendorPage({ params }: { params: Promise<{ id:
         Back to {vendor.name}
       </Link>
       <h1 className="mt-1 text-lg font-semibold">Edit vendor</h1>
+      {error && <div className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
       <form action={updateVendor.bind(null, vendor.id)} className="mt-4 flex flex-col gap-3">
         <input name="name" required defaultValue={vendor.name} placeholder="Vendor / company name" className="rounded border px-3 py-2" />
         <input name="trade" defaultValue={vendor.trade ?? ""} placeholder="Trade (e.g. Plumbing)" className="rounded border px-3 py-2" />

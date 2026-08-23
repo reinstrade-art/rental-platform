@@ -5,10 +5,17 @@ import { prisma } from "@/app/lib/prisma";
 import { updateLease } from "@/app/lib/actions";
 import { LEASE_STATUSES } from "@/app/lib/constants";
 
-export default async function EditLeasePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditLeasePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   const { id } = await params;
+  const { error } = await searchParams;
   const lease = await prisma.lease.findFirst({
     where: { id, organizationId: s.organizationId },
     include: { tenant: true, unit: { include: { property: true } } },
@@ -29,6 +36,7 @@ export default async function EditLeasePage({ params }: { params: Promise<{ id: 
       <p className="text-sm text-silver-dark">
         {lease.tenant.name} — {lease.unit.property.name} / {lease.unit.label}
       </p>
+      {error && <div className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
       <form action={updateLease.bind(null, lease.id)} className="mt-4 flex flex-col gap-3">
         <label className="text-xs text-silver-dark">
           Tenant

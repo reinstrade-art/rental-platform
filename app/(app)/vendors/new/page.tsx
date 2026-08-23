@@ -4,10 +4,11 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { createVendor } from "@/app/lib/actions";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 
-export default async function NewVendorPage() {
+export default async function NewVendorPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/dashboard");
+  const { error } = await searchParams;
 
   return (
     <div className="max-w-sm">
@@ -15,6 +16,7 @@ export default async function NewVendorPage() {
         All vendors
       </Link>
       <h1 className="mt-1 text-lg font-semibold">Add vendor</h1>
+      {error && <div className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
       <form action={createVendor} className="mt-4 flex flex-col gap-3">
         <input name="name" required placeholder="Vendor / company name" className="rounded border px-3 py-2" />
         <input name="trade" placeholder="Trade (e.g. Plumbing)" className="rounded border px-3 py-2" />

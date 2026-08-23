@@ -15,15 +15,17 @@ function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-export default async function SuppliersPage() {
+export default async function SuppliersPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "SUPPLIERS")) redirect("/dashboard");
+  const { error } = await searchParams;
 
   const suppliers = await getSuppliers(s.organizationId);
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div>
         <h1 className="text-lg font-semibold">Suppliers</h1>
         <p className="text-sm text-silver-dark">

@@ -4,10 +4,17 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { updateTenant } from "@/app/lib/actions";
 
-export default async function EditTenantPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditTenantPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   const { id } = await params;
+  const { error } = await searchParams;
   const tenant = await prisma.tenant.findFirst({ where: { id, organizationId: s.organizationId } });
   if (!tenant) notFound();
 
@@ -17,6 +24,7 @@ export default async function EditTenantPage({ params }: { params: Promise<{ id:
         Back to {tenant.name}
       </Link>
       <h1 className="mt-1 text-lg font-semibold">Edit tenant</h1>
+      {error && <div className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
       <form action={updateTenant.bind(null, tenant.id)} className="mt-4 flex flex-col gap-3">
         <input name="name" required defaultValue={tenant.name} placeholder="Full name" className="rounded border px-3 py-2" />
         <input name="phone" defaultValue={tenant.phone ?? ""} placeholder="Phone (optional)" className="rounded border px-3 py-2" />

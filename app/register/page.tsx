@@ -9,7 +9,8 @@ const PREVIEW_ORG = {
   letterheadEmail: null,
 };
 
-export default function RegisterPage() {
+export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
   return (
     <main className="flex min-h-screen flex-col items-center gap-6 bg-ink-photo px-4 py-10">
       <img src="/logo.svg" alt="Reins Realty" className="w-48 shrink-0" />
@@ -18,6 +19,7 @@ export default function RegisterPage() {
         <p className="mt-1 text-sm text-silver-dark">
           Enter the invitation code your office gave you, along with the email or phone number it was issued to.
         </p>
+        {error && <div className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
         <form action={registerWithInvite} className="mt-6 flex flex-col gap-3">
           <input
             name="code"

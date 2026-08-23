@@ -13,15 +13,17 @@ const STATUS_COLOR: Record<string, string> = {
   IGNORED: "text-silver-dark",
 };
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  const { error } = await searchParams;
 
   const [transactions, leases] = await Promise.all([getTransactions(s.organizationId), getLeases(s.organizationId)]);
   const unmatched = transactions.filter((t) => t.status === "UNMATCHED");
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div>
         <h1 className="text-lg font-semibold">Payments ingestion</h1>
         <p className="text-sm text-silver-dark">

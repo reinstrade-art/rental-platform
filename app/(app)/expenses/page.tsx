@@ -20,10 +20,11 @@ function label(s: string) {
   return s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export default async function ExpensesPage() {
+export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "EXPENSES")) redirect("/dashboard");
+  const { error } = await searchParams;
 
   const [trend, expenses, properties] = await Promise.all([
     getCashflowTrend(s.organizationId, 6),
@@ -43,6 +44,7 @@ export default async function ExpensesPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <div>
         <h1 className="text-lg font-semibold">Expenses</h1>
         <p className="text-sm text-silver-dark">
