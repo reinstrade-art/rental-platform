@@ -93,6 +93,19 @@ export async function redeemInvitation(
   if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
   if (!consented) return { ok: false, error: "You must agree to the data notice to register." };
 
+  // User.email/phone are unique across the whole table, not per org — the
+  // same address redeeming a second invite (a repeat test, or someone
+  // already registered elsewhere) would otherwise crash the transaction
+  // below with a raw SQLite constraint error instead of a message.
+  const existing = await prisma.user.findFirst({
+    where: {
+      OR: [invite.email ? { email: invite.email } : undefined, invite.phone ? { phone: invite.phone } : undefined].filter(
+        (c): c is { email: string } | { phone: string } => Boolean(c),
+      ),
+    },
+  });
+  if (existing) return { ok: false, error: "An account already exists for that email or phone — try signing in instead." };
+
   const user = await prisma.$transaction(async (tx) => {
     const created = await tx.user.create({
       data: {
