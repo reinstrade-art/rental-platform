@@ -50,17 +50,28 @@ export async function createInvitation(
   // Best-effort — a failed send here doesn't fail the invite itself; staff
   // can still read the code off the confirmation page, or use its WhatsApp
   // button by hand. sendEmail/sendWhatsApp are themselves no-ops until their
-  // provider env vars are configured, so this is silent until then.
+  // provider env vars are configured, so this comes back false rather than
+  // throwing — the caller (and ultimately the confirmation page) decides
+  // what to show for that, instead of it being silent.
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
   const message = `Hi, please register your account here: ${origin}/register — your invitation code is ${code}. It expires ${expiresAt.toLocaleDateString()}.`;
-  await Promise.all([
+  const [emailSent, whatsappSent] = await Promise.all([
     invite.email ? sendEmail(invite.email, "Your registration invite", message).catch(() => false) : Promise.resolve(false),
     invite.phone ? sendWhatsApp(invite.phone, message).catch(() => false) : Promise.resolve(false),
   ]);
 
-  return invite;
+  return { ...invite, emailSent, whatsappSent };
+}
+
+/** Builds the confirmation-page URL, carrying the delivery outcome through the redirect so the page can say what actually happened rather than assuming it worked. */
+export function inviteRedirectUrl(invite: { id: string; emailSent: boolean; whatsappSent: boolean }): string {
+  const params = new URLSearchParams();
+  if (invite.emailSent) params.set("emailSent", "1");
+  if (invite.whatsappSent) params.set("whatsappSent", "1");
+  const qs = params.toString();
+  return `/invites/${invite.id}${qs ? `?${qs}` : ""}`;
 }
 
 export type RedeemResult =

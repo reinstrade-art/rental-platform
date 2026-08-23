@@ -4,10 +4,17 @@ import { getSession, requireTenantsAccess } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { waLink } from "@/app/lib/phone";
 
-export default async function InviteConfirmationPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function InviteConfirmationPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ emailSent?: string; whatsappSent?: string }>;
+}) {
   const s = await getSession();
   if (!requireTenantsAccess(s)) redirect("/login");
   const { id } = await params;
+  const { emailSent, whatsappSent } = await searchParams;
 
   const invite = await prisma.invitation.findFirst({ where: { id, organizationId: s.organizationId } });
   if (!invite) notFound();
@@ -27,6 +34,30 @@ export default async function InviteConfirmationPage({ params }: { params: Promi
   return (
     <div className="max-w-sm">
       <h1 className="text-lg font-semibold">Invitation created</h1>
+
+      {invite.email && (
+        <div
+          className={`mt-3 rounded border px-3 py-2 text-sm ${
+            emailSent ? "border-green-300 bg-green-50 text-green-700" : "border-orange-300 bg-orange-50 text-orange-800"
+          }`}
+        >
+          {emailSent
+            ? `Emailed to ${invite.email}.`
+            : `Could not email ${invite.email} — check that email sending is configured in Settings, or share the code below directly.`}
+        </div>
+      )}
+      {invite.phone && (
+        <div
+          className={`mt-2 rounded border px-3 py-2 text-sm ${
+            whatsappSent ? "border-green-300 bg-green-50 text-green-700" : "border-orange-300 bg-orange-50 text-orange-800"
+          }`}
+        >
+          {whatsappSent
+            ? `Sent to ${invite.phone} on WhatsApp.`
+            : `Didn't send automatically to ${invite.phone} — use the "Send on WhatsApp" button below, or share the code directly.`}
+        </div>
+      )}
+
       <p className="mt-2 text-sm text-silver-dark">
         Give this code to {invite.email ?? invite.phone}, along with the address/number it was issued to — they&apos;ll
         need both to register at <span className="font-mono">/register</span>.

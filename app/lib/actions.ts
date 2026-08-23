@@ -27,7 +27,7 @@ import {
 } from "./auth";
 import { checkLock, recordFailure, clearFailures } from "./throttle";
 import { raiseApproval, signApproval } from "./approvals";
-import { createInvitation, redeemInvitation } from "./invites";
+import { createInvitation, redeemInvitation, inviteRedirectUrl } from "./invites";
 import { ingestTransaction, matchTransaction, ignoreTransaction, parseTransactionsCsv } from "./payments";
 import { logPlatformAccess } from "./audit";
 import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll } from "./import";
@@ -768,7 +768,7 @@ export async function createTenant(formData: FormData) {
       errorRedirect(`/tenants/${tenant.id}`, "Added, but a phone or email is needed before inviting — add one, then invite.");
     }
     const invite = await createInvitation(s.organizationId, "TENANT", { tenantId: tenant.id }, { email: email ?? undefined, phone: phone ?? undefined });
-    redirect(`/invites/${invite.id}`);
+    redirect(inviteRedirectUrl(invite));
   }
 
   redirect("/tenants");
@@ -1786,7 +1786,7 @@ export async function inviteTenant(tenantId: string) {
     { tenantId },
     { email: tenant.email ?? undefined, phone: tenant.phone ?? undefined },
   );
-  redirect(`/invites/${invite.id}`);
+  redirect(inviteRedirectUrl(invite));
 }
 
 /**
@@ -1820,7 +1820,7 @@ export async function inviteNewTenant(formData: FormData) {
     { tenantId: tenant.id },
     { email: email ?? undefined, phone: phone ?? undefined },
   );
-  redirect(`/invites/${invite.id}`);
+  redirect(inviteRedirectUrl(invite));
 }
 
 export async function inviteVendor(vendorId: string, formData: FormData) {
@@ -1840,7 +1840,7 @@ export async function inviteVendor(vendorId: string, formData: FormData) {
     { vendorId },
     { email: vendor.email ?? undefined, phone: vendor.phone ?? undefined },
   );
-  redirect(`/invites/${invite.id}`);
+  redirect(inviteRedirectUrl(invite));
 }
 
 /**
@@ -1860,7 +1860,7 @@ export async function inviteCaretaker(propertyId: string, formData: FormData) {
   if (!email && !phone) errorRedirect(`/properties/${propertyId}`, "Enter a phone number or email to invite a caretaker.");
 
   const invite = await createInvitation(s.organizationId, "CARETAKER", { propertyId }, { email, phone });
-  redirect(`/invites/${invite.id}`);
+  redirect(inviteRedirectUrl(invite));
 }
 
 // --- public: registration --------------------------------------------------
@@ -2003,7 +2003,7 @@ export async function inviteStaff(formData: FormData) {
       { propertyId },
       { email: email || undefined, phone: phone || undefined },
     );
-    redirect(`/invites/${invite.id}`);
+    redirect(inviteRedirectUrl(invite));
   }
 
   if (!email) errorRedirect("/users", "Email is required.");
@@ -2020,7 +2020,7 @@ export async function inviteStaff(formData: FormData) {
   }
 
   const invite = await createInvitation(s.organizationId, role, {}, { email });
-  redirect(`/invites/${invite.id}`);
+  redirect(inviteRedirectUrl(invite));
 }
 
 /** Promotes/demotes between MANAGER and VIEWER. Never targets ADMIN — that seat is fixed at org creation. */
