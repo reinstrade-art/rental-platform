@@ -71,7 +71,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             : `Your license expires in ${license!.daysLeft} day${license!.daysLeft === 1 ? "" : "s"}. Renew to avoid losing access.`}
         </div>
       )}
-      <main className="overflow-x-hidden px-6 py-6">{children}</main>
+      <main className="px-6 py-6">{children}</main>
     </AppShell>
   );
 }

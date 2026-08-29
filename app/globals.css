@@ -93,6 +93,20 @@ body {
     outline: 2px solid var(--color-gold);
     outline-offset: 2px;
   }
+
+  /* Every list page's <th>/<td> across the app only ever sets vertical
+     padding (`py-2`) and relies on `border-collapse` -- with no horizontal
+     gap at all, adjacent columns visually run together ("TENANT UNIT
+     BALANCE" reads as one word) whenever a column's own content doesn't
+     happen to leave whitespace. Barely noticed on wide desktop columns;
+     glaring once `white-space: nowrap` below stops accidental wrapping from
+     doing the job on narrow screens. One rule here beats editing the ~80
+     <th>/<td> call sites across ~20 files that never had it. */
+  th,
+  td {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
 }
 
 /*
