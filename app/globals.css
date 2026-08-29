@@ -95,6 +95,23 @@ body {
   }
 }
 
+/*
+ * Every list page in the app hand-rolls its own <table> with no shared
+ * wrapper, so there's no single component to fix for narrow screens.
+ * Forcing the table itself to scroll horizontally (rather than letting
+ * flexbox/grid shrink its columns) keeps headers like "TENANT / UNIT /
+ * MONTHLY RENT" from being crushed into an unreadable run-on below the
+ * md breakpoint -- the same width the sidebar drawer also kicks in at.
+ */
+@media (max-width: 767px) {
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 @layer components {
   /* Brushed-metal surface — table header bands, thin edges on the dark
      shells. Not applied to rounded elements; see --gradient-metal above. */

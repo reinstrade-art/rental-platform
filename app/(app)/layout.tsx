@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
+import { AppShell } from "@/app/components/app-shell";
 import { getSession, requireTenantsAccess } from "@/app/lib/auth";
 import { isTenant, isTradesman, isCaretaker } from "@/app/lib/roles";
 import { logout, endImpersonationAction } from "@/app/lib/actions";
@@ -53,49 +53,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     : NAV.filter((item) => !item.feature || hasFeature(tier, item.feature));
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col bg-ink-photo text-lily">
-        <div className="h-1 shrink-0 bg-metal" />
-        <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6">
-          <div className="mb-6 border-l-2 border-gold pl-2 font-semibold tracking-tight">
-            {org?.name ?? "Organization"}
-          </div>
-          <nav className="flex flex-col gap-1">
-            {nav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded px-2 py-1.5 text-sm text-lily/85 transition-colors hover:bg-ink-soft hover:text-gold"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <form action={logout} className="mt-6">
-            <button className="text-sm text-silver underline hover:text-gold">Sign out</button>
+    <AppShell orgName={org?.name ?? "Organization"} nav={nav} logoutAction={logout}>
+      {s.impersonatedBy && (
+        <div className="flex items-center justify-between border-b border-silver bg-silver-light px-6 py-2 text-sm text-ink">
+          <span>
+            Signed in as <strong>{s.email ?? s.phone}</strong> by {s.impersonatedBy.email} for support.
+          </span>
+          <form action={endImpersonationAction}>
+            <button className="underline">Return to my account</button>
           </form>
         </div>
-      </aside>
-      <div className="flex-1">
-        {s.impersonatedBy && (
-          <div className="flex items-center justify-between border-b border-silver bg-silver-light px-6 py-2 text-sm text-ink">
-            <span>
-              Signed in as <strong>{s.email ?? s.phone}</strong> by {s.impersonatedBy.email} for support.
-            </span>
-            <form action={endImpersonationAction}>
-              <button className="underline">Return to my account</button>
-            </form>
-          </div>
-        )}
-        {showLicenseWarning && (
-          <div className="border-b border-orange-300 bg-orange-50 px-6 py-2 text-sm font-medium text-orange-800">
-            {license!.state === "TRIAL"
-              ? `Your trial ends in ${license!.daysLeft} day${license!.daysLeft === 1 ? "" : "s"}. Contact us to license this account and avoid losing access.`
-              : `Your license expires in ${license!.daysLeft} day${license!.daysLeft === 1 ? "" : "s"}. Renew to avoid losing access.`}
-          </div>
-        )}
-        <main className="px-6 py-6">{children}</main>
-      </div>
-    </div>
+      )}
+      {showLicenseWarning && (
+        <div className="border-b border-orange-300 bg-orange-50 px-6 py-2 text-sm font-medium text-orange-800">
+          {license!.state === "TRIAL"
+            ? `Your trial ends in ${license!.daysLeft} day${license!.daysLeft === 1 ? "" : "s"}. Contact us to license this account and avoid losing access.`
+            : `Your license expires in ${license!.daysLeft} day${license!.daysLeft === 1 ? "" : "s"}. Renew to avoid losing access.`}
+        </div>
+      )}
+      <main className="overflow-x-hidden px-6 py-6">{children}</main>
+    </AppShell>
   );
 }
