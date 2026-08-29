@@ -8,9 +8,9 @@ export const metadata = {
  * listing (which asks for a privacy policy URL) and, more fundamentally,
  * because this platform processes tenant PII on behalf of landlord
  * customers and Kenya's Data Protection Act, 2019 requires a data notice
- * for that. Placeholders ([...]) mark facts only the business itself can
- * supply (registered address, phone, ODPC registration number) -- do not
- * remove the brackets or invent values for them.
+ * for that. ODPC registration is noted as pending (Reins Trade
+ * International Limited hadn't completed it as of the last update below) --
+ * update that line once registration completes.
  */
 export default function PrivacyPolicyPage() {
   return (
@@ -21,9 +21,9 @@ export default function PrivacyPolicyPage() {
 
         <p>
           This Privacy Policy explains how <strong>Reins Realty</strong> (trading as Robust Rental Platform, operated by
-          Reinstrade, &ldquo;we&rdquo;, &ldquo;us&rdquo;) collects, uses, shares, and protects personal data when you use our rental
-          management platform (the &ldquo;Platform&rdquo;), whether through our website, our Android app, or our desktop
-          app.
+          Reins Trade International Limited, &ldquo;we&rdquo;, &ldquo;us&rdquo;) collects, uses, shares, and protects personal data when
+          you use our rental management platform (the &ldquo;Platform&rdquo;), whether through our website, our Android app,
+          or our desktop app.
         </p>
         <p>
           We process personal data in line with Kenya&rsquo;s <strong>Data Protection Act, 2019</strong> and its
@@ -176,15 +176,17 @@ export default function PrivacyPolicyPage() {
         <p>
           For any question about this policy or your data, contact us at:
           <br />
-          <strong>Reinstrade / Robust Rental Platform</strong>
+          <strong>Reins Trade International Limited</strong> (trading as Robust Rental Platform / Reins Realty)
           <br />
           Email: <a href="mailto:reinstrade@gmail.com">reinstrade@gmail.com</a>
           <br />
-          Registered address: [registered business address]
+          Registered address: G3, Alma Hills Apartments, Maragoli Road, Nakuru City, Nakuru County, Kenya
           <br />
-          Phone: [business phone number]
+          Phone: +254 733 232 888
           <br />
-          ODPC registration number: [to be added once registered with the Office of the Data Protection Commissioner]
+          ODPC registration: pending — Reins Trade International Limited has not yet completed registration with
+          the Office of the Data Protection Commissioner. This section will be updated with a registration number
+          once that process is complete.
         </p>
       </article>
     </div>
