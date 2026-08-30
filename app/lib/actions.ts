@@ -49,7 +49,7 @@ import {
 } from "./tier-requests";
 import { ORG_TIERS, type OrgTier } from "./constants";
 import { setPlatformCommissionPercent } from "./commission";
-import { createApiKey, revokeApiKey } from "./api-keys";
+import { createApiKey, revokeApiKey, deleteApiKey } from "./api-keys";
 import { createWebhook, revokeWebhook, dispatchWebhookEvent } from "./webhooks";
 import { syncPayment, syncAllUnsyncedPayments } from "./accounting-sync";
 import { registerC2bUrls } from "./mpesa";
@@ -582,6 +582,14 @@ export async function revokeApiKeyAction(keyId: string) {
   const s = await getSession();
   if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can revoke API keys.");
   await revokeApiKey(s.organizationId, keyId);
+  redirect("/settings");
+}
+
+/** Only reaches a row at all for keys that are both revoked and never used -- see deleteApiKey()'s own where clause for why. */
+export async function deleteApiKeyAction(keyId: string) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can delete API keys.");
+  await deleteApiKey(s.organizationId, keyId);
   redirect("/settings");
 }
 

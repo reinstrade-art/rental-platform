@@ -34,6 +34,22 @@ export async function revokeApiKey(organizationId: string, keyId: string) {
 }
 
 /**
+ * Permanently removes a key row -- restricted to revoked-and-never-used
+ * keys specifically, since those are pure clutter (never authenticated a
+ * single request, already can't be used again) with nothing worth keeping
+ * for an audit trail. A key that was ever actually used stays revoked
+ * rather than deleted, so `lastUsedAt` and its place in history survive for
+ * anyone later asking "what was this key doing before it was revoked?".
+ * The where clause enforces both conditions itself rather than trusting the
+ * caller to have checked first.
+ */
+export async function deleteApiKey(organizationId: string, keyId: string) {
+  await prisma.apiKey.deleteMany({
+    where: { id: keyId, organizationId, revokedAt: { not: null }, lastUsedAt: null },
+  });
+}
+
+/**
  * Resolves an `Authorization: Bearer <key>` header to the organization it
  * belongs to — every app/api/v1 route's sole gate, since these requests
  * carry no session cookie. Touches lastUsedAt best-effort on every call, so

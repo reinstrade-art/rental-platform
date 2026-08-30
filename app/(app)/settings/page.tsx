@@ -12,6 +12,7 @@ import {
   revokeOtherSessionsAction,
   createApiKeyAction,
   revokeApiKeyAction,
+  deleteApiKeyAction,
   createWebhookAction,
   revokeWebhookAction,
   disconnectQuickbooksAction,
@@ -281,6 +282,13 @@ export default async function SettingsPage({
               {!k.revokedAt && (
                 <form action={revokeApiKeyAction.bind(null, k.id)}>
                   <button className="text-xs text-red-700 underline">Revoke</button>
+                </form>
+              )}
+              {/* Only offered once a key is both revoked and was never used -- a used-then-revoked key keeps its
+                  lastUsedAt as history instead, see deleteApiKey()'s own comment for why. */}
+              {k.revokedAt && !k.lastUsedAt && (
+                <form action={deleteApiKeyAction.bind(null, k.id)}>
+                  <button className="text-xs text-red-700 underline">Delete</button>
                 </form>
               )}
             </li>
