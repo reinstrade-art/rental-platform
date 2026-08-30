@@ -1,33 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { get } from "@vercel/blob";
+
+// The dedicated public Blob store for desktop-app update files (installer,
+// blockmap, latest.yml) -- separate from the main private store that holds
+// tenant message attachments. Its base URL is not a secret (it's the public
+// CDN address of public objects); only *writing* to it needs the
+// DESKTOP_UPDATES_READ_WRITE_TOKEN used by scripts/publish-desktop-update.mjs
+// in CI, never by this route.
+const PUBLIC_STORE_BASE = "https://fkmuxaym0yuzvztg.public.blob.vercel-storage.com";
 
 /**
- * Serves the desktop app's auto-update files (latest.yml, the installer,
- * its blockmap) publicly, without a session -- electron-updater has no
- * cookies to send. The underlying Blob store is private-only (it also
- * holds tenant message attachments, which must stay private), so this is a
- * narrow, deliberate public window onto exactly one prefix rather than a
- * store-wide access change. Matches the stable path electron-builder's
- * `publish.url` and scripts/publish-desktop-update.mjs both target:
- * desktop-updates/<filename>, no auth, overwritten in place each release.
+ * Redirects to the desktop app's auto-update files rather than proxying
+ * their bytes through this route. The first version of this route streamed
+ * a private blob through a Vercel serverless function -- which silently
+ * truncated the ~115MB installer to 0 bytes, because serverless function
+ * responses are capped around 4.5MB. A redirect's response is tiny
+ * regardless of the target file's size, and the actual transfer happens
+ * directly from Blob's own CDN to the client.
  */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path: segments } = await params;
   const filename = segments.join("/");
-  // Confines this route to its own prefix even though Blob itself doesn't
-  // enforce that -- an empty/traversal-y segment shouldn't resolve to some
-  // unrelated private object elsewhere in the same store.
   if (!filename || filename.includes("..")) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  const blob = await get(`desktop-updates/${filename}`, { access: "private" }).catch(() => null);
-  if (!blob || blob.statusCode !== 200) return NextResponse.json({ error: "Not found." }, { status: 404 });
-
-  return new NextResponse(blob.stream, {
+  return NextResponse.redirect(`${PUBLIC_STORE_BASE}/desktop-updates/${filename}`, {
+    status: 302,
     headers: {
-      "Content-Type": filename.endsWith(".yml") ? "text/yaml" : "application/octet-stream",
-      "Content-Length": String(blob.blob.size ?? ""),
-      // Update files are overwritten in place on every release -- a CDN or
-      // browser cache holding onto a stale latest.yml would silently stop
+      // Update files are overwritten in place on every release -- a cached
+      // redirect (or a cached latest.yml past it) would silently stop
       // landlords from ever seeing a new version.
       "Cache-Control": "no-store",
     },
