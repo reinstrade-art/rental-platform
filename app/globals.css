@@ -94,6 +94,21 @@ body {
     outline-offset: 2px;
   }
 
+  /* A hand cursor on hover is the standard signal that something is
+     clickable -- applied here once, globally, rather than left to whichever
+     component happened to remember a `cursor-pointer` utility class. Covers
+     real links, enabled buttons, ARIA-role buttons, and <summary> (used by
+     the plan page's "Upgrade to X" disclosure, which is a click target but
+     not an <a> or <button>). Disabled buttons are excluded on purpose --
+     a hand cursor over something that can't be clicked is the opposite of
+     this rule's point. */
+  a[href],
+  button:not(:disabled),
+  [role="button"],
+  summary {
+    cursor: pointer;
+  }
+
   /* Every list page's <th>/<td> across the app only ever sets vertical
      padding (`py-2`) and relies on `border-collapse` -- with no horizontal
      gap at all, adjacent columns visually run together ("TENANT UNIT
