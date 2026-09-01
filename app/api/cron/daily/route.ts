@@ -1,17 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { postRepairExpense } from "@/app/lib/expenses";
+import { applyBilling } from "@/app/lib/billing";
+import { hasFeature } from "@/app/lib/tier";
 
 /**
- * The platform's one daily job: recurring vendor work (cleaning and the
- * like) whose cost and frequency are already agreed, raised the moment it
- * falls due — already DONE, posted straight to Expenses via the same path a
+ * The platform's daily job: recurring vendor work (cleaning and the like)
+ * whose cost and frequency are already agreed, raised the moment it falls
+ * due — already DONE, posted straight to Expenses via the same path a
  * human-completed repair uses (postRepairExpense), never routed through the
- * quote/approval flow a first-time job would need.
+ * quote/approval flow a first-time job would need. On the 1st of the month,
+ * also runs the same monthly billing every org's own "Raise charges" button
+ * on /leases/billing-run triggers -- applyBilling() is written to be safe to
+ * call more than once (a repeat run just fills whatever's still missing),
+ * so there's no separate "did we already run this month" bookkeeping to get
+ * wrong; a whole month of retries would all still land on the same result.
  *
  * Runs across every organization in one pass rather than one cron per org —
  * Vercel's own scheduling is platform-wide, not tenant-scoped, and a single
- * daily trigger comfortably covers however many due jobs exist.
+ * daily trigger comfortably covers however many due jobs (and, on the 1st,
+ * orgs) there are.
  *
  * Vercel signs its own cron requests with this header; anything else calling
  * this URL without the secret is refused.
@@ -56,5 +64,21 @@ export async function GET(req: NextRequest) {
     raised.push(repair.id);
   }
 
-  return NextResponse.json({ recurringJobsRaised: raised.length });
+  let billing: { organizationId: string; leases: number; charges: number }[] = [];
+  // UTC, matching how periodMonth/monthStart already treat "the month" —
+  // 3am UTC is comfortably still the 1st for every timezone this platform's
+  // customers are actually in (Kenya, EAT, is UTC+3).
+  if (now.getUTCDate() === 1) {
+    const period = now.toISOString().slice(0, 7);
+    const orgs = await prisma.organization.findMany({ where: { status: "ACTIVE" }, select: { id: true, tier: true } });
+    const billable = orgs.filter((o) => hasFeature(o.tier, "BILLING_RUN"));
+    billing = await Promise.all(
+      billable.map(async (o) => ({ organizationId: o.id, ...(await applyBilling(o.id, period)) })),
+    );
+  }
+
+  return NextResponse.json({
+    recurringJobsRaised: raised.length,
+    billing: billing.length ? billing : undefined,
+  });
 }

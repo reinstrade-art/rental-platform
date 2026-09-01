@@ -32,6 +32,7 @@ import { ingestTransaction, matchTransaction, ignoreTransaction, parseTransactio
 import { logPlatformAccess } from "./audit";
 import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll } from "./import";
 import { GROUNDS_LIST, joinGrounds, validNoticeDeadline, sendAndServeNotice } from "./eviction";
+import { sendPaymentReceipt } from "./receipt";
 import { applyBilling } from "./billing";
 import { postRepairExpense } from "./expenses";
 import { newTrialEndsAt, extendLicense, sendLicenseStkPush } from "./licensing";
@@ -56,6 +57,13 @@ import { registerC2bUrls } from "./mpesa";
 import { mpesaWebhookKey } from "./webhook-secret";
 import { sanitizeMessageBody } from "./sanitize";
 import { attachFilesToMessage } from "./attachments";
+
+/** Same NEXT_PUBLIC_APP_URL-first pattern already used for eviction notices / C2B registration -- factored out since sendPaymentReceipt's callers need it too. */
+async function requestOrigin() {
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+  return process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
+}
 
 // --- auth --------------------------------------------------------------
 
@@ -1051,6 +1059,7 @@ export async function recordPayment(leaseId: string, formData: FormData) {
     }),
   );
   after(() => syncPayment(s.organizationId, payment.id));
+  after(async () => sendPaymentReceipt(payment.id, await requestOrigin()));
   redirect(`/leases/${leaseId}`);
 }
 
@@ -1091,7 +1100,7 @@ export async function recordDirectedPayment(leaseId: string, formData: FormData)
     errorRedirect(`/leases/${leaseId}`, "The itemized amounts add up to more than the total received.");
   }
 
-  await prisma.payment.create({
+  const payment = await prisma.payment.create({
     data: {
       organizationId: s.organizationId,
       leaseId,
@@ -1104,6 +1113,7 @@ export async function recordDirectedPayment(leaseId: string, formData: FormData)
       },
     },
   });
+  after(async () => sendPaymentReceipt(payment.id, await requestOrigin()));
   redirect(`/leases/${leaseId}`);
 }
 
@@ -1934,7 +1944,7 @@ export async function addManualTransaction(formData: FormData) {
   const occurredAt = new Date(String(formData.get("occurredAt") ?? ""));
   if (!amount || isNaN(occurredAt.getTime())) errorRedirect("/payments", "Amount and date are required.");
 
-  await ingestTransaction({
+  const result = await ingestTransaction({
     organizationId: s.organizationId,
     source: "MANUAL",
     amount,
@@ -1942,6 +1952,14 @@ export async function addManualTransaction(formData: FormData) {
     payerName: String(formData.get("payerName") ?? "").trim() || null,
     occurredAt,
   });
+  // Only set when this transaction's reference auto-matched a unit's payment
+  // code against an active lease -- an unmatched one has nothing to send a
+  // receipt for yet (a human resolves it via matchTransactionAction below).
+  const paymentId = "matchedPaymentId" in result ? result.matchedPaymentId : null;
+  if (paymentId) {
+    const origin = await requestOrigin();
+    after(() => sendPaymentReceipt(paymentId, origin));
+  }
   redirect("/payments");
 }
 
@@ -1968,7 +1986,11 @@ export async function matchTransactionAction(transactionId: string, formData: Fo
   const leaseId = String(formData.get("leaseId") ?? "");
   if (!leaseId) errorRedirect("/payments", "Select a lease to match this transaction to.");
 
-  await matchTransaction(s.organizationId, transactionId, leaseId, s.userId);
+  const result = await matchTransaction(s.organizationId, transactionId, leaseId, s.userId);
+  if (result.matchedPaymentId) {
+    const origin = await requestOrigin();
+    after(() => sendPaymentReceipt(result.matchedPaymentId!, origin));
+  }
 }
 
 export async function ignoreTransactionAction(transactionId: string) {

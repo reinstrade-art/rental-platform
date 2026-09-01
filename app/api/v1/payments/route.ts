@@ -4,6 +4,7 @@ import { prisma } from "@/app/lib/prisma";
 import { authenticateApiKey } from "@/app/lib/api-keys";
 import { dispatchWebhookEvent } from "@/app/lib/webhooks";
 import { syncPayment } from "@/app/lib/accounting-sync";
+import { sendPaymentReceipt } from "@/app/lib/receipt";
 
 /** GET /api/v1/payments?from=YYYY-MM-DD&to=YYYY-MM-DD — Authorization: Bearer <key>. Both bounds optional and inclusive on paidAt. */
 export async function GET(req: NextRequest) {
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
     }),
   );
   after(() => syncPayment(auth.organizationId, payment.id));
+  after(() => sendPaymentReceipt(payment.id, req.nextUrl.origin));
 
   return NextResponse.json({ id: payment.id }, { status: 201 });
 }

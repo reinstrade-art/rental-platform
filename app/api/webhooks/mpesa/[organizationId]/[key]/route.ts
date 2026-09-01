@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { ingestTransaction } from "@/app/lib/payments";
 import { mpesaWebhookKey } from "@/app/lib/webhook-secret";
+import { sendPaymentReceipt } from "@/app/lib/receipt";
 
 /**
  * Shaped to match Safaricom's Daraja C2B confirmation callback. `key` is a
@@ -17,7 +18,7 @@ import { mpesaWebhookKey } from "@/app/lib/webhook-secret";
  * ResponseType "Completed" (see registerC2bUrls in app/lib/mpesa.ts), so
  * there's no separate accept/reject decision to make here.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ organizationId: string; key: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ organizationId: string; key: string }> }) {
   const { organizationId, key } = await params;
 
   if (key !== mpesaWebhookKey(organizationId)) {
@@ -38,7 +39,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ organiz
   const occurredAt = parseDarajaTimestamp(String(body.TransTime ?? "")) ?? new Date();
   const payerName = [body.FirstName, body.MiddleName, body.LastName].filter(Boolean).join(" ") || null;
 
-  await ingestTransaction({
+  const result = await ingestTransaction({
     organizationId,
     source: "MPESA_DARAJA",
     amount,
@@ -47,6 +48,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ organiz
     occurredAt,
     rawPayload: body,
   });
+  // Only set when the paybill reference auto-matched a unit's payment code
+  // -- an unmatched deposit has nothing to send a receipt for yet (a human
+  // resolves it from the Payments page's unmatched-transactions list).
+  if ("matchedPaymentId" in result && result.matchedPaymentId) {
+    const paymentId = result.matchedPaymentId;
+    const origin = req.nextUrl.origin;
+    after(() => sendPaymentReceipt(paymentId, origin));
+  }
 
   // Safaricom expects this exact shape acknowledging receipt.
   return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });

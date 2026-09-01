@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { parseCallbackMetadata, type StkCallback } from "@/app/lib/mpesa";
 import { matchTransaction } from "@/app/lib/payments";
 import { createPayoutForPayment } from "@/app/lib/commission";
+import { sendPaymentReceipt } from "@/app/lib/receipt";
 
 /**
  * Where Safaricom tells us what happened to a prompt.
@@ -53,6 +54,10 @@ export async function POST(req: NextRequest) {
     },
   });
   const matched = await matchTransaction(request.organizationId, transaction.id, request.leaseId, null);
+  if (matched.matchedPaymentId) {
+    const paymentId = matched.matchedPaymentId;
+    after(() => sendPaymentReceipt(paymentId, req.nextUrl.origin));
+  }
 
   await prisma.mpesaRequest.update({
     where: { id: request.id },

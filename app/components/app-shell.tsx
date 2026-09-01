@@ -18,7 +18,7 @@ export function AppShell({
   children,
 }: {
   orgName: string;
-  nav: { href: string; label: string }[];
+  nav: { href: string; label: string; attention?: boolean }[];
   logoutAction: () => Promise<void>;
   children: React.ReactNode;
 }) {
@@ -74,7 +74,13 @@ export function AppShell({
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className="rounded px-2 py-1.5 text-sm text-lily/85 transition-colors hover:bg-ink-soft hover:text-gold"
+                // Bold + red is the one place this shell departs from the
+                // three-color ink/silver/lily palette on purpose -- an alert
+                // that needs attention shouldn't look like every other nav
+                // item until someone happens to click into it.
+                className={`rounded px-2 py-1.5 text-sm transition-colors hover:bg-ink-soft hover:text-gold ${
+                  item.attention ? "font-bold text-red-400" : "text-lily/85"
+                }`}
               >
                 {item.label}
               </Link>

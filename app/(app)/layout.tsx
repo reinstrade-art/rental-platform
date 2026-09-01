@@ -6,6 +6,7 @@ import { logout, endImpersonationAction } from "@/app/lib/actions";
 import { prisma } from "@/app/lib/prisma";
 import { licenseState } from "@/app/lib/licensing";
 import { hasFeature, type Feature } from "@/app/lib/tier";
+import { getArrearsAlerts } from "@/app/lib/alerts";
 
 const NAV: { href: string; label: string; feature?: Feature }[] = [
   { href: "/dashboard", label: "Dashboard" },
@@ -52,8 +53,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ? NAV.filter((item) => item.href === "/tenants")
     : NAV.filter((item) => !item.feature || hasFeature(tier, item.feature));
 
+  // Only fetched when the Alerts nav item is actually showing -- gated
+  // behind hasFeature the same way the item itself is, so an org without
+  // ARREARS_ALERTS never pays for a query whose result it'd never see.
+  const hasActiveAlerts =
+    nav.some((item) => item.href === "/alerts") && (await getArrearsAlerts(s.organizationId)).length > 0;
+  const navWithAttention = nav.map((item) => ({ ...item, attention: item.href === "/alerts" && hasActiveAlerts }));
+
   return (
-    <AppShell orgName={org?.name ?? "Organization"} nav={nav} logoutAction={logout}>
+    <AppShell orgName={org?.name ?? "Organization"} nav={navWithAttention} logoutAction={logout}>
       {s.impersonatedBy && (
         <div className="flex items-center justify-between border-b border-silver bg-silver-light px-6 py-2 text-sm text-ink">
           <span>
