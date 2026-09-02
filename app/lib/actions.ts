@@ -1951,6 +1951,7 @@ export async function addManualTransaction(formData: FormData) {
     reference: String(formData.get("reference") ?? "").trim() || null,
     payerName: String(formData.get("payerName") ?? "").trim() || null,
     occurredAt,
+    method: String(formData.get("method") ?? "").trim() || null,
   });
   // Only set when this transaction's reference auto-matched a unit's payment
   // code against an active lease -- an unmatched one has nothing to send a

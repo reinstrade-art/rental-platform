@@ -56,7 +56,7 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
-export const PAYMENT_METHODS = ["MPESA", "CASH", "BANK", "CHEQUE"] as const;
+export const PAYMENT_METHODS = ["MPESA", "CASH", "BANK", "CARD", "CHEQUE"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const LICENSE_PAYMENT_METHODS = ["MPESA_STK", "BANK", "CASH", "OTHER"] as const;

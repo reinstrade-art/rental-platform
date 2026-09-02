@@ -11,6 +11,8 @@ export type IngestInput = {
   payerName?: string | null;
   occurredAt: Date;
   rawPayload?: unknown;
+  /** How the money actually moved — BANK | CASH | CARD | CHEQUE | MPESA (see PAYMENT_METHODS). Left unset for an M-Pesa source, whose method matchTransaction already derives from `source` itself. */
+  method?: string | null;
 };
 
 /**
@@ -29,6 +31,7 @@ export async function ingestTransaction(input: IngestInput) {
     data: {
       organizationId: input.organizationId,
       source: input.source,
+      method: input.method ?? null,
       amount: input.amount,
       reference: input.reference ?? null,
       payerName: input.payerName ?? null,
@@ -87,7 +90,13 @@ export async function matchTransaction(
         organizationId,
         leaseId,
         amount: transaction.amount,
-        method: MPESA_SOURCES.has(transaction.source) ? "MPESA" : transaction.source,
+        // The office's own explicit method (BANK/CASH/CARD/CHEQUE) wins when
+        // given; an M-Pesa source implies its own method regardless, since
+        // that's a fact of how the transaction arrived, not something the
+        // office chooses. A row with neither (an old CSV import predating
+        // this field, or a manual entry where method was left blank) falls
+        // back to the source string itself, same as before this column existed.
+        method: MPESA_SOURCES.has(transaction.source) ? "MPESA" : (transaction.method ?? transaction.source),
         reference: transaction.reference,
         paidAt: transaction.occurredAt,
       },
@@ -111,7 +120,7 @@ export async function ignoreTransaction(organizationId: string, transactionId: s
   });
 }
 
-/** Minimal CSV: date,amount,reference,payer — one transaction per row, header row optional. */
+/** Minimal CSV: date,amount,reference,payer[,method] — one transaction per row, header row optional. The 5th column is optional and backward-compatible with existing 4-column files. */
 export function parseTransactionsCsv(csv: string): Omit<IngestInput, "organizationId" | "source">[] {
   // See the matching note in app/lib/import.ts — an Excel/Windows-saved CSV's
   // leading byte-order-mark otherwise corrupts the very first cell of the
@@ -125,11 +134,11 @@ export function parseTransactionsCsv(csv: string): Omit<IngestInput, "organizati
 
   for (const row of rows) {
     const cols = row.split(",").map((c) => c.trim());
-    const [dateStr, amountStr, reference, payer] = cols;
+    const [dateStr, amountStr, reference, payer, method] = cols;
     const occurredAt = new Date(dateStr);
     const amount = Number(amountStr);
     if (isNaN(occurredAt.getTime()) || !amount) continue; // header row or malformed line — skipped, not fatal
-    out.push({ occurredAt, amount, reference: reference || null, payerName: payer || null });
+    out.push({ occurredAt, amount, reference: reference || null, payerName: payer || null, method: method || null });
   }
   return out;
 }

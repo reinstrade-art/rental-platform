@@ -9,7 +9,7 @@ import { DeleteButton } from "@/app/components/delete-button";
 import { sendMpesaPrompt } from "@/app/lib/mpesa-actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 import { prisma } from "@/app/lib/prisma";
-import { CHARGE_TYPES, CHARGE_TYPE_LABEL } from "@/app/lib/constants";
+import { CHARGE_TYPES, CHARGE_TYPE_LABEL, PAYMENT_METHODS } from "@/app/lib/constants";
 import { MpesaPay } from "@/app/components/mpesa-pay";
 import { GROUNDS, GROUNDS_LIST, STATUS_LABEL, OPEN_STATUSES } from "@/app/lib/eviction";
 import { waLink } from "@/app/lib/phone";
@@ -296,7 +296,14 @@ export default async function LeaseDetailPage({
           <form action={recordPayment.bind(null, lease.id)} className="mt-4 flex flex-col gap-2">
             <input name="paidAt" type="date" required className="rounded border px-3 py-2" />
             <input name="amount" type="number" step="0.01" required placeholder="Amount" className="rounded border px-3 py-2" />
-            <input name="method" placeholder="Method (e.g. M-Pesa, Cash)" className="rounded border px-3 py-2" />
+            <select name="method" defaultValue="" className="rounded border px-3 py-2">
+              <option value="">Method (optional)</option>
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
             <input name="reference" placeholder="Reference (optional)" className="rounded border px-3 py-2" />
             <button type="submit" className="rounded bg-ink px-3 py-2 text-lily text-sm">
               Record payment
@@ -337,7 +344,14 @@ export default async function LeaseDetailPage({
                 </div>
                 <input name="paidAt" type="date" required placeholder="Date" className="mt-2 rounded border px-3 py-2 text-sm" />
                 <input name="amount" type="number" step="0.01" required placeholder="Total amount received" className="rounded border px-3 py-2 text-sm" />
-                <input name="method" placeholder="Method (e.g. M-Pesa, Cash)" className="rounded border px-3 py-2 text-sm" />
+                <select name="method" defaultValue="" className="rounded border px-3 py-2 text-sm">
+                  <option value="">Method (optional)</option>
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
                 <input name="reference" placeholder="Reference (optional)" className="rounded border px-3 py-2 text-sm" />
                 <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily">
                   Record itemized payment

@@ -983,6 +983,15 @@ model Transaction {
 
   source String // MANUAL | CSV_IMPORT | MPESA_DARAJA
   amount Float
+  // How the money actually moved — MPESA | CASH | BANK | CARD | CHEQUE (see
+  // PAYMENT_METHODS in constants.ts). Distinct from `source` above, which is
+  // how *this app* learned about the transaction (a webhook vs. a human
+  // typing it in) -- a bank transfer entered manually has source MANUAL and
+  // method BANK, not the other way round. Optional and defaults to null for
+  // M-Pesa sources, whose method is already implied by `source` itself (see
+  // matchTransaction in payments.ts) and for rows written before this
+  // column existed.
+  method String?
   // Whatever the source called it — a paybill account number, a bank
   // narration, an M-Pesa code — matched against Unit.paymentCode.
   reference   String?

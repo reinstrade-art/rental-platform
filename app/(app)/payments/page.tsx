@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getTransactions, getLeases } from "@/app/lib/data";
 import { addManualTransaction, importTransactionsCsv, matchTransactionAction, ignoreTransactionAction } from "@/app/lib/actions";
+import { PAYMENT_METHODS } from "@/app/lib/constants";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -39,6 +40,14 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
           <form action={addManualTransaction} className="mt-3 flex flex-col gap-2">
             <input name="occurredAt" type="date" required className="rounded border px-3 py-2" />
             <input name="amount" type="number" step="0.01" required placeholder="Amount" className="rounded border px-3 py-2" />
+            <select name="method" defaultValue="" className="rounded border px-3 py-2 text-sm">
+              <option value="">Method (optional)</option>
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
             <input name="reference" placeholder="Reference / account number" className="rounded border px-3 py-2" />
             <input name="payerName" placeholder="Payer name (optional)" className="rounded border px-3 py-2" />
             <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
@@ -49,7 +58,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
 
         <div className="max-w-sm">
           <h2 className="font-semibold">Import a CSV</h2>
-          <p className="text-xs text-silver-dark">One row per transaction: date,amount,reference,payer</p>
+          <p className="text-xs text-silver-dark">One row per transaction: date,amount,reference,payer,method (method is optional — MPESA/BANK/CASH/CARD/CHEQUE)</p>
           <form action={importTransactionsCsv} className="mt-3 flex flex-col gap-2" encType="multipart/form-data">
             <input name="file" type="file" accept=".csv,text/csv" required className="rounded border px-3 py-2 text-sm" />
             <button type="submit" className="rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
