@@ -87,9 +87,14 @@ export default async function PlatformPage({
       <section>
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold">Organizations</h1>
-          <Link href="/platform/audit" className="text-sm underline text-silver-dark">
-            Audit log
-          </Link>
+          <div className="flex gap-4">
+            <Link href="/platform/accounting" className="text-sm underline text-silver-dark">
+              Accounting
+            </Link>
+            <Link href="/platform/audit" className="text-sm underline text-silver-dark">
+              Audit log
+            </Link>
+          </div>
         </div>
         <p className="mt-1 text-sm text-silver-dark">Click a holding company to see its properties, and a property to see its leases.</p>
         {error && (

@@ -15,6 +15,7 @@ import {
   withdrawEviction,
   resendNoticeAction,
 } from "@/app/lib/actions";
+import { requireModule } from "@/app/lib/permissions";
 
 const DELIVERY_LABEL: Record<string, string> = {
   HAND_DELIVERED: "hand-delivered",
@@ -45,6 +46,7 @@ export default async function EvictionDetailPage({
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  requireModule(s, "evictions");
   const { id } = await params;
   const { error } = await searchParams;
   const ev = await getEviction(s.organizationId, id);

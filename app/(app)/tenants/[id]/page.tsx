@@ -3,14 +3,15 @@ import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getSession, requireTenantsAccess, isCaretaker } from "@/app/lib/auth";
 import { getTenant, leaseBalance } from "@/app/lib/data";
-import { deleteTenant, inviteTenant, replyToTenant } from "@/app/lib/actions";
+import { deleteTenant, inviteTenant, replyToTenant, impersonateAction } from "@/app/lib/actions";
 import { sendMpesaPrompt } from "@/app/lib/mpesa-actions";
-import { mpesaConfigured } from "@/app/lib/mpesa";
-import { prisma } from "@/app/lib/prisma";
+import { mpesaPayOptionsForLease } from "@/app/lib/mpesa-pay-options";
 import { DeleteButton } from "@/app/components/delete-button";
 import { RichTextEditor } from "@/app/components/rich-text-editor";
-import { MpesaPay } from "@/app/components/mpesa-pay";
+import { MpesaPayPanel } from "@/app/components/mpesa-pay-panel";
 import { waLink } from "@/app/lib/phone";
+import { displayBalance, balanceTone } from "@/app/lib/balance-display";
+import { requireModule } from "@/app/lib/permissions";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -26,6 +27,7 @@ export default async function TenantDetailPage({
   const s = await getSession();
   if (!requireTenantsAccess(s)) redirect("/login");
   const caretaker = isCaretaker(s.role);
+  if (!caretaker) requireModule(s, "tenants");
   const { id } = await params;
   const { error } = await searchParams;
   const tenant = await getTenant(s.organizationId, id, caretaker ? (s.propertyId ?? undefined) : undefined);
@@ -36,23 +38,13 @@ export default async function TenantDetailPage({
     .reduce((sum, l) => sum + leaseBalance(l), 0);
 
   const activeLease = tenant.leases.find((l) => l.status === "ACTIVE") ?? null;
-  const org = !caretaker && activeLease ? await prisma.organization.findUnique({ where: { id: s.organizationId } }) : null;
+  const payOptions = !caretaker && activeLease ? await mpesaPayOptionsForLease(s.organizationId, activeLease.id) : null;
 
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
   const firstName = tenant.name.split(" ")[0];
-  const mpesaReady = Boolean(
-    org &&
-      mpesaConfigured({
-        env: org.mpesaEnv,
-        shortcode: org.mpesaShortcode,
-        accountType: org.mpesaAccountType,
-        consumerKey: org.mpesaConsumerKey,
-        consumerSecret: org.mpesaConsumerSecret,
-        passkey: org.mpesaPasskey,
-      }),
-  );
+  const mpesaReady = Boolean(payOptions && (payOptions.stkReady || payOptions.directReady));
 
   return (
     <div className="flex flex-col gap-8">
@@ -92,13 +84,20 @@ export default async function TenantDetailPage({
         </div>
         <div className="rounded border p-4">
           <div className="text-xs text-silver-dark">{totalOwed > 0 ? "Owed (active leases)" : "Balance"}</div>
-          <div className={`mt-1 text-xl font-semibold ${totalOwed > 0 ? "text-red-600" : ""}`}>{money(totalOwed)}</div>
+          <div className={`mt-1 text-xl font-semibold ${balanceTone(totalOwed)}`}>{money(displayBalance(totalOwed))}</div>
         </div>
         <div className="rounded border p-4">
           <div className="text-xs text-silver-dark">Portal access</div>
           <div className="mt-1 text-sm font-semibold">
             {tenant.user ? (
-              <span className="text-green-700">Registered</span>
+              <span className="flex items-center gap-2">
+                <span className="text-green-700">Registered</span>
+                {s.role === "ADMIN" && !tenant.user.disabledAt && (
+                  <form action={impersonateAction.bind(null, tenant.user.id)}>
+                    <button className="text-xs font-normal underline">Sign in as</button>
+                  </form>
+                )}
+              </span>
             ) : caretaker ? (
               <span className="text-silver-dark">—</span>
             ) : (
@@ -112,17 +111,27 @@ export default async function TenantDetailPage({
         </div>
       </div>
 
-      {activeLease && mpesaReady && (
-        <div className="max-w-xs">
-          <h2 className="font-semibold">Send M-Pesa prompt</h2>
-          <p className="text-xs text-silver-dark">Raises the payment prompt straight to {tenant.name.split(" ")[0]}&apos;s phone.</p>
+      {activeLease && mpesaReady && payOptions && (
+        <div className="max-w-sm">
+          <h2 className="font-semibold">Pay via M-Pesa</h2>
+          <p className="text-xs text-silver-dark">
+            An instant prompt to {tenant.name.split(" ")[0]}&apos;s phone, or the paybill details to read out.
+          </p>
           <div className="mt-2">
-            <MpesaPay
+            <MpesaPayPanel
               action={sendMpesaPrompt}
               leaseId={activeLease.id}
               defaultAmount={leaseBalance(activeLease) > 0 ? leaseBalance(activeLease) : activeLease.monthlyRent}
               phone={tenant.phone}
               editablePhone
+              stkReady={payOptions.stkReady}
+              direct={{
+                ready: payOptions.directReady,
+                accountType: payOptions.accountType,
+                shortcode: payOptions.shortcode,
+                accountRef: payOptions.accountRef,
+                autoMatch: payOptions.directAutoMatch,
+              }}
             />
           </div>
         </div>
@@ -167,7 +176,7 @@ export default async function TenantDetailPage({
                     </td>
                     <td className="py-2">{new Date(l.startDate).toLocaleDateString()}</td>
                     <td className={`py-2 ${l.status === "ACTIVE" ? "text-green-700" : "text-silver-dark"}`}>{l.status}</td>
-                    <td className={`py-2 ${balance > 0 ? "text-red-600" : ""}`}>{money(balance)}</td>
+                    <td className={`py-2 ${balanceTone(balance)}`}>{money(displayBalance(balance))}</td>
                     <td className="py-2">
                       <div className="flex flex-col gap-0.5">
                         <span className={`text-xs ${l.signedAt ? "text-green-700" : "text-silver-dark"}`}>

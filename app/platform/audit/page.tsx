@@ -15,7 +15,7 @@ const ACTION_LABEL: Record<string, string> = {
 export default async function PlatformAuditPage() {
   const s = await getSession();
   if (!s) redirect("/login");
-  if (!requirePlatformAdmin(s)) redirect("/dashboard");
+  if (!requirePlatformAdmin(s)) redirect("/home");
 
   const entries = await getAuditLog();
 

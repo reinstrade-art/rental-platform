@@ -3,6 +3,7 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { getOpenApprovals } from "@/app/lib/approvals";
 import { signApprovalAction } from "@/app/lib/actions";
 import { APPROVAL_LEVELS } from "@/app/lib/constants";
+import { requireModule } from "@/app/lib/permissions";
 
 const KIND_LABEL: Record<string, string> = {
   REPAIR_WORK: "Approve repair work",
@@ -18,6 +19,7 @@ function money(n: number) {
 export default async function ApprovalsPage() {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  requireModule(s, "approvals");
   const requests = await getOpenApprovals(s.organizationId);
 
   return (

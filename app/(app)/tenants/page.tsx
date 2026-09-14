@@ -5,11 +5,15 @@ import { getTenants } from "@/app/lib/data";
 import { inviteTenant, inviteNewTenant, deleteTenant, importTenantsCsv } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
+import { requireModule } from "@/app/lib/permissions";
 
 export default async function TenantsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireTenantsAccess(s)) redirect("/login");
   const caretaker = isCaretaker(s.role);
+  // A caretaker's access to Tenants is its own dedicated grant (requireTenantsAccess
+  // above), never subject to the ordinary staff permission set below.
+  if (!caretaker) requireModule(s, "tenants");
   const tenants = await getTenants(s.organizationId, caretaker ? (s.propertyId ?? undefined) : undefined);
   const canImport = !caretaker && hasFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
   const { error } = await searchParams;

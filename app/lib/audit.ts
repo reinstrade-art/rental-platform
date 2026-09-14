@@ -8,7 +8,8 @@ export type AuditAction =
   | "RECORD_LICENSE_PAYMENT"
   | "SEND_LICENSE_STK"
   | "SET_ORG_TIER"
-  | "IMPERSONATE_ORG";
+  | "IMPERSONATE_ORG"
+  | "RESET_STAFF_PASSWORD";
 
 /**
  * The only place a row is ever written to AuditLog. Called from the page

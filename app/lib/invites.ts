@@ -6,6 +6,7 @@ import { hashPassword } from "./auth";
 import { CONSENT_VERSION } from "./consent";
 import { sendEmail } from "./email";
 import { sendWhatsApp } from "./whatsapp";
+import { mpesaNumber } from "./phone";
 
 const INVITE_DAYS = 7;
 
@@ -98,7 +99,15 @@ export async function redeemInvitation(
 
   const typed = identifier.trim();
   const matchesEmail = invite.email && typed.toLowerCase() === invite.email;
-  const matchesPhone = invite.phone && typed === invite.phone;
+  // Compared on the normalised 2547XXXXXXXX form, not the raw string — the
+  // invite's phone was stored however the office originally typed it
+  // (0712…, +254712…, 254712…), and there's no reason to expect whoever is
+  // registering to type it back the exact same way. Falls back to a plain
+  // string match for a number mpesaNumber() can't parse (non-Kenyan, or
+  // malformed on file), rather than refusing outright.
+  const matchesPhone =
+    invite.phone &&
+    (typed === invite.phone || (mpesaNumber(typed) !== null && mpesaNumber(typed) === mpesaNumber(invite.phone)));
   if (!matchesEmail && !matchesPhone) return generic;
 
   if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
@@ -130,6 +139,13 @@ export async function redeemInvitation(
         propertyId: invite.propertyId,
         consentedAt: new Date(),
         consentVersion: CONSENT_VERSION,
+        // A brand-new MANAGER/VIEWER starts with no module access at all —
+        // the admin who invited them grants each module deliberately on the
+        // Team page, rather than the account landing with everything open
+        // the moment it's redeemed. Every other role leaves this null
+        // (full/not-applicable), same as parsePermissions() already treats
+        // any non-MANAGER/VIEWER role.
+        permissions: invite.role === "MANAGER" || invite.role === "VIEWER" ? "[]" : undefined,
       },
     });
     await tx.invitation.update({ where: { id: invite.id }, data: { usedAt: new Date() } });

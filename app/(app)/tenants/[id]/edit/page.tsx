@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
+import { requireModule } from "@/app/lib/permissions";
 import { prisma } from "@/app/lib/prisma";
 import { updateTenant } from "@/app/lib/actions";
 
@@ -13,6 +14,7 @@ export default async function EditTenantPage({
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  requireModule(s, "tenants");
   const { id } = await params;
   const { error } = await searchParams;
   const tenant = await prisma.tenant.findFirst({ where: { id, organizationId: s.organizationId } });

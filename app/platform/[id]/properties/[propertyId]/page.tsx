@@ -15,7 +15,7 @@ export default async function PlatformPropertyDetailPage({
 }) {
   const s = await getSession();
   if (!s) redirect("/login");
-  if (!requirePlatformAdmin(s)) redirect("/dashboard");
+  if (!requirePlatformAdmin(s)) redirect("/home");
 
   const { id, propertyId } = await params;
   const property = await prisma.property.findFirst({

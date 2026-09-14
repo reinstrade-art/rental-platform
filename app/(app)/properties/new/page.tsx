@@ -1,7 +1,13 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSession, requireStaff } from "@/app/lib/auth";
+import { requireModule } from "@/app/lib/permissions";
 import { createProperty } from "@/app/lib/actions";
 
-export default function NewPropertyPage() {
+export default async function NewPropertyPage() {
+  const s = await getSession();
+  if (!requireStaff(s)) redirect("/login");
+  requireModule(s, "properties");
   return (
     <div className="max-w-sm">
       <Link href="/properties" className="text-xs underline text-silver-dark">

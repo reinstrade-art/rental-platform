@@ -29,6 +29,7 @@ export function MpesaPay({
   phone,
   editablePhone,
   buttonLabel = "Send M-Pesa prompt",
+  onStatus,
 }: {
   action: (prev: MpesaState, fd: FormData) => Promise<MpesaState>;
   leaseId?: string;
@@ -36,6 +37,8 @@ export function MpesaPay({
   phone?: string | null;
   editablePhone?: boolean;
   buttonLabel?: string;
+  /** Lets a wrapping panel react to the prompt's outcome — e.g. surfacing the direct-pay fallback once it fails or times out. */
+  onStatus?: (status: "pending" | "success" | "failed" | "timedout") => void;
 }) {
   const [state, formAction, pending] = useActionState<MpesaState, FormData>(action, undefined);
   // Tagged with the requestId each result belongs to, rather than reset in
@@ -69,6 +72,14 @@ export function MpesaPay({
   const currentPoll = poll?.requestId === state?.requestId ? poll : null;
   const timedOut = timedOutFor === state?.requestId;
   const waiting = state?.requestId && (!currentPoll || currentPoll.status === "PENDING") && !timedOut;
+
+  useEffect(() => {
+    if (!onStatus) return;
+    if (state?.error || currentPoll?.status === "FAILED") onStatus("failed");
+    else if (timedOut) onStatus("timedout");
+    else if (currentPoll?.status === "SUCCESS") onStatus("success");
+    else if (waiting) onStatus("pending");
+  }, [onStatus, state?.error, currentPoll?.status, timedOut, waiting]);
 
   return (
     <form action={formAction} className="flex flex-col gap-2">

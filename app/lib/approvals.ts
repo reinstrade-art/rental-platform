@@ -1,11 +1,19 @@
 import "server-only";
 import { prisma } from "./prisma";
 import { APPROVAL_LEVELS, type ApprovalKind, type ApprovalLevel } from "./constants";
+import { sendPushToUsers } from "./push";
 
 const RANK: Record<string, number> = { REQUESTER: 1, MANAGER: 2, DIRECTOR: 3 };
 function rankOf(level: string | null | undefined): number {
   return RANK[level ?? ""] ?? 0;
 }
+
+const KIND_LABEL: Record<string, string> = {
+  REPAIR_WORK: "a repair",
+  REPAIR_COST: "a repair's cost",
+  QUOTE_AWARD: "a quote award",
+  PAYMENT_OUT: "an expense",
+};
 
 /**
  * Raises a request and immediately files the raiser's own signature into the
@@ -35,7 +43,24 @@ export async function raiseApproval(
     data: { requestId: request.id, userId: raisedById, level: "REQUESTER", action: "APPROVED" },
   });
 
-  if (org.approvalChainLength <= 1) await resolve(request.id);
+  if (org.approvalChainLength <= 1) {
+    await resolve(request.id);
+  } else {
+    // Whoever's ranked high enough to sign the next slot — the raiser's own
+    // REQUESTER step above never counts as one of these, so this is always
+    // someone new being asked for a signature.
+    const eligible = await prisma.user.findMany({
+      where: { organizationId, id: { not: raisedById }, approvalLevel: { in: ["MANAGER", "DIRECTOR"] }, disabledAt: null },
+      select: { id: true },
+    });
+    if (eligible.length > 0) {
+      await sendPushToUsers(eligible.map((u) => u.id), {
+        title: "Approval needed",
+        body: `${KIND_LABEL[kind] ?? "A request"} is waiting on your signature.`,
+        data: { kind: "approval", requestId: request.id },
+      });
+    }
+  }
   return request;
 }
 

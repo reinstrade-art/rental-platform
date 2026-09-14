@@ -1,7 +1,13 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSession, requireTenantsAccess, isCaretaker } from "@/app/lib/auth";
+import { requireModule } from "@/app/lib/permissions";
 import { createTenant } from "@/app/lib/actions";
 
 export default async function NewTenantPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const s = await getSession();
+  if (!requireTenantsAccess(s)) redirect("/login");
+  if (!isCaretaker(s.role)) requireModule(s, "tenants");
   const { error } = await searchParams;
   return (
     <div className="max-w-sm">

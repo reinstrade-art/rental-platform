@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { parseB2cResult, type B2cCallback } from "@/app/lib/mpesa";
+import { syncPayoutToWave } from "@/app/lib/platform-accounting-sync";
 
 /**
  * Where Safaricom reports what happened to a B2C payout — the mirror image
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
       completedAt: new Date(),
     },
   });
+  after(() => syncPayoutToWave(payout.id));
 
   return ACK;
 }

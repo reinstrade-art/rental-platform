@@ -4,10 +4,12 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { getMessageThreads } from "@/app/lib/data";
 import { replyToTenant } from "@/app/lib/actions";
 import { RichTextEditor } from "@/app/components/rich-text-editor";
+import { requireModule } from "@/app/lib/permissions";
 
 export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  requireModule(s, "messages");
   const { error } = await searchParams;
 
   const threads = await getMessageThreads(s.organizationId);

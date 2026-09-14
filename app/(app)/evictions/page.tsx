@@ -4,11 +4,13 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { getEvictions } from "@/app/lib/data";
 import { GROUNDS, STATUS_LABEL, OPEN_STATUSES, splitGrounds } from "@/app/lib/eviction";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
+import { requireModule } from "@/app/lib/permissions";
 
 export default async function EvictionsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  if (!hasFeature(await getOrgTier(s.organizationId), "EVICTIONS")) redirect("/dashboard");
+  if (!hasFeature(await getOrgTier(s.organizationId), "EVICTIONS")) redirect("/home");
+  requireModule(s, "evictions");
   const { error } = await searchParams;
   const evictions = await getEvictions(s.organizationId);
 

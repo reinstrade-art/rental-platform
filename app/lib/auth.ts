@@ -1,4 +1,5 @@
 import "server-only";
+import crypto from "crypto";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
@@ -6,6 +7,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { isPlatformAdmin, isStaff, isCaretaker, isTenant, isTradesman } from "./roles";
 import { isLicenseActive } from "./licensing";
+import { parsePermissions, type ModuleKey } from "./constants";
 
 const COOKIE = "rp_session";
 // Holds the staff member's own token while they are signed in as somebody
@@ -74,6 +76,10 @@ export type Session = {
   propertyId: string | null;
   /** Set when a staff member is signed in as this account rather than the account itself. */
   impersonatedBy: { id: string; email: string | null } | null;
+  /** True right after an admin hands this account a temporary password — every page but /change-password refuses until a real one is chosen. */
+  mustChangePassword: boolean;
+  /** Parsed module allow-list for a MANAGER/VIEWER (see app/lib/permissions.ts) — null means full access, and is ALWAYS null for ADMIN regardless of what's on file. */
+  permissions: ModuleKey[] | null;
 };
 
 /** An address and a phone number are told apart by the "@". */
@@ -86,6 +92,14 @@ export function identify(input: string): { email: string } | { phone: string } |
 
 export async function hashPassword(plain: string) {
   return bcrypt.hash(plain, 10);
+}
+
+/** A one-time password an admin reads aloud or pastes into a message — unambiguous alphabet (no 0/O/1/I/l), same reasoning as generateCode() in invites.ts, long enough to stand on its own as a real (if temporary) password. */
+export function generateTempPassword(): string {
+  const alphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 12; i++) out += alphabet[crypto.randomInt(alphabet.length)];
+  return out;
 }
 
 /** Returns the user when the credentials are valid, otherwise null. */
@@ -196,6 +210,7 @@ export async function impersonate(admin: Session, targetUserId: string) {
     { id: target.id, organizationId: target.organizationId, email: target.email, phone: target.phone, role: target.role },
     admin.userId,
   );
+  return target.role;
 }
 
 /**
@@ -352,16 +367,18 @@ export const getSession = cache(async (): Promise<Session | null> => {
       vendorId: string | null;
       disabledAt: Date | null;
       propertyId: string | null;
+      mustChangePassword: boolean;
+      permissions: string | null;
     } | null;
     try {
       const withProperty = await prisma.user.findUnique({
         where: { id: String(payload.sub) },
-        select: { ...baseSelect, propertyId: true },
+        select: { ...baseSelect, propertyId: true, mustChangePassword: true, permissions: true },
       });
       user = withProperty;
     } catch {
       const fallback = await prisma.user.findUnique({ where: { id: String(payload.sub) }, select: baseSelect });
-      user = fallback ? { ...fallback, propertyId: null } : null;
+      user = fallback ? { ...fallback, propertyId: null, mustChangePassword: false, permissions: null } : null;
     }
     // No account, or access individually revoked — either way the session is dead.
     if (!user || user.disabledAt) return null;
@@ -394,6 +411,8 @@ export const getSession = cache(async (): Promise<Session | null> => {
       vendorId: user.vendorId,
       propertyId: user.propertyId,
       impersonatedBy,
+      mustChangePassword: user.mustChangePassword,
+      permissions: user.role === "ADMIN" ? null : parsePermissions(user.permissions),
     };
   } catch {
     return null;

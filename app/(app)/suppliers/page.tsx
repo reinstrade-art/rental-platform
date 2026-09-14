@@ -6,6 +6,7 @@ import { createSupplier, deleteSupplier } from "@/app/lib/actions";
 import { SUPPLIER_CATEGORIES } from "@/app/lib/constants";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { DeleteButton } from "@/app/components/delete-button";
+import { requireModule } from "@/app/lib/permissions";
 
 function label(s: string) {
   return s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -18,7 +19,8 @@ function money(n: number) {
 export default async function SuppliersPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  if (!hasFeature(await getOrgTier(s.organizationId), "SUPPLIERS")) redirect("/dashboard");
+  if (!hasFeature(await getOrgTier(s.organizationId), "SUPPLIERS")) redirect("/home");
+  requireModule(s, "suppliers");
   const { error } = await searchParams;
 
   const suppliers = await getSuppliers(s.organizationId);

@@ -18,8 +18,8 @@ import { hasFeature } from "@/app/lib/tier";
  *
  * Runs across every organization in one pass rather than one cron per org —
  * Vercel's own scheduling is platform-wide, not tenant-scoped, and a single
- * daily trigger comfortably covers however many due jobs (and, on the 1st,
- * orgs) there are.
+ * daily trigger comfortably covers however many due jobs (and, in the last
+ * three days of the month, orgs) there are.
  *
  * Vercel signs its own cron requests with this header; anything else calling
  * this URL without the secret is refused.
@@ -65,11 +65,26 @@ export async function GET(req: NextRequest) {
   }
 
   let billing: { organizationId: string; leases: number; charges: number }[] = [];
-  // UTC, matching how periodMonth/monthStart already treat "the month" —
-  // 3am UTC is comfortably still the 1st for every timezone this platform's
-  // customers are actually in (Kenya, EAT, is UTC+3).
-  if (now.getUTCDate() === 1) {
-    const period = now.toISOString().slice(0, 7);
+  // Raised three days AHEAD of the month it's for, not on the 1st — a
+  // tenant sees next month's charge before it's due, and the office isn't
+  // relying on a cron firing exactly on the 1st for rent to be on time.
+  // UTC throughout, matching how periodMonth/monthStart already treat "the
+  // month" — 3am UTC is comfortably still the same calendar day for every
+  // timezone this platform's customers are actually in (Kenya, EAT, is
+  // UTC+3). applyBilling() is safe to call more than once (a repeat run
+  // just fills whatever's still missing), so firing on all three of those
+  // days rather than tracking "did this org's next month already get
+  // billed" is deliberate, not a gap.
+  const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const daysUntilNextMonth = Math.round((nextMonthStart.getTime() - now.getTime()) / 86_400_000);
+  // ?period=YYYY-MM lets a same-secret manual call bill a specific month on
+  // the spot — for a one-time catch-up (a month whose own 3-day window has
+  // already passed, e.g. right after this schedule shipped) rather than
+  // waiting for the next natural window. Vercel's own scheduled trigger
+  // never sends this param, so its behaviour is unchanged.
+  const overridePeriod = req.nextUrl.searchParams.get("period");
+  if (overridePeriod || daysUntilNextMonth <= 3) {
+    const period = overridePeriod ?? nextMonthStart.toISOString().slice(0, 7);
     const orgs = await prisma.organization.findMany({ where: { status: "ACTIVE" }, select: { id: true, tier: true } });
     const billable = orgs.filter((o) => hasFeature(o.tier, "BILLING_RUN"));
     billing = await Promise.all(

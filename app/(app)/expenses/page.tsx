@@ -6,6 +6,7 @@ import { createExpense, deleteExpense } from "@/app/lib/actions";
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS } from "@/app/lib/constants";
 import { DeleteButton } from "@/app/components/delete-button";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
+import { requireModule } from "@/app/lib/permissions";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -23,7 +24,8 @@ function label(s: string) {
 export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  if (!hasFeature(await getOrgTier(s.organizationId), "EXPENSES")) redirect("/dashboard");
+  if (!hasFeature(await getOrgTier(s.organizationId), "EXPENSES")) redirect("/home");
+  requireModule(s, "expenses");
   const { error } = await searchParams;
 
   const [trend, expenses, properties] = await Promise.all([

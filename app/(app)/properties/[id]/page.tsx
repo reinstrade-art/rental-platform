@@ -1,35 +1,84 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
-import { getProperty, leaseBalance } from "@/app/lib/data";
+import { getProperty, monthRange } from "@/app/lib/data";
 import { createUnit, updateUnit, deleteProperty, inviteCaretaker, disableStaff, enableStaff } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
+import { MonthNav } from "@/app/components/month-nav";
+import { requireModule } from "@/app/lib/permissions";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 export default async function PropertyDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; period?: string }>;
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  requireModule(s, "properties");
   const { id } = await params;
-  const { saved, error } = await searchParams;
+  const { saved, error, period: periodParam } = await searchParams;
   const property = await getProperty(s.organizationId, id);
   if (!property) notFound();
   const savedUnit = saved ? property.units.find((u) => u.id === saved) : null;
 
+  const now = new Date();
+  const period = /^\d{4}-\d{2}$/.test(periodParam ?? "")
+    ? periodParam!
+    : `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const [periodYear, periodMonthNum] = period.split("-").map(Number);
+  const periodLabel = `${MONTH_NAMES[periodMonthNum - 1]} ${periodYear}`;
+  const { start: periodStart, end: periodEnd } = monthRange(new Date(Date.UTC(periodYear, periodMonthNum - 1, 1)));
+
+  // The lease (if any) actually covering this unit during the selected
+  // month — not just "the current lease" — so occupancy and the tenant shown
+  // reflect who was there then, not who's there today.
   const activeLeaseByUnit = new Map(
-    property.units.map((u) => [u.id, u.leases.find((l) => l.status === "ACTIVE") ?? null]),
+    property.units.map((u) => [
+      u.id,
+      u.leases.find((l) => l.startDate < periodEnd && (!l.endDate || l.endDate >= periodStart)) ?? null,
+    ]),
   );
   const occupied = [...activeLeaseByUnit.values()].filter(Boolean).length;
-  const monthlyRentTotal = [...activeLeaseByUnit.values()].reduce((sum, l) => sum + (l?.monthlyRent ?? 0), 0);
-  const balanceOwed = [...activeLeaseByUnit.values()].reduce((sum, l) => sum + (l ? leaseBalance(l) : 0), 0);
+
+  // What the portfolio would earn TODAY at full occupancy — deliberately not
+  // scoped to the month filter above (that only changes who occupied a unit
+  // and what was billed/paid then), so this stays a stable benchmark instead
+  // of swinging with whichever past tenant/rent happened to be in place that
+  // month. A vacant unit's own listed rent counts too.
+  const currentLeaseByUnit = new Map(
+    property.units.map((u) => [u.id, u.leases.find((l) => l.status === "ACTIVE") ?? null]),
+  );
+  const expectedRentTotal = property.units.reduce((sum, u) => {
+    const current = currentLeaseByUnit.get(u.id);
+    return sum + (current ? current.monthlyRent : (u.monthlyRent ?? 0));
+  }, 0);
+
+  // Arrears is this month's billed amount left unpaid — a tenant's advance
+  // payment from an earlier month doesn't erase an unpaid current bill, and a
+  // current overpayment doesn't count as negative arrears either; it's
+  // clamped to zero per lease, same rule the Leases page uses.
+  function thisMonthFigures(lease: { charges: { amount: number; periodMonth: Date }[]; payments: { amount: number; paidAt: Date }[] }) {
+    const charged = lease.charges
+      .filter((c) => c.periodMonth >= periodStart && c.periodMonth < periodEnd)
+      .reduce((s, c) => s + c.amount, 0);
+    const paid = lease.payments
+      .filter((p) => p.paidAt >= periodStart && p.paidAt < periodEnd)
+      .reduce((s, p) => s + p.amount, 0);
+    return { charged, paid, arrears: Math.max(0, charged - paid) };
+  }
+  const receivedTotal = [...activeLeaseByUnit.values()].reduce((sum, l) => sum + (l ? thisMonthFigures(l).paid : 0), 0);
+  const arrearsTotal = [...activeLeaseByUnit.values()].reduce((sum, l) => sum + (l ? thisMonthFigures(l).arrears : 0), 0);
 
   return (
     <div className="flex flex-col gap-8">
@@ -43,7 +92,7 @@ export default async function PropertyDetailPage({
         <Link href="/properties" className="text-xs underline text-silver-dark">
           All properties
         </Link>
-        <div className="mt-1 flex items-start justify-between">
+        <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold">{property.name}</h1>
             <p className="text-sm text-silver-dark">{property.address ?? "No address on file"}</p>
@@ -53,6 +102,8 @@ export default async function PropertyDetailPage({
           </Link>
         </div>
       </div>
+
+      <MonthNav basePath={`/properties/${property.id}`} period={period} />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="rounded border p-4">
@@ -66,24 +117,29 @@ export default async function PropertyDetailPage({
           </div>
         </div>
         <div className="rounded border p-4">
-          <div className="text-xs text-silver-dark">Monthly rent (occupied)</div>
-          <div className="mt-1 text-xl font-semibold">{money(monthlyRentTotal)}</div>
+          <div className="text-xs text-silver-dark">Expected rent (all units)</div>
+          <div className="mt-1 text-xl font-semibold">{money(expectedRentTotal)}</div>
         </div>
         <div className="rounded border p-4">
-          <div className="text-xs text-silver-dark">{balanceOwed > 0 ? "Owed (active leases)" : "Balance"}</div>
-          <div className={`mt-1 text-xl font-semibold ${balanceOwed > 0 ? "text-red-600" : ""}`}>{money(balanceOwed)}</div>
+          <div className="text-xs text-silver-dark">Rent received — {periodLabel}</div>
+          <div className="mt-1 text-xl font-semibold">{money(receivedTotal)}</div>
+        </div>
+        <div className="rounded border p-4">
+          <div className="text-xs text-silver-dark">Arrears — {periodLabel}</div>
+          <div className={`mt-1 text-xl font-semibold ${arrearsTotal > 0 ? "text-red-600" : "text-green-700"}`}>{money(arrearsTotal)}</div>
         </div>
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold">Units</h2>
+        <h2 className="text-lg font-semibold">Units — {periodLabel}</h2>
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
               <th className="py-2">Label</th>
               <th className="py-2">Monthly rent</th>
               <th className="py-2">Tenant</th>
-              <th className="py-2">Balance</th>
+              <th className="py-2">Rent received</th>
+              <th className="py-2">Arrears</th>
               <th className="py-2">Payment code</th>
             </tr>
           </thead>
@@ -127,8 +183,9 @@ export default async function PropertyDetailPage({
                       </div>
                     )}
                   </td>
-                  <td className={`py-2 ${active && leaseBalance(active) > 0 ? "text-red-600" : ""}`}>
-                    {active ? money(leaseBalance(active)) : "—"}
+                  <td className="py-2">{active ? money(thisMonthFigures(active).paid) : "—"}</td>
+                  <td className={`py-2 ${active && thisMonthFigures(active).arrears > 0 ? "text-red-600" : ""}`}>
+                    {active ? money(thisMonthFigures(active).arrears) : "—"}
                   </td>
                   <td className="py-2">
                     <div className="flex gap-1">
@@ -152,7 +209,7 @@ export default async function PropertyDetailPage({
             })}
             {property.units.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-4 text-silver-dark">
+                <td colSpan={6} className="py-4 text-silver-dark">
                   No units yet.
                 </td>
               </tr>

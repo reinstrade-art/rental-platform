@@ -2,37 +2,74 @@
 @plugin "@tailwindcss/typography";
 
 /*
- * Platform-wide palette: matte black, silver, lily white — three colors,
- * deliberately. Status colors (arrears red, credit green) are kept outside
- * this palette on purpose: they carry financial meaning, not decoration,
- * and muting them would make balances harder to scan at a glance.
+ * Full dark redesign. The app's whole palette lives in these tokens and the
+ * ~70 pages that reference them by name (bg-lily, text-ink, border-silver,
+ * bg-ink, text-lily, bg-silver-light, text-silver-dark) never needed
+ * individual edits — flipping the token VALUES here re-themes the entire
+ * app in one place. Two roles that shared one token in the old light theme
+ * had to split apart for the flip to hold together coherently:
+ *
+ * - ink used to mean BOTH "the dark surface color" (bg-ink buttons,
+ *   bg-ink-photo shells) AND, via inheritance, "the default text color."
+ *   Those two roles now point in opposite directions (surfaces should stay
+ *   dark-ish, text needs to go light), so ink keeps the TEXT role — it's
+ *   the far more common of the two explicit uses — and .bg-ink-photo below
+ *   is pinned to a literal dark value instead of following it.
+ * - lily used to mean BOTH "the page background" AND, on the always-dark
+ *   shell chrome (sidebar, mastheads, auth splash), "light text on dark."
+ *   lily keeps the page-background role; the five chrome spots that need
+ *   guaranteed-light text now use the new --color-cream token instead of
+ *   lily, so they read correctly regardless of which way lily points.
  */
 :root {
-  --color-ink: #17181a; /* matte black — primary surfaces, primary buttons */
-  --color-ink-soft: #26282b; /* lifted matte black — hover states on dark surfaces */
-  --color-silver: #c3c8d1; /* cooler, brighter silver — reads as metal rather than flat gray */
-  --color-silver-light: #eef0f3; /* pale silver — subtle fills, table stripes */
-  --color-silver-dark: #767c86; /* deep silver — muted/secondary text on light */
-  --color-lily: #faf9f6; /* lily white — page background, text on dark */
-  --color-gold: #e8b93f; /* one warm accent — focus states, hover highlights, small touches only, never large fills */
+  --color-ink: #f4f1e8; /* light warm parchment — primary text; paired with cream/dark text, bg-ink also serves as the light "primary button" surface */
+  --color-ink-soft: #e7e1cf; /* dimmed parchment — hover lift on ink-surfaced buttons */
+  --color-silver: #34343f; /* dark cool graphite — default border color everywhere */
+  --color-silver-light: #191922; /* dark card/surface fill — badges, table stripes, the "raised panel" look */
+  --color-silver-dark: #9a9eac; /* light-mid gray — muted/secondary text, still reads as "quieter" against the page */
+  --color-lily: #0c0c13; /* near-black, faintly indigo — page background */
+  --color-gold: #e8b93f; /* unchanged — the one warm accent, focus states, the brand mark */
+  --color-cream: #faf9f6; /* guaranteed-light text for the always-dark shell chrome (sidebar, mastheads, auth splash) — see note above */
+  --color-accent: #7b6ef0; /* new: violet — tab/active states, chart bars, the "figures vs editorial" kind of toggle */
 
-  /* Brushed-metal sheen: light-dark-light bands simulate reflected light
-     across a curved metal surface. Used only on flat, non-rounded strips
-     (table header bands, shell top edges) — border-image and gradients
-     don't respect border-radius, so this is deliberately kept off rounded
-     cards/buttons rather than faked there. */
+  /* Brushed-metal sheen, re-tuned dark: dim-brighter-dim bands instead of
+     light-mid-light, so table header bands still read as a metal strip
+     rather than a pale stripe stranded on a black page. */
   --gradient-metal: linear-gradient(
     100deg,
-    #eef0f3 0%,
-    #cfd3d9 20%,
-    #9aa0ab 42%,
-    #dde1e6 58%,
-    #b3b9c2 76%,
-    #eef0f3 100%
+    #202028 0%,
+    #2c2c37 20%,
+    #46464f 42%,
+    #33333d 58%,
+    #262631 76%,
+    #202028 100%
   );
 
   --background: var(--color-lily);
   --foreground: var(--color-ink);
+
+  /* Dark-mode-appropriate steps for the handful of raw Tailwind red/green/
+     orange utilities used throughout for error/success/warning banners and
+     badges (bg-red-50 border-red-300 text-red-700, etc.) — overriding the
+     same variable names Tailwind's own palette defines means every one of
+     those ~200 call sites repaints without being touched individually. */
+  --color-red-50: #2a1416;
+  --color-red-100: #35191c;
+  --color-red-300: #7a3238;
+  --color-red-400: #ef8e93;
+  --color-red-600: #ff6b6f;
+  --color-red-700: #ff8a8f;
+  --color-green-50: #0f2418;
+  --color-green-300: #2f6b47;
+  --color-green-600: #4ade80;
+  --color-green-700: #6ee7a0;
+  --color-green-800: #86efb0;
+  --color-orange-50: #2a1c0d;
+  --color-orange-100: #33230f;
+  --color-orange-300: #7a5220;
+  --color-orange-600: #ffb454;
+  --color-orange-700: #ffc470;
+  --color-orange-800: #ffd394;
 }
 
 @theme inline {
@@ -45,23 +82,23 @@
   --color-silver-dark: var(--color-silver-dark);
   --color-lily: var(--color-lily);
   --color-gold: var(--color-gold);
+  --color-cream: var(--color-cream);
+  --color-accent: var(--color-accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 /*
  * The watermark: the user's own reference photo (dark interior, city
- * skyline through the window), fixed behind every page. On the lily-white
- * content pages it's almost entirely covered by a near-opaque lily tint
- * (94%) — enough to read as texture, not enough to fight with financial
- * data in tables. On the matte-black shells (sidebar/headers/auth) it's
- * blended in at higher visibility since dark-on-dark doesn't hurt legibility
- * there. Same image, two opacities, one `background-blend-mode: multiply`
- * so the photo always sits *under* the palette rather than washing it out.
+ * skyline through the window), fixed behind every page. Previously tinted
+ * near-opaque lily (light) on content pages and a darker ink tint on the
+ * shell; now that content pages are dark too, one dark tint works for both,
+ * so .bg-ink-photo below just reuses the same treatment at the same
+ * strength instead of needing a second, separate recipe.
  */
 body {
   background-color: var(--background);
-  background-image: linear-gradient(rgba(250, 249, 246, 0.94), rgba(250, 249, 246, 0.94)), url("/bg-watermark.jpg");
+  background-image: linear-gradient(rgba(12, 12, 19, 0.92), rgba(12, 12, 19, 0.92)), url("/bg-watermark.jpg");
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
@@ -148,15 +185,15 @@ body {
     background-image: var(--gradient-metal);
   }
 
-  /* The watermark photo at higher visibility, for large matte-black
-     surfaces only (sidebar, headers, auth backgrounds) — never on buttons
-     or small elements, where a photo texture would just read as noise.
-     A lighter ink tint (78%, vs. the body's 94% lily tint) lets more of
-     the photo show through since dark-on-dark doesn't threaten legibility
-     the way it would on a page full of numbers. */
+  /* The always-dark shell surface: sidebar, mastheads, the auth splash
+     behind the sign-in card. Pinned to a literal value rather than
+     var(--color-ink) so it stays dark regardless of which way the ink
+     token points — see the top-of-file note. Same watermark photo as the
+     body, just blended in at higher visibility, since dark-on-dark doesn't
+     threaten legibility the way it would on a page full of numbers. */
   .bg-ink-photo {
-    background-color: var(--color-ink);
-    background-image: linear-gradient(rgba(10, 10, 10, 0.78), rgba(10, 10, 10, 0.78)), url("/bg-watermark.jpg");
+    background-color: #0a0a10;
+    background-image: linear-gradient(rgba(6, 6, 10, 0.8), rgba(6, 6, 10, 0.8)), url("/bg-watermark.jpg");
     background-size: cover;
     background-position: center;
   }

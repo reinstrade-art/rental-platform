@@ -3,16 +3,29 @@ import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { getLease, leaseBalance } from "@/app/lib/data";
-import { addCharge, recordPayment, recordDirectedPayment, startEviction, deleteLease, forceDeleteLease } from "@/app/lib/actions";
+import {
+  addCharge,
+  updateCharge,
+  deleteCharge,
+  recordPayment,
+  updatePayment,
+  deletePayment,
+  recordDirectedPayment,
+  startEviction,
+  deleteLease,
+  forceDeleteLease,
+} from "@/app/lib/actions";
 import { allocate } from "@/app/lib/settle";
 import { DeleteButton } from "@/app/components/delete-button";
 import { sendMpesaPrompt } from "@/app/lib/mpesa-actions";
-import { mpesaConfigured } from "@/app/lib/mpesa";
+import { mpesaPayOptionsForLease } from "@/app/lib/mpesa-pay-options";
 import { prisma } from "@/app/lib/prisma";
 import { CHARGE_TYPES, CHARGE_TYPE_LABEL, PAYMENT_METHODS } from "@/app/lib/constants";
-import { MpesaPay } from "@/app/components/mpesa-pay";
+import { MpesaPayPanel } from "@/app/components/mpesa-pay-panel";
 import { GROUNDS, GROUNDS_LIST, STATUS_LABEL, OPEN_STATUSES } from "@/app/lib/eviction";
 import { waLink } from "@/app/lib/phone";
+import { displayBalance, balanceTone } from "@/app/lib/balance-display";
+import { requireModule } from "@/app/lib/permissions";
 
 function periodParam(d: Date) {
   const dt = new Date(d);
@@ -32,6 +45,7 @@ export default async function LeaseDetailPage({
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  requireModule(s, "leases");
   const { id } = await params;
   const { error } = await searchParams;
   const lease = await getLease(s.organizationId, id);
@@ -49,15 +63,8 @@ export default async function LeaseDetailPage({
   });
   const openEviction = latestEviction && OPEN_STATUSES.includes(latestEviction.status) ? latestEviction : null;
 
-  const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } });
-  const mpesaReady = mpesaConfigured({
-    env: org.mpesaEnv,
-    shortcode: org.mpesaShortcode,
-    accountType: org.mpesaAccountType,
-    consumerKey: org.mpesaConsumerKey,
-    consumerSecret: org.mpesaConsumerSecret,
-    passkey: org.mpesaPasskey,
-  });
+  const payOptions = await mpesaPayOptionsForLease(s.organizationId, lease.id);
+  const mpesaReady = payOptions.stkReady || payOptions.directReady;
 
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
@@ -104,7 +111,7 @@ export default async function LeaseDetailPage({
         </div>
         <div className="rounded border p-4">
           <div className="text-xs text-silver-dark">{balance > 0 ? "Balance owed" : "Balance"}</div>
-          <div className={`mt-1 text-xl font-semibold ${balance > 0 ? "text-red-600" : ""}`}>{money(balance)}</div>
+          <div className={`mt-1 text-xl font-semibold ${balanceTone(balance)}`}>{money(displayBalance(balance))}</div>
         </div>
       </div>
 
@@ -195,14 +202,54 @@ export default async function LeaseDetailPage({
               </tr>
             </thead>
             <tbody>
-              {lease.charges.map((c) => (
-                <tr key={c.id} className="border-b">
-                  <td className="py-1">{new Date(c.periodMonth).toLocaleDateString(undefined, { year: "numeric", month: "short" })}</td>
-                  <td className="py-1">{CHARGE_TYPE_LABEL[c.type] ?? c.type}</td>
-                  <td className="py-1">{money(c.amount)}</td>
-                  <td className="py-1"></td>
-                </tr>
-              ))}
+              {lease.charges.map((c) => {
+                const formId = `charge-${c.id}`;
+                return (
+                  <tr key={c.id} className="border-b">
+                    <td className="py-1">
+                      <form id={formId} action={updateCharge.bind(null, c.id)} />
+                      <input
+                        form={formId}
+                        name="periodMonth"
+                        type="month"
+                        required
+                        defaultValue={periodParam(c.periodMonth)}
+                        className="w-32 rounded border px-1.5 py-1 text-xs"
+                      />
+                    </td>
+                    <td className="py-1">
+                      <select form={formId} name="type" defaultValue={c.type} className="rounded border px-1.5 py-1 text-xs">
+                        {CHARGE_TYPES.map((t) => (
+                          <option key={t} value={t}>
+                            {CHARGE_TYPE_LABEL[t] ?? t}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="py-1">
+                      <input
+                        form={formId}
+                        name="amount"
+                        type="number"
+                        step="0.01"
+                        required
+                        defaultValue={c.amount}
+                        className="w-24 rounded border px-1.5 py-1 text-xs"
+                      />
+                    </td>
+                    <td className="py-1">
+                      <div className="flex items-center gap-2">
+                        <button form={formId} className="text-xs underline">
+                          Save
+                        </button>
+                        <form action={deleteCharge.bind(null, c.id)}>
+                          <DeleteButton confirmText="Delete this charge? This cannot be undone." />
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {lease.charges.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-2 text-silver-dark">
@@ -244,11 +291,30 @@ export default async function LeaseDetailPage({
             <tbody>
               {lease.payments.map((p) => {
                 const chargeById = new Map(lease.charges.map((c) => [c.id, c]));
+                const formId = `payment-${p.id}`;
                 return (
                 <tr key={p.id} className="border-b">
-                  <td className="py-1">{new Date(p.paidAt).toLocaleDateString()}</td>
                   <td className="py-1">
-                    {p.method ?? "—"}
+                    <form id={formId} action={updatePayment.bind(null, p.id)} />
+                    <input type="hidden" form={formId} name="reference" defaultValue={p.reference ?? ""} />
+                    <input
+                      form={formId}
+                      name="paidAt"
+                      type="date"
+                      required
+                      defaultValue={new Date(p.paidAt).toISOString().slice(0, 10)}
+                      className="w-32 rounded border px-1.5 py-1 text-xs"
+                    />
+                  </td>
+                  <td className="py-1">
+                    <select form={formId} name="method" defaultValue={p.method ?? ""} className="rounded border px-1.5 py-1 text-xs">
+                      <option value="">Method (optional)</option>
+                      {PAYMENT_METHODS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
                     {p.allocations.length > 0 && (
                       <span className="block text-xs text-silver-dark">
                         {p.allocations
@@ -261,9 +327,22 @@ export default async function LeaseDetailPage({
                       </span>
                     )}
                   </td>
-                  <td className="py-1">{money(p.amount)}</td>
+                  <td className="py-1">
+                    <input
+                      form={formId}
+                      name="amount"
+                      type="number"
+                      step="0.01"
+                      required
+                      defaultValue={p.amount}
+                      className="w-24 rounded border px-1.5 py-1 text-xs"
+                    />
+                  </td>
                   <td className="py-1">
                     <div className="flex items-center gap-2">
+                      <button form={formId} className="text-xs underline">
+                        Save
+                      </button>
                       <a href={`/api/receipt/${p.id}`} target="_blank" rel="noreferrer" className="text-xs underline text-silver-dark">
                         Receipt
                       </a>
@@ -278,6 +357,9 @@ export default async function LeaseDetailPage({
                           </a>
                         ) : null;
                       })()}
+                      <form action={deletePayment.bind(null, p.id)}>
+                        <DeleteButton confirmText="Delete this payment? This cannot be undone." />
+                      </form>
                     </div>
                   </td>
                 </tr>
@@ -362,14 +444,22 @@ export default async function LeaseDetailPage({
 
           {mpesaReady && (
             <div className="mt-4 border-t pt-4">
-              <h3 className="text-sm font-semibold">Send M-Pesa prompt</h3>
+              <h3 className="text-sm font-semibold">Pay via M-Pesa</h3>
               <div className="mt-2">
-                <MpesaPay
+                <MpesaPayPanel
                   action={sendMpesaPrompt}
                   leaseId={lease.id}
                   defaultAmount={balance > 0 ? balance : lease.monthlyRent}
                   phone={lease.tenant.phone}
                   editablePhone
+                  stkReady={payOptions.stkReady}
+                  direct={{
+                    ready: payOptions.directReady,
+                    accountType: payOptions.accountType,
+                    shortcode: payOptions.shortcode,
+                    accountRef: payOptions.accountRef,
+                    autoMatch: payOptions.directAutoMatch,
+                  }}
                 />
               </div>
             </div>

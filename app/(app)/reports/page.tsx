@@ -4,6 +4,7 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { prisma } from "@/app/lib/prisma";
 import { getReportData, monthName } from "@/app/lib/reports";
+import { requireModule } from "@/app/lib/permissions";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -16,7 +17,8 @@ export default async function ReportsPage({
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  if (!hasFeature(await getOrgTier(s.organizationId), "REPORTS")) redirect("/dashboard");
+  if (!hasFeature(await getOrgTier(s.organizationId), "REPORTS")) redirect("/home");
+  requireModule(s, "reports");
 
   const sp = await searchParams;
   const now = new Date();

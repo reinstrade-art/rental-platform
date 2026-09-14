@@ -3,6 +3,7 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { getTransactions, getLeases } from "@/app/lib/data";
 import { addManualTransaction, importTransactionsCsv, matchTransactionAction, ignoreTransactionAction } from "@/app/lib/actions";
 import { PAYMENT_METHODS } from "@/app/lib/constants";
+import { requireModule } from "@/app/lib/permissions";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -17,6 +18,7 @@ const STATUS_COLOR: Record<string, string> = {
 export default async function PaymentsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  requireModule(s, "payments");
   const { error } = await searchParams;
 
   const [transactions, leases] = await Promise.all([getTransactions(s.organizationId), getLeases(s.organizationId)]);

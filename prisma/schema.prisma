@@ -215,6 +215,8 @@ model Payout {
   createdAt   DateTime  @default(now())
   completedAt DateTime?
 
+  platformAccountingSyncLog PlatformAccountingSyncLog?
+
   @@index([organizationId])
 }
 
@@ -248,7 +250,64 @@ model LicensePayment {
 
   createdAt DateTime @default(now())
 
+  platformAccountingSyncLog PlatformAccountingSyncLog?
+
   @@index([organizationId])
+}
+
+// The PLATFORM's own Wave connection — one row, id "default", the same
+// singleton shape as PlatformSetting. Deliberately not another row on
+// AccountingConnection: that table is an ORG's own customer accounting
+// (their tenants' rent, their books); this is the operator's own books —
+// license revenue coming in, commission payouts going out. A platform
+// admin connects exactly one Wave business, once, from Platform Admin →
+// Accounting, the same OAuth shape as the per-org QuickBooks connection in
+// app/lib/quickbooks.ts.
+model PlatformAccountingConnection {
+  id       String @id @default("default")
+  provider String @default("WAVE")
+
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+
+  // Wave's own id for the connected business — chosen at connect time from
+  // whichever businesses the admin's Wave account belongs to.
+  businessId String
+
+  // Wave account ids the sync posts against, picked from that business's
+  // own chart of accounts — never guessed, same reasoning as
+  // AccountingConnection.incomeAccountId/bankAccountId.
+  incomeAccountId  String? // credited by a LicensePayment
+  expenseAccountId String? // debited by a Payout
+  bankAccountId    String? // the anchor both sides move through
+
+  connectedBy String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// One row per LicensePayment/Payout pushed to Wave — same "a failed sync is
+// a visible FAILED row, never a silent gap" discipline as
+// AccountingSyncLog, just platform-scoped and covering both directions of
+// money instead of only incoming tenant payments.
+model PlatformAccountingSyncLog {
+  id String @id @default(cuid())
+
+  kind String // LICENSE_PAYMENT | PAYOUT
+
+  licensePaymentId String?         @unique
+  licensePayment   LicensePayment? @relation(fields: [licensePaymentId], references: [id], onDelete: Cascade)
+  payoutId         String?         @unique
+  payout           Payout?         @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+
+  provider   String  @default("WAVE")
+  externalId String? // the Wave money-transaction id, once SUCCESS
+  status     String  @default("PENDING") // PENDING | SUCCESS | FAILED
+  error      String?
+  syncedAt   DateTime?
+
+  createdAt DateTime @default(now())
 }
 
 // What each package costs by default — the platform's standard price list.
@@ -366,6 +425,22 @@ model User {
   // request in getSession(), same as an organization's own suspension.
   disabledAt DateTime?
 
+  // Set when an admin hands this account a temporary password (see
+  // resetStaffPasswordAction) — forces a stop at /change-password on the
+  // next request before anything else in the app is reachable, same way
+  // disabledAt blocks access outright. Cleared the moment a real password
+  // is chosen.
+  mustChangePassword Boolean @default(false)
+
+  // Custom module access for a MANAGER/VIEWER, set by the org's own ADMIN —
+  // a JSON array of module keys (see MODULE_LIST in app/lib/constants.ts),
+  // e.g. ["properties","leases","payments"]. Null means "full access", the
+  // default for every account until an admin deliberately narrows it —
+  // required NOT ever meaning "no access", which would silently lock out
+  // every existing MANAGER/VIEWER the moment this column shipped. Ignored
+  // entirely for ADMIN, who always has full access regardless of this field.
+  permissions String?
+
   // Recorded at registration for outside roles (TENANT/TRADESMAN/CASUAL_LABOURER).
   // consentVersion pins WHICH wording of the notice was agreed to — bump
   // CONSENT_VERSION in app/lib/consent.ts whenever the wording changes what
@@ -380,6 +455,24 @@ model User {
   approvalsRaised     ApprovalRequest[]
   auditLogsWritten    AuditLog[]
   sessions            Session[]
+  deviceTokens        DeviceToken[]
+}
+
+// One row per installed copy of the Android app that's asked to be notified —
+// keyed on the FCM token itself (unique per install), not per user, so a
+// second person signing in on the same phone reassigns the row to them
+// rather than leaving the old owner's token stuck on it. A user can hold
+// several (several phones, or a reinstall).
+model DeviceToken {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  token    String @unique
+  platform String @default("ANDROID")
+
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
 }
 
 // One row per signed-in device, not per login — the JWT's jti points here, so
@@ -477,9 +570,10 @@ model Tenant {
   phone String?
   email String?
 
-  leases   Lease[]
-  user     User?
-  messages Message[]
+  leases         Lease[]
+  user           User?
+  messages       Message[]
+  reportedRepairs Repair[]
 
   createdAt DateTime @default(now())
 }
@@ -799,6 +893,14 @@ model Repair {
   category    String? // e.g. plumbing, electrical, structural
   priority    String  @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
   status      String  @default("REPORTED") // REPORTED | QUOTING | APPROVED | IN_PROGRESS | DONE | CANCELLED
+
+  // Set when a tenant filed this themselves from their portal rather than
+  // staff logging it directly — lets the tenant see their own request's
+  // progress, and lets staff see at a glance which jobs came in that way.
+  // Null for anything staff-created, including common-area faults with no
+  // tenant to attribute it to.
+  reportedByTenantId String?
+  reportedByTenant   Tenant? @relation(fields: [reportedByTenantId], references: [id])
 
   reportedAt  DateTime @default(now())
   completedAt DateTime?

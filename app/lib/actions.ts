@@ -9,14 +9,19 @@ import {
   createSession,
   destroySession,
   hashPassword,
+  generateTempPassword,
   needsPlatformSetup,
   requireStaff,
   requireOrgAdmin,
   requirePlatformAdmin,
   requireTenant,
   requireTenantsAccess,
+  requireTradesman,
   isCaretaker,
+  isTenant,
+  isTradesman,
   verifyCredentials,
+  verifyPassword,
   getSession,
   impersonate,
   platformImpersonate,
@@ -48,15 +53,19 @@ import {
   confirmTierRequest,
   rejectTierRequest,
 } from "./tier-requests";
-import { ORG_TIERS, type OrgTier } from "./constants";
+import { ORG_TIERS, type OrgTier, MODULE_LIST, REPAIR_PRIORITIES } from "./constants";
+import { requireModule } from "./permissions";
 import { setPlatformCommissionPercent } from "./commission";
 import { createApiKey, revokeApiKey, deleteApiKey } from "./api-keys";
 import { createWebhook, revokeWebhook, dispatchWebhookEvent } from "./webhooks";
 import { syncPayment, syncAllUnsyncedPayments } from "./accounting-sync";
+import { syncLicensePaymentToWave, syncAllUnsyncedPlatformTransactions } from "./platform-accounting-sync";
 import { registerC2bUrls } from "./mpesa";
+import { ensureOrgPaymentCodes } from "./mpesa-pay-options";
 import { mpesaWebhookKey } from "./webhook-secret";
 import { sanitizeMessageBody } from "./sanitize";
 import { attachFilesToMessage } from "./attachments";
+import { notifyTenantForLease } from "./push";
 
 /** Same NEXT_PUBLIC_APP_URL-first pattern already used for eviction notices / C2B registration -- factored out since sendPaymentReceipt's callers need it too. */
 async function requestOrigin() {
@@ -110,7 +119,42 @@ export async function login(formData: FormData) {
     role: user.role,
   });
 
-  redirect(user.role === "PLATFORM_ADMIN" ? "/platform" : user.role === "CARETAKER" ? "/tenants" : "/dashboard");
+  redirect(user.role === "PLATFORM_ADMIN" ? "/platform" : user.role === "CARETAKER" ? "/tenants" : "/home");
+}
+
+/**
+ * Where mustChangePassword sends someone next — proving the temporary
+ * password one more time (rather than trusting the session alone) so a
+ * device left unlocked can't be used to lock the real account owner out of
+ * their own account by picking a password only the attacker knows.
+ */
+export async function changeOwnPassword(formData: FormData) {
+  const s = await getSession();
+  if (!s) redirect("/login");
+
+  const currentPassword = String(formData.get("currentPassword") ?? "");
+  const newPassword = String(formData.get("newPassword") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+  if (!(await verifyPassword(s.userId, currentPassword))) {
+    errorRedirect("/change-password", "Your current password is incorrect.");
+  }
+  if (newPassword.length < 8) errorRedirect("/change-password", "New password must be at least 8 characters.");
+  if (newPassword !== confirmPassword) errorRedirect("/change-password", "New passwords don't match.");
+  if (newPassword === currentPassword) errorRedirect("/change-password", "Choose a password different from the temporary one.");
+
+  await prisma.user.update({
+    where: { id: s.userId },
+    data: { passwordHash: await hashPassword(newPassword), mustChangePassword: false },
+  });
+  // The temporary password may have been read over someone's shoulder or a
+  // shared channel — closing every other device forces a re-sign-in with
+  // only the new, real password from here on.
+  await revokeOtherSessions(s.userId);
+
+  redirect(
+    s.role === "PLATFORM_ADMIN" ? "/platform" : s.role === "CARETAKER" ? "/tenants" : isTenant(s.role) ? "/portal" : isTradesman(s.role) ? "/trade" : "/home",
+  );
 }
 
 export async function logout() {
@@ -254,8 +298,9 @@ export async function recordLicensePayment(organizationId: string, formData: For
   const periodDays = Number(formData.get("periodDays") ?? 30) || 30;
   if (!amount || amount <= 0) errorRedirect(`/platform/${organizationId}`, "Enter a positive amount.");
 
-  await extendLicense(organizationId, { amount, method, reference, periodDays, recordedBy: s.userId });
+  const { paymentId } = await extendLicense(organizationId, { amount, method, reference, periodDays, recordedBy: s.userId });
   await logPlatformAccess(s.userId, organizationId, "RECORD_LICENSE_PAYMENT", `KES ${amount} via ${method}`);
+  after(() => syncLicensePaymentToWave(paymentId));
   redirect("/platform");
 }
 
@@ -329,6 +374,37 @@ export async function setPlatformCommissionAction(formData: FormData) {
 
   await setPlatformCommissionPercent(percent);
   redirect("/platform?priceSaved=1");
+}
+
+export async function disconnectWaveAction() {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+  await prisma.platformAccountingConnection.deleteMany({ where: { id: "default" } });
+  redirect("/platform/accounting");
+}
+
+/** The Wave account ids the sync posts against — see wave.ts's postMoneyTransactionToWave for why these can't be guessed. */
+export async function setWaveAccountsAction(formData: FormData) {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+
+  const incomeAccountId = String(formData.get("incomeAccountId") ?? "").trim() || null;
+  const expenseAccountId = String(formData.get("expenseAccountId") ?? "").trim() || null;
+  const bankAccountId = String(formData.get("bankAccountId") ?? "").trim() || null;
+
+  await prisma.platformAccountingConnection.updateMany({
+    where: { id: "default" },
+    data: { incomeAccountId, expenseAccountId, bankAccountId },
+  });
+  redirect("/platform/accounting?waveConnected=1");
+}
+
+/** Manually catches up any license payment or payout that never made it into Wave — the same sync every new one triggers automatically, run on demand. */
+export async function syncWaveNowAction() {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
+  const { attempted } = await syncAllUnsyncedPlatformTransactions();
+  redirect(`/platform/accounting?waveSynced=${attempted}`);
 }
 
 /** Platform admin sets (or clears) a negotiated commission rate for one org — overrides the platform default for that org only. */
@@ -551,6 +627,20 @@ export async function registerMpesaC2bAction() {
 }
 
 /**
+ * Assigns a payment code to every unit that has none — derived from the
+ * unit label, kept unique per org and non-overlapping so the C2B matcher
+ * can't double-match (see ensureUnitPaymentCode). Makes direct paybill
+ * payments reconcile without an admin hand-entering a code per unit.
+ */
+export async function generateUnitPaymentCodesAction() {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can generate payment codes.");
+
+  const assigned = await ensureOrgPaymentCodes(s.organizationId);
+  redirect(`/settings?codesAssigned=${assigned}`);
+}
+
+/**
  * Where the platform sends this org's share once (and if) a platform admin
  * turns commission routing on for them — set by the org's own ADMIN, never
  * chosen on their behalf. Harmless to fill in ahead of time: unused until
@@ -658,6 +748,7 @@ export async function syncQuickbooksNowAction() {
 export async function createProperty(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "properties");
 
   const name = String(formData.get("name") ?? "").trim();
   const address = String(formData.get("address") ?? "").trim() || null;
@@ -670,6 +761,7 @@ export async function createProperty(formData: FormData) {
 export async function updateProperty(propertyId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "properties");
 
   const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
   if (!property) errorRedirect("/properties", "Property not found.");
@@ -686,6 +778,7 @@ export async function updateProperty(propertyId: string, formData: FormData) {
 export async function deleteProperty(propertyId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "properties");
 
   const property = await prisma.property.findFirst({
     where: { id: propertyId, organizationId: s.organizationId },
@@ -713,6 +806,7 @@ function errorRedirect(path: string, message: string): never {
 export async function importPropertiesCsv(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "properties");
   requireFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
 
   const file = formData.get("file");
@@ -729,6 +823,7 @@ export async function importPropertiesCsv(formData: FormData) {
 export async function createUnit(propertyId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "properties");
 
   const property = await prisma.property.findFirst({
     where: { id: propertyId, organizationId: s.organizationId },
@@ -748,6 +843,7 @@ export async function createUnit(propertyId: string, formData: FormData) {
 export async function updateUnit(unitId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "properties");
 
   const unit = await prisma.unit.findFirst({ where: { id: unitId, organizationId: s.organizationId } });
   if (!unit) throw new Error("Unit not found.");
@@ -765,6 +861,9 @@ export async function updateUnit(unitId: string, formData: FormData) {
 export async function createTenant(formData: FormData) {
   const s = await getSession();
   if (!requireTenantsAccess(s)) throw new Error("Not authorized.");
+  // A caretaker's Tenants access is its own dedicated grant, never subject
+  // to the ordinary staff module-permission set.
+  if (!isCaretaker(s.role)) requireModule(s, "tenants");
 
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim() || null;
@@ -793,6 +892,7 @@ export async function createTenant(formData: FormData) {
 export async function updateTenant(tenantId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "tenants");
 
   const tenant = await prisma.tenant.findFirst({ where: { id: tenantId, organizationId: s.organizationId } });
   if (!tenant) errorRedirect("/tenants", "Tenant not found.");
@@ -815,6 +915,7 @@ export async function updateTenant(tenantId: string, formData: FormData) {
 export async function deleteTenant(tenantId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "tenants");
 
   const tenant = await prisma.tenant.findFirst({
     where: { id: tenantId, organizationId: s.organizationId },
@@ -832,6 +933,7 @@ export async function deleteTenant(tenantId: string) {
 export async function importTenantsCsv(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "tenants");
   requireFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
 
   const file = formData.get("file");
@@ -848,6 +950,7 @@ export async function importTenantsCsv(formData: FormData) {
 export async function createLease(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
 
   const unitId = String(formData.get("unitId") ?? "");
   let tenantId = String(formData.get("tenantId") ?? "");
@@ -892,6 +995,7 @@ export async function createLease(formData: FormData) {
 export async function updateLease(leaseId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
 
   const lease = await prisma.lease.findFirst({ where: { id: leaseId, organizationId: s.organizationId } });
   if (!lease) errorRedirect("/leases", "Lease not found.");
@@ -925,6 +1029,7 @@ export async function updateLease(leaseId: string, formData: FormData) {
 export async function deleteLease(leaseId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
 
   const lease = await prisma.lease.findFirst({
     where: { id: leaseId, organizationId: s.organizationId },
@@ -953,6 +1058,7 @@ export async function deleteLease(leaseId: string) {
 export async function forceDeleteLease(leaseId: string) {
   const s = await getSession();
   if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can force-delete a lease with financial history.");
+  requireModule(s, "leases");
 
   const lease = await prisma.lease.findFirst({ where: { id: leaseId, organizationId: s.organizationId } });
   if (!lease) throw new Error("Lease not found.");
@@ -974,6 +1080,7 @@ export async function forceDeleteLease(leaseId: string) {
 export async function importRentRoll(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
   requireFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
 
   const propertyId = String(formData.get("propertyId") ?? "");
@@ -997,6 +1104,7 @@ export async function importRentRoll(formData: FormData) {
 export async function addCharge(leaseId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
 
   const lease = await prisma.lease.findFirst({ where: { id: leaseId, organizationId: s.organizationId } });
   if (!lease) throw new Error("Lease not found.");
@@ -1021,12 +1129,59 @@ export async function addCharge(leaseId: string, formData: FormData) {
       periodMonth: periodMonth.toISOString().slice(0, 7),
     }),
   );
+  after(() =>
+    notifyTenantForLease(leaseId, {
+      title: "New charge",
+      body: `${type === "RENT" ? "Rent" : type} of ${amount.toLocaleString()} added for ${periodMonth.toLocaleDateString(undefined, { year: "numeric", month: "long" })}.`,
+      data: { kind: "charge", leaseId },
+    }),
+  );
   redirect(`/leases/${leaseId}`);
+}
+
+/** Corrects a charge already on file — a typo'd amount, wrong period, or wrong type. Never touches which payments were allocated to it; those stand as recorded. */
+export async function updateCharge(chargeId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
+
+  const charge = await prisma.charge.findFirst({ where: { id: chargeId, organizationId: s.organizationId } });
+  if (!charge) throw new Error("Charge not found.");
+
+  const type = String(formData.get("type") ?? charge.type);
+  const amount = Number(formData.get("amount") ?? 0);
+  const description = String(formData.get("description") ?? "").trim() || null;
+  const periodMonth = new Date(String(formData.get("periodMonth") ?? ""));
+  if (!amount || isNaN(periodMonth.getTime())) {
+    errorRedirect(`/leases/${charge.leaseId}`, "Amount and period month are required.");
+  }
+
+  await prisma.charge.update({ where: { id: chargeId }, data: { type, amount, description, periodMonth } });
+  redirect(`/leases/${charge.leaseId}`);
+}
+
+/**
+ * Removes a charge entered in error. PaymentAllocation rows pointing to it
+ * cascade-delete (see schema) — the payment itself is untouched, only the
+ * record of what it was earmarked for; the money simply falls back into the
+ * ordinary oldest-charge-first pool for balance purposes.
+ */
+export async function deleteCharge(chargeId: string) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
+
+  const charge = await prisma.charge.findFirst({ where: { id: chargeId, organizationId: s.organizationId } });
+  if (!charge) throw new Error("Charge not found.");
+
+  await prisma.charge.delete({ where: { id: chargeId } });
+  redirect(`/leases/${charge.leaseId}`);
 }
 
 export async function recordPayment(leaseId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
 
   const lease = await prisma.lease.findFirst({ where: { id: leaseId, organizationId: s.organizationId } });
   if (!lease) throw new Error("Lease not found.");
@@ -1058,9 +1213,65 @@ export async function recordPayment(leaseId: string, formData: FormData) {
       paidAt: paidAt.toISOString(),
     }),
   );
+  after(() =>
+    notifyTenantForLease(leaseId, {
+      title: "Payment received",
+      body: `We've recorded ${amount.toLocaleString()} against your account. Thank you.`,
+      data: { kind: "payment", leaseId },
+    }),
+  );
   after(() => syncPayment(s.organizationId, payment.id));
   after(async () => sendPaymentReceipt(payment.id, await requestOrigin()));
   redirect(`/leases/${leaseId}`);
+}
+
+/**
+ * Corrects a payment already on file — a typo'd amount, wrong date, or wrong
+ * method/reference. Never re-runs receipt sending or accounting sync — those
+ * fired once for the original entry, and don't need repeating for a
+ * correction; if the amount's changed enough to matter, resend the receipt
+ * by hand from the lease page.
+ */
+export async function updatePayment(paymentId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
+
+  const payment = await prisma.payment.findFirst({ where: { id: paymentId, organizationId: s.organizationId } });
+  if (!payment) throw new Error("Payment not found.");
+
+  const amount = Number(formData.get("amount") ?? 0);
+  const method = String(formData.get("method") ?? "").trim() || null;
+  const reference = String(formData.get("reference") ?? "").trim() || null;
+  const paidAt = new Date(String(formData.get("paidAt") ?? ""));
+  if (!amount || isNaN(paidAt.getTime())) errorRedirect(`/leases/${payment.leaseId}`, "Amount and date are required.");
+
+  try {
+    await prisma.payment.update({ where: { id: paymentId }, data: { amount, method, reference, paidAt } });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      errorRedirect(`/leases/${payment.leaseId}`, "That reference has already been recorded against another payment.");
+    }
+    throw e;
+  }
+  redirect(`/leases/${payment.leaseId}`);
+}
+
+/**
+ * Removes a payment entered in error. Its allocations cascade-delete (see
+ * schema) — the charges it was earmarked for go back to being unpaid, same
+ * as if the payment had never been recorded.
+ */
+export async function deletePayment(paymentId: string) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
+
+  const payment = await prisma.payment.findFirst({ where: { id: paymentId, organizationId: s.organizationId } });
+  if (!payment) throw new Error("Payment not found.");
+
+  await prisma.payment.delete({ where: { id: paymentId } });
+  redirect(`/leases/${payment.leaseId}`);
 }
 
 /**
@@ -1075,6 +1286,7 @@ export async function recordPayment(leaseId: string, formData: FormData) {
 export async function recordDirectedPayment(leaseId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
 
   const lease = await prisma.lease.findFirst({ where: { id: leaseId, organizationId: s.organizationId } });
   if (!lease) throw new Error("Lease not found.");
@@ -1114,6 +1326,13 @@ export async function recordDirectedPayment(leaseId: string, formData: FormData)
     },
   });
   after(async () => sendPaymentReceipt(payment.id, await requestOrigin()));
+  after(() =>
+    notifyTenantForLease(leaseId, {
+      title: "Payment received",
+      body: `We've recorded ${amount.toLocaleString()} against your account. Thank you.`,
+      data: { kind: "payment", leaseId },
+    }),
+  );
   redirect(`/leases/${leaseId}`);
 }
 
@@ -1127,6 +1346,7 @@ export async function recordDirectedPayment(leaseId: string, formData: FormData)
 export async function runMonthlyBilling(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "leases");
   requireFeature(await getOrgTier(s.organizationId), "BILLING_RUN");
 
   const period = String(formData.get("period") ?? "");
@@ -1162,6 +1382,7 @@ async function requireOpenEviction(organizationId: string, id: string) {
 export async function startEviction(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "evictions");
   requireFeature(await getOrgTier(s.organizationId), "EVICTIONS");
 
   const leaseId = str(formData, "leaseId");
@@ -1202,6 +1423,7 @@ export async function startEviction(formData: FormData) {
 export async function resendNoticeAction(evictionId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "evictions");
   await requireOpenEviction(s.organizationId, evictionId);
 
   const h = await headers();
@@ -1221,6 +1443,7 @@ export async function resendNoticeAction(evictionId: string) {
 export async function recordNoticeServed(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "evictions");
 
   const id = str(formData, "id");
   const ev = await requireOpenEviction(s.organizationId, id);
@@ -1245,6 +1468,7 @@ export async function recordNoticeServed(formData: FormData) {
 export async function recordDistressFiled(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "evictions");
 
   const id = str(formData, "id");
   const ev = await requireOpenEviction(s.organizationId, id);
@@ -1266,6 +1490,7 @@ export async function recordDistressFiled(formData: FormData) {
 export async function recordCourtFiled(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "evictions");
 
   const id = str(formData, "id");
   const ev = await requireOpenEviction(s.organizationId, id);
@@ -1290,6 +1515,7 @@ export async function recordCourtFiled(formData: FormData) {
 export async function recordOrderObtained(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "evictions");
 
   const id = str(formData, "id");
   const ev = await requireOpenEviction(s.organizationId, id);
@@ -1323,6 +1549,7 @@ async function endTenancy(leaseId: string) {
 export async function recordEnforced(formData: FormData) {
   const s = await getSession();
   if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can record an eviction as enforced.");
+  requireModule(s, "evictions");
 
   const id = str(formData, "id");
   const ev = await requireOpenEviction(s.organizationId, id);
@@ -1350,6 +1577,7 @@ export async function recordEnforced(formData: FormData) {
 export async function recordVacated(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "evictions");
 
   const id = str(formData, "id");
   const ev = await requireOpenEviction(s.organizationId, id);
@@ -1366,6 +1594,7 @@ export async function recordVacated(formData: FormData) {
 export async function withdrawEviction(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "evictions");
 
   const id = str(formData, "id");
   const ev = await requireOpenEviction(s.organizationId, id);
@@ -1387,6 +1616,7 @@ export async function withdrawEviction(formData: FormData) {
 export async function createExpense(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "expenses");
   requireFeature(await getOrgTier(s.organizationId), "EXPENSES");
 
   const category = str(formData, "category");
@@ -1418,6 +1648,7 @@ export async function createExpense(formData: FormData) {
 export async function deleteExpense(expenseId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "expenses");
 
   const expense = await prisma.expense.findFirst({ where: { id: expenseId, organizationId: s.organizationId } });
   if (!expense) errorRedirect("/expenses", "Expense not found.");
@@ -1432,6 +1663,7 @@ export async function deleteExpense(expenseId: string) {
 export async function createVendor(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "vendors");
   requireFeature(await getOrgTier(s.organizationId), "REPAIRS");
 
   const name = String(formData.get("name") ?? "").trim();
@@ -1456,6 +1688,7 @@ export async function createVendor(formData: FormData) {
 export async function setVendorPrequalified(vendorId: string, prequalified: boolean) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "vendors");
   const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, organizationId: s.organizationId } });
   if (!vendor) throw new Error("Vendor not found.");
   await prisma.vendor.update({ where: { id: vendorId }, data: { prequalified } });
@@ -1464,6 +1697,7 @@ export async function setVendorPrequalified(vendorId: string, prequalified: bool
 export async function updateVendor(vendorId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "vendors");
   const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, organizationId: s.organizationId } });
   if (!vendor) errorRedirect("/vendors", "Vendor not found.");
 
@@ -1487,6 +1721,7 @@ export async function updateVendor(vendorId: string, formData: FormData) {
 export async function deleteVendor(vendorId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "vendors");
   const vendor = await prisma.vendor.findFirst({
     where: { id: vendorId, organizationId: s.organizationId },
     include: { quotes: true, user: true },
@@ -1508,6 +1743,7 @@ export async function deleteVendor(vendorId: string) {
 export async function createSupplier(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "suppliers");
   requireFeature(await getOrgTier(s.organizationId), "SUPPLIERS");
 
   const name = str(formData, "name");
@@ -1532,6 +1768,7 @@ export async function createSupplier(formData: FormData) {
 export async function updateSupplier(supplierId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "suppliers");
 
   const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, organizationId: s.organizationId } });
   if (!supplier) errorRedirect("/suppliers", "Supplier not found.");
@@ -1558,6 +1795,7 @@ export async function updateSupplier(supplierId: string, formData: FormData) {
 export async function deleteSupplier(supplierId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "suppliers");
 
   const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, organizationId: s.organizationId } });
   if (!supplier) throw new Error("Supplier not found.");
@@ -1573,6 +1811,7 @@ export async function deleteSupplier(supplierId: string) {
 export async function assignSupplier(repairId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "repairs");
 
   const repair = await prisma.repair.findFirst({ where: { id: repairId, organizationId: s.organizationId } });
   if (!repair) throw new Error("Repair not found.");
@@ -1590,18 +1829,19 @@ export async function assignSupplier(repairId: string, formData: FormData) {
 export async function createRepair(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "repairs");
   requireFeature(await getOrgTier(s.organizationId), "REPAIRS");
 
   const propertyId = String(formData.get("propertyId") ?? "");
   const unitId = String(formData.get("unitId") ?? "").trim() || null;
   const title = String(formData.get("title") ?? "").trim();
-  if (!propertyId || !title) errorRedirect("/repairs/new", "Property and title are required.");
+  if (!propertyId || !title) errorRedirect("/repairs", "Property and title are required.");
 
   const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
-  if (!property) errorRedirect("/repairs/new", "Property not found.");
+  if (!property) errorRedirect("/repairs", "Property not found.");
   if (unitId) {
     const unit = await prisma.unit.findFirst({ where: { id: unitId, organizationId: s.organizationId, propertyId } });
-    if (!unit) errorRedirect("/repairs/new", "Unit not found on that property.");
+    if (!unit) errorRedirect("/repairs", "Unit not found on that property.");
   }
 
   await prisma.repair.create({
@@ -1618,6 +1858,46 @@ export async function createRepair(formData: FormData) {
   redirect("/repairs");
 }
 
+/**
+ * A tenant filing their own repair request from the portal — the property
+ * and unit are never taken from the form, only looked up from a lease that's
+ * actually theirs, so nothing lets a tenant log a fault against a unit they
+ * don't occupy. Lands at REPORTED, same starting point as one staff logs
+ * directly; reportedByTenantId is the only thing that marks where it came
+ * from.
+ */
+export async function requestRepair(formData: FormData) {
+  const s = await getSession();
+  if (!requireTenant(s)) throw new Error("Not authorized.");
+  requireFeature(await getOrgTier(s.organizationId), "REPAIRS");
+
+  const leaseId = String(formData.get("leaseId") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  if (!leaseId || !title) errorRedirect("/portal", "Select your unit and describe the problem.");
+
+  const lease = await prisma.lease.findFirst({
+    where: { id: leaseId, tenantId: s.tenantId!, organizationId: s.organizationId },
+    include: { unit: true },
+  });
+  if (!lease) errorRedirect("/portal", "Unit not found.");
+
+  const priority = String(formData.get("priority") ?? "NORMAL");
+
+  await prisma.repair.create({
+    data: {
+      organizationId: s.organizationId,
+      propertyId: lease.unit.propertyId,
+      unitId: lease.unitId,
+      reportedByTenantId: s.tenantId,
+      title,
+      description: String(formData.get("description") ?? "").trim() || null,
+      category: String(formData.get("category") ?? "").trim() || null,
+      priority: REPAIR_PRIORITIES.includes(priority as (typeof REPAIR_PRIORITIES)[number]) ? priority : "NORMAL",
+    },
+  });
+  redirect("/portal");
+}
+
 async function requireOwnedRepair(organizationId: string, repairId: string) {
   const repair = await prisma.repair.findFirst({ where: { id: repairId, organizationId } });
   if (!repair) errorRedirect("/repairs", "Repair not found.");
@@ -1627,6 +1907,7 @@ async function requireOwnedRepair(organizationId: string, repairId: string) {
 export async function sendWorkOrder(repairId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "repairs");
   await requireOwnedRepair(s.organizationId, repairId);
 
   const workOrderRef = String(formData.get("workOrderRef") ?? "").trim() || null;
@@ -1640,6 +1921,7 @@ export async function sendWorkOrder(repairId: string, formData: FormData) {
 export async function submitQuote(repairId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "repairs");
   await requireOwnedRepair(s.organizationId, repairId);
 
   const vendorId = String(formData.get("vendorId") ?? "");
@@ -1664,6 +1946,40 @@ export async function submitQuote(repairId: string, formData: FormData) {
 }
 
 /**
+ * The same upsert as submitQuote, but from the vendor's own side of the
+ * table — a tradesman bidding on a work order sent to the whole pool, not
+ * staff typing a number in on their behalf. Scoped to the caller's own
+ * vendorId (from the session, never the form) and to a repair that's
+ * actually open for quotes, so a tradesman can't quote on a job never sent
+ * out, or overwrite an award already made.
+ */
+export async function submitQuoteAsTradesman(repairId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireTradesman(s)) throw new Error("Not authorized.");
+
+  const repair = await prisma.repair.findFirst({
+    where: { id: repairId, organizationId: s.organizationId, status: "QUOTING", awardedVendorId: null },
+  });
+  if (!repair) errorRedirect("/trade", "This job is no longer open for quotes.");
+
+  const amount = Number(formData.get("amount") ?? 0);
+  if (!amount) errorRedirect("/trade", "Amount is required.");
+
+  await prisma.quote.upsert({
+    where: { repairId_vendorId: { repairId, vendorId: s.vendorId } },
+    create: {
+      organizationId: s.organizationId,
+      repairId,
+      vendorId: s.vendorId,
+      amount,
+      notes: String(formData.get("notes") ?? "").trim() || null,
+    },
+    update: { amount, notes: String(formData.get("notes") ?? "").trim() || null },
+  });
+  redirect("/trade");
+}
+
+/**
  * Awarding a quote is a financial commitment, so it goes through the
  * approval chain rather than applying immediately — the raiser supplies the
  * first signature, and the award only takes effect once the chain resolves
@@ -1672,6 +1988,7 @@ export async function submitQuote(repairId: string, formData: FormData) {
 export async function acceptQuote(repairId: string, quoteId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "repairs");
   await requireOwnedRepair(s.organizationId, repairId);
 
   const quote = await prisma.quote.findFirst({ where: { id: quoteId, repairId, organizationId: s.organizationId } });
@@ -1684,6 +2001,7 @@ export async function acceptQuote(repairId: string, quoteId: string) {
 export async function approveWork(repairId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "repairs");
   await requireOwnedRepair(s.organizationId, repairId);
 
   await raiseApproval(s.organizationId, "REPAIR_WORK", repairId, s.userId);
@@ -1693,6 +2011,7 @@ export async function approveWork(repairId: string) {
 export async function approveCost(repairId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "repairs");
   const repair = await requireOwnedRepair(s.organizationId, repairId);
   if (!repair.workApprovedAt) errorRedirect(`/repairs/${repairId}`, "Work must be approved before cost can be approved.");
 
@@ -1706,12 +2025,14 @@ export async function approveCost(repairId: string, formData: FormData) {
 export async function signApprovalAction(requestId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "approvals");
   await signApproval(s.organizationId, requestId, s.userId);
 }
 
 export async function markRepairDone(repairId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "repairs");
   const repair = await requireOwnedRepair(s.organizationId, repairId);
   if (!repair.costApprovedAt) errorRedirect(`/repairs/${repairId}`, "Cost must be approved before a repair can be marked done.");
 
@@ -1733,6 +2054,7 @@ export async function markRepairDone(repairId: string, formData: FormData) {
 export async function createRecurringJob(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "repairs");
   requireFeature(await getOrgTier(s.organizationId), "RECURRING_JOBS");
 
   const title = str(formData, "title");
@@ -1772,6 +2094,7 @@ export async function createRecurringJob(formData: FormData) {
 export async function setRecurringJobActive(jobId: string, active: boolean) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "repairs");
 
   const job = await prisma.recurringJob.findFirst({ where: { id: jobId, organizationId: s.organizationId } });
   if (!job) throw new Error("Recurring job not found.");
@@ -1781,6 +2104,7 @@ export async function setRecurringJobActive(jobId: string, active: boolean) {
 export async function deleteRecurringJob(jobId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "repairs");
 
   const job = await prisma.recurringJob.findFirst({ where: { id: jobId, organizationId: s.organizationId } });
   if (!job) throw new Error("Recurring job not found.");
@@ -1793,6 +2117,7 @@ export async function deleteRecurringJob(jobId: string) {
 export async function inviteTenant(tenantId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "tenants");
 
   const tenant = await prisma.tenant.findFirst({ where: { id: tenantId, organizationId: s.organizationId } });
   if (!tenant) errorRedirect("/tenants", "Tenant not found.");
@@ -1818,6 +2143,7 @@ export async function inviteTenant(tenantId: string) {
 export async function inviteNewTenant(formData: FormData) {
   const s = await getSession();
   if (!requireTenantsAccess(s)) throw new Error("Not authorized.");
+  if (!isCaretaker(s.role)) requireModule(s, "tenants");
 
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim() || null;
@@ -1844,6 +2170,7 @@ export async function inviteNewTenant(formData: FormData) {
 export async function inviteVendor(vendorId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "vendors");
 
   const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, organizationId: s.organizationId } });
   if (!vendor) errorRedirect("/vendors", "Vendor not found.");
@@ -1869,6 +2196,7 @@ export async function inviteVendor(vendorId: string, formData: FormData) {
 export async function inviteCaretaker(propertyId: string, formData: FormData) {
   const s = await getSession();
   if (!requireOrgAdmin(s)) throw new Error("Not authorized.");
+  requireModule(s, "properties");
 
   const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
   if (!property) throw new Error("Property not found.");
@@ -1916,7 +2244,7 @@ export async function registerWithInvite(formData: FormData) {
     result.role === "TENANT"
       ? "/portal"
       : result.role === "MANAGER" || result.role === "VIEWER"
-        ? "/dashboard"
+        ? "/home"
         : result.role === "CARETAKER"
           ? "/tenants"
           : "/trade",
@@ -1928,6 +2256,7 @@ export async function registerWithInvite(formData: FormData) {
 export async function setUnitPaymentCode(unitId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "payments");
 
   const unit = await prisma.unit.findFirst({ where: { id: unitId, organizationId: s.organizationId } });
   if (!unit) throw new Error("Unit not found.");
@@ -1939,6 +2268,7 @@ export async function setUnitPaymentCode(unitId: string, formData: FormData) {
 export async function addManualTransaction(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "payments");
 
   const amount = Number(formData.get("amount") ?? 0);
   const occurredAt = new Date(String(formData.get("occurredAt") ?? ""));
@@ -1967,6 +2297,7 @@ export async function addManualTransaction(formData: FormData) {
 export async function importTransactionsCsv(formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "payments");
 
   const file = formData.get("file");
   if (!(file instanceof File)) errorRedirect("/payments", "Choose a CSV file.");
@@ -1983,6 +2314,7 @@ export async function importTransactionsCsv(formData: FormData) {
 export async function matchTransactionAction(transactionId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "payments");
 
   const leaseId = String(formData.get("leaseId") ?? "");
   if (!leaseId) errorRedirect("/payments", "Select a lease to match this transaction to.");
@@ -1997,6 +2329,7 @@ export async function matchTransactionAction(transactionId: string, formData: Fo
 export async function ignoreTransactionAction(transactionId: string) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "payments");
   await ignoreTransaction(s.organizationId, transactionId, s.userId);
 }
 
@@ -2066,6 +2399,32 @@ export async function setStaffRole(userId: string, role: "MANAGER" | "VIEWER") {
   await prisma.user.update({ where: { id: userId }, data: { role } });
 }
 
+/**
+ * Sets which modules a MANAGER/VIEWER may use — an admin narrowing "a
+ * portion of access as they deem fit", rather than the fixed all-or-nothing
+ * split MANAGER/VIEWER otherwise get. The "Full access" checkbox clears the
+ * list entirely (null) rather than checking every box, since null and
+ * "every module checked" must keep meaning the same thing going forward as
+ * new modules are added — a hard-coded full list would silently exclude any
+ * module added after this was saved.
+ */
+export async function setStaffPermissions(userId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can set staff permissions.");
+
+  const user = await prisma.user.findFirst({ where: { id: userId, organizationId: s.organizationId } });
+  if (!user) errorRedirect("/users", "Not found.");
+  if (user.role === "ADMIN") errorRedirect("/users", "The admin always has full access.");
+
+  const fullAccess = formData.get("fullAccess") === "on";
+  const selected = fullAccess ? null : MODULE_LIST.filter((m) => formData.get(`module_${m}`) === "on");
+  await prisma.user.update({
+    where: { id: userId },
+    data: { permissions: selected ? JSON.stringify(selected) : null },
+  });
+  redirect("/users");
+}
+
 /** Revokes access without deleting the account — history stays attached to a real row. Every session is signed out immediately. */
 export async function disableStaff(userId: string) {
   const s = await getSession();
@@ -2087,6 +2446,38 @@ export async function enableStaff(userId: string) {
   if (!user) throw new Error("Not found.");
 
   await prisma.user.update({ where: { id: userId }, data: { disabledAt: null } });
+}
+
+export type ResetPasswordState = { error?: string; rawPassword?: string; identifier?: string } | undefined;
+
+/**
+ * Hands a teammate who's locked themselves out a fresh temporary password —
+ * for when they can't sign in at all, so there's no "forgot password" flow
+ * to fall back on for them to use themselves. Returned in the action's own
+ * result rather than a redirect URL, same reasoning as createApiKeyAction: a
+ * secret has no business ever appearing in a URL. Every existing session on
+ * the account is revoked immediately (the old password may be compromised,
+ * which is often exactly why this is being run), and mustChangePassword
+ * forces them to set their own real password the moment they sign back in.
+ */
+export async function resetStaffPasswordAction(_prev: ResetPasswordState, formData: FormData): Promise<ResetPasswordState> {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) return { error: "Only an organization admin can reset a teammate's password." };
+
+  const userId = String(formData.get("userId") ?? "");
+  const user = await prisma.user.findFirst({ where: { id: userId, organizationId: s.organizationId } });
+  if (!user) return { error: "Not found." };
+  if (user.role === "ADMIN") return { error: "Cannot reset the admin's own password this way." };
+  if (userId === s.userId) return { error: "You cannot reset your own password this way." };
+
+  const rawPassword = generateTempPassword();
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: await hashPassword(rawPassword), mustChangePassword: true },
+  });
+  await revokeAllSessions(userId);
+
+  return { rawPassword, identifier: user.email ?? user.phone ?? undefined };
 }
 
 /**
@@ -2130,8 +2521,8 @@ export async function revokeInvitationAction(invitationId: string) {
 export async function impersonateAction(targetUserId: string) {
   const s = await getSession();
   if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can sign in as someone else.");
-  await impersonate(s, targetUserId);
-  redirect("/dashboard");
+  const role = await impersonate(s, targetUserId);
+  redirect(isTenant(role) ? "/portal" : isTradesman(role) ? "/trade" : role === "CARETAKER" ? "/tenants" : "/home");
 }
 
 /**
@@ -2147,7 +2538,34 @@ export async function platformImpersonateAction(targetUserId: string) {
   if (!requirePlatformAdmin(s)) throw new Error("Not authorized.");
   const organizationId = await platformImpersonate(s, targetUserId);
   await logPlatformAccess(s.userId, organizationId, "IMPERSONATE_ORG", `Signed in as staff by ${s.email ?? s.userId}`);
-  redirect("/dashboard");
+  redirect("/home");
+}
+
+/**
+ * The platform admin's own version of resetStaffPasswordAction — for a
+ * customer who's locked out and can't be reached through their own org
+ * admin (e.g. THEY are the org's only admin). Unlike the org-admin version,
+ * this may target the org's own ADMIN seat and crosses organizations by
+ * design, same as platformImpersonate() — logged unconditionally, same
+ * footing as every other cross-org action here.
+ */
+export async function platformResetStaffPasswordAction(_prev: ResetPasswordState, formData: FormData): Promise<ResetPasswordState> {
+  const s = await getSession();
+  if (!requirePlatformAdmin(s)) return { error: "Not authorized." };
+
+  const userId = String(formData.get("userId") ?? "");
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !user.organizationId) return { error: "Not found." };
+
+  const rawPassword = generateTempPassword();
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: await hashPassword(rawPassword), mustChangePassword: true },
+  });
+  await revokeAllSessions(userId);
+  await logPlatformAccess(s.userId, user.organizationId, "RESET_STAFF_PASSWORD", `Password reset for ${user.email ?? user.phone} by ${s.email ?? s.userId}`);
+
+  return { rawPassword, identifier: user.email ?? user.phone ?? undefined };
 }
 
 /** Hands the session back to whoever opened it — a platform admin returns to the org list, an org admin to their own team page. */
@@ -2287,6 +2705,7 @@ export async function sendTenantMessage(formData: FormData) {
 export async function replyToTenant(tenantId: string, formData: FormData) {
   const s = await getSession();
   if (!requireTenantsAccess(s)) throw new Error("Not authorized.");
+  if (!isCaretaker(s.role)) requireModule(s, "messages");
 
   const propertyId = isCaretaker(s.role) ? s.propertyId : null;
   const tenant = await prisma.tenant.findFirst({

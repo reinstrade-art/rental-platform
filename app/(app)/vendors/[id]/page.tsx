@@ -5,6 +5,7 @@ import { getVendor } from "@/app/lib/data";
 import { setVendorPrequalified, inviteVendor, deleteVendor } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
+import { requireModule } from "@/app/lib/permissions";
 
 function money(n: number | null | undefined) {
   return n == null ? "—" : n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -19,7 +20,8 @@ export default async function VendorDetailPage({
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/dashboard");
+  if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/home");
+  requireModule(s, "vendors");
   const { id } = await params;
   const { error } = await searchParams;
   const vendor = await getVendor(s.organizationId, id);

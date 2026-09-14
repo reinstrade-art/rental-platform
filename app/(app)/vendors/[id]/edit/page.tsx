@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
+import { requireModule } from "@/app/lib/permissions";
 import { prisma } from "@/app/lib/prisma";
 import { updateVendor } from "@/app/lib/actions";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
@@ -14,7 +15,8 @@ export default async function EditVendorPage({
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/dashboard");
+  if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/home");
+  requireModule(s, "vendors");
 
   const { id } = await params;
   const { error } = await searchParams;

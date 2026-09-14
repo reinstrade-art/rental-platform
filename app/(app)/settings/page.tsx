@@ -19,6 +19,7 @@ import {
   setQuickbooksAccountsAction,
   syncQuickbooksNowAction,
   registerMpesaC2bAction,
+  generateUnitPaymentCodesAction,
 } from "@/app/lib/actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 import { quickbooksAppConfigured } from "@/app/lib/quickbooks";
@@ -27,15 +28,16 @@ import { listApiKeys } from "@/app/lib/api-keys";
 import { listWebhooks } from "@/app/lib/webhooks";
 import { CreateApiKeyForm } from "@/app/components/create-api-key-form";
 import { CreateWebhookForm } from "@/app/components/create-webhook-form";
+import { DesktopVersion } from "@/app/components/desktop-version";
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; qbConnected?: string; qbSynced?: string; c2bRegistered?: string }>;
+  searchParams: Promise<{ error?: string; qbConnected?: string; qbSynced?: string; c2bRegistered?: string; codesAssigned?: string }>;
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  const { error, qbConnected, qbSynced, c2bRegistered } = await searchParams;
+  const { error, qbConnected, qbSynced, c2bRegistered, codesAssigned } = await searchParams;
 
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } });
   const sessions = await getOwnOtherSessions(s.userId);
@@ -54,6 +56,7 @@ export default async function SettingsPage({
     {qbConnected && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">QuickBooks settings saved.</div>}
     {qbSynced && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Synced {qbSynced} payment(s) to QuickBooks.</div>}
     {c2bRegistered && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Registered with Safaricom — payments to your paybill will now auto-match by unit payment code.</div>}
+    {codesAssigned !== undefined && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Assigned payment codes to {codesAssigned} unit(s) that had none.</div>}
     <div className="max-w-sm rounded border p-4">
       <h2 className="font-semibold">Plan</h2>
       <p className="mt-1 text-sm text-silver-dark">
@@ -206,10 +209,16 @@ export default async function SettingsPage({
     <div className="max-w-lg">
       <h2 className="text-lg font-semibold">M-Pesa paybill auto-matching (C2B)</h2>
       <p className="mt-1 text-sm text-silver-dark">
-        For tenants who pay your paybill directly (rather than through an app prompt) — give each unit a Payment
-        code on its Properties page (e.g. A1, B2), tell tenants to enter it as the M-Pesa Account Number when they
-        pay, and a matching payment is recorded against that unit&apos;s active lease automatically.
+        The other half of the hybrid payment panel — for a tenant who pays your paybill straight from the M-Pesa
+        menu instead of tapping the prompt. Each unit needs a Payment code (its M-Pesa Account Number); tenants and
+        staff see it on the lease automatically, and a matching payment posts to that unit&apos;s active lease on its
+        own. Codes are also editable per unit on the Properties page.
       </p>
+      <form action={generateUnitPaymentCodesAction} className="mt-3">
+        <button className="rounded border px-3 py-2 text-sm transition-colors hover:bg-silver-light">
+          Generate payment codes for all units
+        </button>
+      </form>
       {mpesaConfigured({
         env: org.mpesaEnv,
         shortcode: org.mpesaShortcode,
@@ -419,6 +428,8 @@ export default async function SettingsPage({
         </ul>
       )}
     </div>
+
+    <DesktopVersion />
     </div>
   );
 }

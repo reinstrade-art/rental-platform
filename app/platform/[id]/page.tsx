@@ -11,12 +11,14 @@ import {
   sendLicenseStkAction,
   updateOrgTier,
   platformImpersonateAction,
+  platformResetStaffPasswordAction,
   confirmTierRequestAction,
   rejectTierRequestAction,
   setOrgTierPriceAction,
   setOrgCommissionAction,
   setCommissionRoutedAction,
 } from "@/app/lib/actions";
+import { ResetPasswordForm } from "@/app/components/reset-password-form";
 import { getOrgTierPrices } from "@/app/lib/tier-requests";
 import { getPlatformCommissionPercent, getEffectiveCommissionPercent } from "@/app/lib/commission";
 import { ORG_TIERS } from "@/app/lib/constants";
@@ -40,7 +42,7 @@ export default async function PlatformOrgDetailPage({
 }) {
   const s = await getSession();
   if (!s) redirect("/login");
-  if (!requirePlatformAdmin(s)) redirect("/dashboard");
+  if (!requirePlatformAdmin(s)) redirect("/home");
 
   const { id } = await params;
   const { priceSaved, error } = await searchParams;
@@ -328,9 +330,12 @@ export default async function PlatformOrgDetailPage({
                   {u.disabledAt ? (
                     <span className="text-xs text-silver-dark">Disabled</span>
                   ) : (
-                    <form action={platformImpersonateAction.bind(null, u.id)}>
-                      <button className="text-xs underline">Sign in as</button>
-                    </form>
+                    <div className="flex flex-wrap items-start gap-2">
+                      <form action={platformImpersonateAction.bind(null, u.id)}>
+                        <button className="text-xs underline">Sign in as</button>
+                      </form>
+                      <ResetPasswordForm userId={u.id} action={platformResetStaffPasswordAction} />
+                    </div>
                   )}
                 </td>
               </tr>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
+import { requireModule } from "@/app/lib/permissions";
 import { prisma } from "@/app/lib/prisma";
 import { createLease } from "@/app/lib/actions";
 import { LeaseUnitSelect } from "@/app/components/lease-unit-select";
@@ -12,6 +13,7 @@ export default async function NewLeasePage({
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  requireModule(s, "leases");
   const { tenantId, unitId, error } = await searchParams;
 
   const [units, tenants] = await Promise.all([

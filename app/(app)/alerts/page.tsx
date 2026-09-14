@@ -4,6 +4,7 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { getArrearsAlerts } from "@/app/lib/alerts";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { waLink } from "@/app/lib/phone";
+import { requireModule } from "@/app/lib/permissions";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -16,7 +17,8 @@ function monthLabel(d: Date) {
 export default async function AlertsPage() {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  if (!hasFeature(await getOrgTier(s.organizationId), "ARREARS_ALERTS")) redirect("/dashboard");
+  if (!hasFeature(await getOrgTier(s.organizationId), "ARREARS_ALERTS")) redirect("/home");
+  requireModule(s, "alerts");
 
   const alerts = await getArrearsAlerts(s.organizationId);
   const serious = alerts.filter((a) => a.severity === "serious");

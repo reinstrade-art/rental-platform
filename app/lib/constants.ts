@@ -105,3 +105,54 @@ export const FEATURE_TIER: Record<string, OrgTier> = {
   REPORTS: "FULL",
 };
 export type Feature = keyof typeof FEATURE_TIER;
+
+// Modules an ADMIN can grant or withhold per MANAGER/VIEWER — see
+// User.permissions and app/lib/permissions.ts. Deliberately excludes
+// Dashboard (always visible, it's just a summary of what a module access
+// already lets someone see) and Team/Settings (ADMIN-only regardless,
+// already gated by requireOrgAdmin — narrowing those per-staff would just
+// be a second, confusing way to say "not an admin").
+export const MODULE_LIST = [
+  "properties",
+  "tenants",
+  "leases",
+  "messages",
+  "alerts",
+  "evictions",
+  "payments",
+  "expenses",
+  "repairs",
+  "vendors",
+  "suppliers",
+  "reports",
+  "approvals",
+] as const;
+export type ModuleKey = (typeof MODULE_LIST)[number];
+
+/** Parses User.permissions — null/invalid means "full access", never "no access" (see the column's own schema comment for why). */
+export function parsePermissions(raw: string | null): ModuleKey[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((m): m is ModuleKey => (MODULE_LIST as readonly string[]).includes(m));
+  } catch {
+    return null;
+  }
+}
+
+export const MODULE_LABEL: Record<ModuleKey, string> = {
+  properties: "Properties",
+  tenants: "Tenants",
+  leases: "Leases",
+  messages: "Messages",
+  alerts: "Alerts",
+  evictions: "Evictions",
+  payments: "Payments",
+  expenses: "Expenses",
+  repairs: "Repairs",
+  vendors: "Vendors",
+  suppliers: "Suppliers",
+  reports: "Reports",
+  approvals: "Approvals",
+};

@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { parseCallbackMetadata, type StkCallback } from "@/app/lib/mpesa";
+import { syncLicensePaymentToWave } from "@/app/lib/platform-accounting-sync";
 
 /**
  * Where Safaricom tells us what happened to a license-billing prompt —
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
       reference: meta.mpesaReceiptNumber ?? null,
     },
   });
+  after(() => syncLicensePaymentToWave(payment.id));
 
   // The PENDING row already recorded amount/periodDays when the prompt was
   // raised; extendLicense creates its own SUCCESS row and would double-count

@@ -48,7 +48,7 @@ export async function extendLicense(
   const base = org.licenseExpiresAt && org.licenseExpiresAt > new Date() ? org.licenseExpiresAt : new Date();
   const licenseExpiresAt = new Date(base.getTime() + input.periodDays * 86_400_000);
 
-  await prisma.$transaction([
+  const [payment] = await prisma.$transaction([
     prisma.licensePayment.create({
       data: {
         organizationId,
@@ -63,7 +63,7 @@ export async function extendLicense(
     prisma.organization.update({ where: { id: organizationId }, data: { licenseExpiresAt } }),
   ]);
 
-  return licenseExpiresAt;
+  return { licenseExpiresAt, paymentId: payment.id };
 }
 
 export function platformMpesaCredentials(): DarajaCredentials {

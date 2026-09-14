@@ -14,6 +14,30 @@ export function monthRange(d: Date = new Date()) {
   return { start, end };
 }
 
+/** The whole calendar year, Jan 1 through the following Jan 1. */
+export function yearRange(year: number) {
+  return { start: new Date(Date.UTC(year, 0, 1)), end: new Date(Date.UTC(year + 1, 0, 1)) };
+}
+
+/** Jan 1 of the given year through today — the current moment for this year, or the year's own close for a past one. */
+export function ytdRange(year: number, now: Date = new Date()) {
+  const end = year >= now.getUTCFullYear() ? new Date(now.getTime() + 24 * 60 * 60 * 1000) : new Date(Date.UTC(year + 1, 0, 1));
+  return { start: new Date(Date.UTC(year, 0, 1)), end };
+}
+
+/** One row per calendar month of the given year: total charged vs. total received, org-wide — the Dashboard's "billed against collected" chart. */
+export async function getBilledVsCollected(organizationId: string, year: number) {
+  const { start, end } = yearRange(year);
+  const [charges, payments] = await Promise.all([
+    prisma.charge.findMany({ where: { organizationId, periodMonth: { gte: start, lt: end } }, select: { amount: true, periodMonth: true } }),
+    prisma.payment.findMany({ where: { organizationId, paidAt: { gte: start, lt: end } }, select: { amount: true, paidAt: true } }),
+  ]);
+  const months = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, billed: 0, collected: 0 }));
+  for (const c of charges) months[c.periodMonth.getUTCMonth()].billed += c.amount;
+  for (const p of payments) months[p.paidAt.getUTCMonth()].collected += p.amount;
+  return months.map((m) => ({ ...m, rate: m.billed > 0 ? Math.round((m.collected / m.billed) * 100) : 0 }));
+}
+
 export async function getProperties(organizationId: string) {
   return prisma.property.findMany({
     where: { organizationId },
@@ -62,7 +86,7 @@ export async function getTenant(organizationId: string, tenantId: string, proper
         orderBy: { startDate: "desc" },
         include: { unit: { include: { property: true } }, charges: true, payments: true },
       },
-      user: { select: { email: true, phone: true, disabledAt: true } },
+      user: { select: { id: true, email: true, phone: true, disabledAt: true } },
       messages: { orderBy: { createdAt: "desc" }, take: 20, include: { attachments: true } },
     },
   });
@@ -95,13 +119,16 @@ export function leaseBalance(lease: { charges: { amount: number }[]; payments: {
   return charged - paid;
 }
 
-export async function getDashboard(organizationId: string, at: Date = new Date()) {
-  const { start, end } = monthRange(at);
+export async function getDashboard(organizationId: string, range: { start: Date; end: Date } = monthRange()) {
+  const { start, end } = range;
 
   const [properties, units, tenants, leases, charges, payments, allCharges, allPayments] =
     await Promise.all([
       prisma.property.count({ where: { organizationId } }),
-      prisma.unit.findMany({ where: { organizationId }, select: { id: true, monthlyRent: true, leases: { select: { status: true } } } }),
+      prisma.unit.findMany({
+        where: { organizationId },
+        select: { id: true, monthlyRent: true, leases: { select: { status: true, startDate: true, endDate: true, monthlyRent: true } } },
+      }),
       prisma.tenant.count({ where: { organizationId } }),
       prisma.lease.count({ where: { organizationId, status: "ACTIVE" } }),
       prisma.charge.findMany({ where: { organizationId, periodMonth: { gte: start, lt: end } }, select: { amount: true } }),
@@ -110,8 +137,8 @@ export async function getDashboard(organizationId: string, at: Date = new Date()
       prisma.payment.groupBy({ by: ["leaseId"], where: { organizationId }, _sum: { amount: true } }),
     ]);
 
-  const billedThisMonth = charges.reduce((s, c) => s + c.amount, 0);
-  const receivedThisMonth = payments.reduce((s, p) => s + p.amount, 0);
+  const billed = charges.reduce((s, c) => s + c.amount, 0);
+  const received = payments.reduce((s, p) => s + p.amount, 0);
 
   const paidByLease = new Map(allPayments.map((p) => [p.leaseId, p._sum.amount ?? 0]));
   const grossArrears = allCharges.reduce((sum, c) => {
@@ -119,11 +146,19 @@ export async function getDashboard(organizationId: string, at: Date = new Date()
     return sum + Math.max(0, balance);
   }, 0);
 
-  const occupiedUnits = units.filter((u) => u.leases.some((l) => l.status === "ACTIVE")).length;
-  // Every unit's rent, occupied or vacant — what the portfolio would earn at
-  // full occupancy, not what's actually billed. A unit with no monthlyRent
-  // set (never priced) contributes nothing, since there's no figure to sum.
-  const potentialIncome = units.reduce((sum, u) => sum + (u.monthlyRent ?? 0), 0);
+  // Occupancy reflects the period being viewed — the lease (if any) that
+  // actually covered the unit during that month, not just whoever holds it
+  // today, so a past month's occupancy reads as it truly was then.
+  const occupiedUnits = units.filter((u) => u.leases.some((l) => l.startDate < end && (!l.endDate || l.endDate >= start))).length;
+  // What the portfolio would earn TODAY at full occupancy — the current
+  // lease's own rent for an occupied unit (which can differ from the unit's
+  // listed rate), or the unit's listed rate when vacant. Deliberately not
+  // scoped to the period above, so this stays a stable benchmark rather than
+  // swinging with whichever past tenant/rent happened to be in place then.
+  const potentialIncome = units.reduce((sum, u) => {
+    const current = u.leases.find((l) => l.status === "ACTIVE");
+    return sum + (current ? current.monthlyRent : (u.monthlyRent ?? 0));
+  }, 0);
 
   return {
     period: start,
@@ -132,15 +167,15 @@ export async function getDashboard(organizationId: string, at: Date = new Date()
     occupiedUnits,
     tenantCount: tenants,
     activeLeaseCount: leases,
-    billedThisMonth,
-    receivedThisMonth,
+    billed,
+    received,
     grossArrears,
     potentialIncome,
   };
 }
 
-export async function getPropertyRollups(organizationId: string, at: Date = new Date()) {
-  const { start, end } = monthRange(at);
+export async function getPropertyRollups(organizationId: string, range: { start: Date; end: Date } = monthRange()) {
+  const { start, end } = range;
   const properties = await prisma.property.findMany({
     where: { organizationId },
     include: {
@@ -164,7 +199,10 @@ export async function getPropertyRollups(organizationId: string, at: Date = new 
     let billed = 0;
     let received = 0;
     for (const u of p.units) {
-      if (u.leases.some((l) => l.status === "ACTIVE")) occupied++;
+      // Period-aware, same rule as getDashboard's occupiedUnits — a lease
+      // that actually covered the unit during this month, not just whoever
+      // holds it today.
+      if (u.leases.some((l) => l.startDate < end && (!l.endDate || l.endDate >= start))) occupied++;
       for (const l of u.leases) {
         billed += l.charges.reduce((s, c) => s + c.amount, 0);
         received += l.payments.reduce((s, pay) => s + pay.amount, 0);
@@ -224,7 +262,7 @@ export async function getSuppliers(organizationId: string) {
 export async function getRepairs(organizationId: string) {
   return prisma.repair.findMany({
     where: { organizationId },
-    include: { property: true, unit: true, awardedVendor: true },
+    include: { property: true, unit: true, awardedVendor: true, reportedByTenant: true, quotes: true },
     orderBy: { reportedAt: "desc" },
   });
 }
@@ -256,6 +294,7 @@ export async function getRepair(organizationId: string, repairId: string) {
       unit: true,
       awardedVendor: true,
       supplier: true,
+      reportedByTenant: true,
       quotes: { include: { vendor: true }, orderBy: { createdAt: "asc" } },
     },
   });
@@ -279,6 +318,7 @@ export async function getTenantPortal(tenantId: string) {
         orderBy: { createdAt: "desc" },
       },
       messages: { orderBy: { createdAt: "asc" }, include: { attachments: true } },
+      reportedRepairs: { orderBy: { reportedAt: "desc" }, include: { property: true, unit: true } },
     },
   });
 }
@@ -356,8 +396,8 @@ export async function getActiveSessionCounts(organizationId: string): Promise<Re
   return Object.fromEntries(rows.map((r) => [r.userId, r._count._all]));
 }
 
-export async function getVendorPortal(vendorId: string) {
-  const [awardedRepairs, quotes] = await Promise.all([
+export async function getVendorPortal(organizationId: string, vendorId: string) {
+  const [awardedRepairs, quotes, openForQuoting] = await Promise.all([
     prisma.repair.findMany({
       where: { awardedVendorId: vendorId },
       include: { property: true, unit: true },
@@ -368,6 +408,18 @@ export async function getVendorPortal(vendorId: string) {
       include: { repair: { include: { property: true, unit: true } } },
       orderBy: { createdAt: "desc" },
     }),
+    // Work orders this vendor could still bid on: sent out, not yet awarded,
+    // and this vendor hasn't already put in a quote (that's the list above).
+    prisma.repair.findMany({
+      where: {
+        organizationId,
+        status: "QUOTING",
+        awardedVendorId: null,
+        quotes: { none: { vendorId } },
+      },
+      include: { property: true, unit: true },
+      orderBy: { reportedAt: "desc" },
+    }),
   ]);
-  return { awardedRepairs, quotes };
+  return { awardedRepairs, quotes, openForQuoting };
 }

@@ -2,13 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireTenant } from "@/app/lib/auth";
 import { getTenantPortal, leaseBalance } from "@/app/lib/data";
-import { prisma } from "@/app/lib/prisma";
-import { mpesaConfigured } from "@/app/lib/mpesa";
 import { payMpesaSelf } from "@/app/lib/mpesa-actions";
-import { MpesaPay } from "@/app/components/mpesa-pay";
-import { signLease, sendTenantMessage } from "@/app/lib/actions";
+import { mpesaPayOptionsForLease } from "@/app/lib/mpesa-pay-options";
+import { MpesaPayPanel } from "@/app/components/mpesa-pay-panel";
+import { signLease, sendTenantMessage, requestRepair } from "@/app/lib/actions";
 import { SignaturePad } from "@/app/components/signature-pad";
 import { RichTextEditor } from "@/app/components/rich-text-editor";
+import { displayBalance, balanceTone } from "@/app/lib/balance-display";
+import { getOrgTier, hasFeature } from "@/app/lib/tier";
+import { REPAIR_PRIORITIES } from "@/app/lib/constants";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -24,18 +26,17 @@ export default async function TenantPortalPage({ searchParams }: { searchParams:
   if (!requireTenant(s)) redirect("/login");
   const { error } = await searchParams;
 
-  const [tenant, org] = await Promise.all([
-    getTenantPortal(s.tenantId),
-    prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } }),
-  ]);
-  const mpesaReady = mpesaConfigured({
-    env: org.mpesaEnv,
-    shortcode: org.mpesaShortcode,
-    accountType: org.mpesaAccountType,
-    consumerKey: org.mpesaConsumerKey,
-    consumerSecret: org.mpesaConsumerSecret,
-    passkey: org.mpesaPasskey,
-  });
+  const tenant = await getTenantPortal(s.tenantId);
+  const repairsEnabled = hasFeature(await getOrgTier(s.organizationId), "REPAIRS");
+  const activeLeases = tenant.leases.filter((l) => l.status === "ACTIVE");
+
+  // Both M-Pesa routes for each active tenancy, resolved up front — the JSX
+  // map below can't await, and a tenant has only one or two leases anyway.
+  const payOptions = new Map(
+    await Promise.all(
+      activeLeases.map(async (l) => [l.id, await mpesaPayOptionsForLease(s.organizationId, l.id)] as const),
+    ),
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -64,9 +65,9 @@ export default async function TenantPortalPage({ searchParams }: { searchParams:
                   </Link>
                 </div>
               </div>
-              <div className={`text-right ${balance > 0 ? "text-red-600" : "text-green-700"}`}>
+              <div className={`text-right ${balanceTone(balance)}`}>
                 <div className="text-xs text-silver-dark">Balance</div>
-                <div className="text-lg font-semibold">{money(balance)}</div>
+                <div className="text-lg font-semibold">{money(displayBalance(balance))}</div>
               </div>
             </div>
 
@@ -130,19 +131,31 @@ export default async function TenantPortalPage({ searchParams }: { searchParams:
               </div>
             </div>
 
-            {mpesaReady && lease.status === "ACTIVE" && (
-              <div className="mt-4 max-w-xs border-t pt-4">
-                <h3 className="text-sm font-semibold">Pay via M-Pesa</h3>
-                <div className="mt-2">
-                  <MpesaPay
-                    action={payMpesaSelf}
-                    defaultAmount={balance > 0 ? balance : lease.monthlyRent}
-                    phone={tenant.phone}
-                    buttonLabel="Pay now"
-                  />
+            {(() => {
+              const opts = payOptions.get(lease.id);
+              if (!opts || (!opts.stkReady && !opts.directReady)) return null;
+              return (
+                <div className="mt-4 max-w-sm border-t pt-4">
+                  <h3 className="text-sm font-semibold">Pay via M-Pesa</h3>
+                  <div className="mt-2">
+                    <MpesaPayPanel
+                      action={payMpesaSelf}
+                      defaultAmount={balance > 0 ? balance : lease.monthlyRent}
+                      phone={tenant.phone}
+                      buttonLabel="Pay now"
+                      stkReady={opts.stkReady}
+                      direct={{
+                        ready: opts.directReady,
+                        accountType: opts.accountType,
+                        shortcode: opts.shortcode,
+                        accountRef: opts.accountRef,
+                        autoMatch: opts.directAutoMatch,
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             <div className="mt-4 max-w-sm border-t pt-4">
               <h3 className="text-sm font-semibold">Tenancy agreement</h3>
@@ -182,6 +195,68 @@ export default async function TenantPortalPage({ searchParams }: { searchParams:
         );
       })}
       {tenant.leases.length === 0 && <p className="text-sm text-silver-dark">No tenancy on file yet.</p>}
+
+      {repairsEnabled && (
+        <div className="rounded border p-4">
+          <h2 className="text-sm font-semibold">Repairs</h2>
+          <p className="text-xs text-silver-dark">Something broken in your unit? Report it here — the office is notified and tracks it through to done.</p>
+
+          <ul className="mt-3 flex flex-col gap-2">
+            {tenant.reportedRepairs.map((r) => (
+              <li key={r.id} className="rounded border px-3 py-2 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{r.title}</span>
+                  <span
+                    className={`text-xs font-semibold ${
+                      r.status === "DONE" ? "text-green-700" : r.status === "CANCELLED" ? "text-silver-dark" : "text-ink"
+                    }`}
+                  >
+                    {r.status}
+                  </span>
+                </div>
+                <p className="text-xs text-silver-dark">
+                  {r.property.name}
+                  {r.unit ? ` / ${r.unit.label}` : ""} · reported {new Date(r.reportedAt).toLocaleDateString()}
+                </p>
+              </li>
+            ))}
+            {tenant.reportedRepairs.length === 0 && <p className="text-xs text-silver-dark">No repair requests yet.</p>}
+          </ul>
+
+          {activeLeases.length > 0 ? (
+            <form action={requestRepair} className="mt-3 flex flex-col gap-2 border-t pt-3">
+              {activeLeases.length > 1 ? (
+                <select name="leaseId" required className="rounded border px-3 py-2 text-sm">
+                  {activeLeases.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.unit.property.name} / {l.unit.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input type="hidden" name="leaseId" value={activeLeases[0].id} />
+              )}
+              <input name="title" required placeholder="What's wrong (short title)" className="rounded border px-3 py-2 text-sm" />
+              <textarea name="description" rows={2} placeholder="Details (optional)" className="rounded border px-3 py-2 text-sm" />
+              <div className="flex gap-2">
+                <input name="category" placeholder="Category (e.g. Plumbing)" className="flex-1 rounded border px-3 py-2 text-sm" />
+                <select name="priority" defaultValue="NORMAL" className="rounded border px-3 py-2 text-sm">
+                  {REPAIR_PRIORITIES.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button type="submit" className="self-start rounded bg-ink px-3 py-1.5 text-sm text-lily transition-colors hover:bg-ink-soft">
+                Report a repair
+              </button>
+            </form>
+          ) : (
+            <p className="mt-3 text-xs text-silver-dark border-t pt-3">Reporting a repair needs an active tenancy on file.</p>
+          )}
+        </div>
+      )}
 
       <div className="rounded border p-4">
         <h2 className="text-sm font-semibold">Messages</h2>

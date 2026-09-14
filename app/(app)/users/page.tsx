@@ -5,13 +5,17 @@ import { getStaff, getProperties, getPendingInvitations, getActiveSessionCounts 
 import {
   inviteStaff,
   setStaffRole,
+  setStaffPermissions,
   disableStaff,
   enableStaff,
   deleteStaffAction,
   revokeInvitationAction,
   impersonateAction,
+  resetStaffPasswordAction,
 } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
+import { ResetPasswordForm } from "@/app/components/reset-password-form";
+import { MODULE_LIST, MODULE_LABEL, parsePermissions } from "@/app/lib/constants";
 
 export default async function UsersPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
@@ -68,7 +72,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                   </td>
                 )}
                 {isAdmin && (
-                  <td className="py-2 flex gap-2">
+                  <td className="py-2 flex flex-wrap items-start gap-2">
                     {u.id !== s.userId && u.role !== "ADMIN" && (
                       <>
                         {u.disabledAt ? (
@@ -80,6 +84,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                             <form action={impersonateAction.bind(null, u.id)}>
                               <button className="text-xs underline">Sign in as</button>
                             </form>
+                            <ResetPasswordForm userId={u.id} action={resetStaffPasswordAction} />
                             <form action={disableStaff.bind(null, u.id)}>
                               <button className="text-xs underline text-red-700">Disable</button>
                             </form>
@@ -88,6 +93,43 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                         <form action={deleteStaffAction.bind(null, u.id)}>
                           <DeleteButton confirmText={`Delete ${u.email ?? u.phone}? This cannot be undone.`} />
                         </form>
+                        {(u.role === "MANAGER" || u.role === "VIEWER") && (
+                          <details className="w-full basis-full">
+                            <summary className="cursor-pointer text-xs underline">Permissions</summary>
+                            {(() => {
+                              const current = parsePermissions(u.permissions);
+                              return (
+                                <form
+                                  action={setStaffPermissions.bind(null, u.id)}
+                                  className="mt-2 flex flex-col gap-1.5 rounded border p-2"
+                                >
+                                  <label className="flex items-center gap-2 text-xs font-medium">
+                                    <input type="checkbox" name="fullAccess" defaultChecked={current === null} />
+                                    Full access
+                                  </label>
+                                  <div className="ml-1 grid grid-cols-2 gap-1 border-t pt-1.5 sm:grid-cols-3">
+                                    {MODULE_LIST.map((m) => (
+                                      <label key={m} className="flex items-center gap-1.5 text-xs">
+                                        <input
+                                          type="checkbox"
+                                          name={`module_${m}`}
+                                          defaultChecked={current === null || current.includes(m)}
+                                        />
+                                        {MODULE_LABEL[m]}
+                                      </label>
+                                    ))}
+                                  </div>
+                                  <p className="text-xs text-silver-dark">
+                                    Uncheck &quot;Full access&quot; to limit this account to only the modules ticked below.
+                                  </p>
+                                  <button type="submit" className="self-start rounded bg-ink px-2 py-1 text-xs text-lily">
+                                    Save permissions
+                                  </button>
+                                </form>
+                              );
+                            })()}
+                          </details>
+                        )}
                       </>
                     )}
                   </td>

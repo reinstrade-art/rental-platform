@@ -4,11 +4,13 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { getVendors } from "@/app/lib/data";
 import { setVendorPrequalified, inviteVendor } from "@/app/lib/actions";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
+import { requireModule } from "@/app/lib/permissions";
 
 export default async function VendorsPage() {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/dashboard");
+  if (!hasFeature(await getOrgTier(s.organizationId), "REPAIRS")) redirect("/home");
+  requireModule(s, "vendors");
   const vendors = await getVendors(s.organizationId);
 
   return (

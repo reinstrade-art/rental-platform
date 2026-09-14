@@ -5,6 +5,7 @@ import { getSupplier } from "@/app/lib/data";
 import { deleteSupplier } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
+import { requireModule } from "@/app/lib/permissions";
 
 function label(s: string) {
   return s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -17,7 +18,8 @@ function money(n: number) {
 export default async function SupplierDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  if (!hasFeature(await getOrgTier(s.organizationId), "SUPPLIERS")) redirect("/dashboard");
+  if (!hasFeature(await getOrgTier(s.organizationId), "SUPPLIERS")) redirect("/home");
+  requireModule(s, "suppliers");
   const { id } = await params;
   const supplier = await getSupplier(s.organizationId, id);
   if (!supplier) notFound();
