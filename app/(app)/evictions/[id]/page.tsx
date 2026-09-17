@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
-import { maskTenantName } from "@/app/lib/tenant-privacy";
+import { getSession, requireStaff } from "@/app/lib/auth";
 import { getEviction } from "@/app/lib/data";
 import { GROUNDS, STATUS_LABEL, COURT_VENUE_LABEL, splitGrounds, earliestDeadline } from "@/app/lib/eviction";
 import { waLink } from "@/app/lib/phone";
@@ -55,8 +54,6 @@ export default async function EvictionDetailPage({
 
   const { lease } = ev;
   const { tenant, unit } = lease;
-  const piiVisible = canViewTenantPII(s.role);
-  const tenantDisplayName = maskTenantName(tenant.name, piiVisible);
   const codes = splitGrounds(ev.grounds);
   const closed = ["ENFORCED", "WITHDRAWN", "VACATED"].includes(ev.status);
   const isAdmin = s.role === "ADMIN";
@@ -81,7 +78,7 @@ export default async function EvictionDetailPage({
         </Link>
         <div className="mt-1 flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold">Eviction — {tenantDisplayName}</h1>
+            <h1 className="text-lg font-semibold">Eviction — {tenant.name}</h1>
             <p className="text-sm text-silver-dark">
               {unit.property.name} · Unit {unit.label} · opened {fmt(ev.createdAt)}
             </p>

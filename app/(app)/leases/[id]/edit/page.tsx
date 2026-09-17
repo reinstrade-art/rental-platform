@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
+import { getSession, requireStaff } from "@/app/lib/auth";
 import { requireModule } from "@/app/lib/permissions";
 import { prisma } from "@/app/lib/prisma";
 import { updateLease } from "@/app/lib/actions";
 import { LEASE_STATUSES } from "@/app/lib/constants";
-import { maskTenantName } from "@/app/lib/tenant-privacy";
 
 export default async function EditLeasePage({
   params,
@@ -24,7 +23,6 @@ export default async function EditLeasePage({
     include: { tenant: true, unit: { include: { property: true } } },
   });
   if (!lease) notFound();
-  const piiVisible = canViewTenantPII(s.role);
 
   const [tenants, units] = await Promise.all([
     prisma.tenant.findMany({ where: { organizationId: s.organizationId }, orderBy: { name: "asc" } }),
@@ -38,7 +36,7 @@ export default async function EditLeasePage({
       </Link>
       <h1 className="mt-1 text-lg font-semibold">Edit lease</h1>
       <p className="text-sm text-silver-dark">
-        {maskTenantName(lease.tenant.name, piiVisible)} — {lease.unit.property.name} / {lease.unit.label}
+        {lease.tenant.name} — {lease.unit.property.name} / {lease.unit.label}
       </p>
       {error && <div className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
       <form action={updateLease.bind(null, lease.id)} className="mt-4 flex flex-col gap-3">
@@ -47,7 +45,7 @@ export default async function EditLeasePage({
           <select name="tenantId" defaultValue={lease.tenantId} className="mt-1 block w-full rounded border px-3 py-2">
             {tenants.map((t) => (
               <option key={t.id} value={t.id}>
-                {maskTenantName(t.name, piiVisible)}
+                {t.name}
               </option>
             ))}
           </select>

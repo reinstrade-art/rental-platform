@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
-import { maskTenantName } from "@/app/lib/tenant-privacy";
+import { getSession, requireStaff } from "@/app/lib/auth";
 import { getLease, leaseBalance } from "@/app/lib/data";
 import {
   addCharge,
@@ -75,8 +74,6 @@ export default async function LeaseDetailPage({
   const agreementWa = waLink(lease.tenant.phone, `Dear ${firstName}, here is your tenancy agreement: ${origin}/api/agreement/${lease.id}`);
   const invoicePeriods = [...new Set(lease.charges.map((c) => periodParam(c.periodMonth)))].sort().reverse();
   const currentPeriod = periodParam(new Date());
-  const piiVisible = canViewTenantPII(s.role);
-  const tenantDisplayName = maskTenantName(lease.tenant.name, piiVisible);
 
   return (
     <div className="flex flex-col gap-8">
@@ -87,7 +84,7 @@ export default async function LeaseDetailPage({
         </Link>
         <div className="mt-1 flex items-start justify-between">
           <h1 className="text-lg font-semibold">
-            {tenantDisplayName} — {lease.unit.property.name} / {lease.unit.label}
+            {lease.tenant.name} — {lease.unit.property.name} / {lease.unit.label}
           </h1>
           <Link href={`/leases/${lease.id}/edit`} className="text-xs underline text-silver-dark">
             Edit lease
@@ -527,7 +524,7 @@ export default async function LeaseDetailPage({
             : "No charges or payments recorded yet, so this is safe to delete."}
         </p>
         <form action={deleteLease.bind(null, lease.id)} className="mt-2">
-          <DeleteButton confirmText={`Delete this lease for ${tenantDisplayName}? This cannot be undone.`} />
+          <DeleteButton confirmText={`Delete this lease for ${lease.tenant.name}? This cannot be undone.`} />
         </form>
 
         {(lease.charges.length > 0 || lease.payments.length > 0) && s.role === "ADMIN" && (
@@ -539,7 +536,7 @@ export default async function LeaseDetailPage({
             </p>
             <form action={forceDeleteLease.bind(null, lease.id)} className="mt-2">
               <DeleteButton
-                confirmText={`This permanently deletes ${lease.charges.length} charge(s) and ${lease.payments.length} payment(s) for ${tenantDisplayName}, along with the lease itself. This cannot be undone. Continue?`}
+                confirmText={`This permanently deletes ${lease.charges.length} charge(s) and ${lease.payments.length} payment(s) for ${lease.tenant.name}, along with the lease itself. This cannot be undone. Continue?`}
                 label="Force delete (removes financial history)"
               />
             </form>

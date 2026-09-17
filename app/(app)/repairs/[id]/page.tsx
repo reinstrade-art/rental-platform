@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
-import { maskTenantName } from "@/app/lib/tenant-privacy";
+import { getSession, requireStaff } from "@/app/lib/auth";
 import { getRepair, getVendors, getSuppliers } from "@/app/lib/data";
 import { getApprovalForSubject } from "@/app/lib/approvals";
 import {
@@ -54,7 +53,6 @@ export default async function RepairDetailPage({
     canSuppliers ? getSuppliers(s.organizationId) : Promise.resolve([]),
   ]);
   if (!repair) notFound();
-  const piiVisible = canViewTenantPII(s.role);
 
   const [awardRequest, workRequest, costRequest] = await Promise.all([
     getApprovalForSubject(s.organizationId, "QUOTE_AWARD", repair.id),
@@ -78,7 +76,7 @@ export default async function RepairDetailPage({
           </Link>
           {repair.unit ? ` / ${repair.unit.label}` : " (common area)"} · reported{" "}
           {new Date(repair.reportedAt).toLocaleDateString()}
-          {repair.reportedByTenant ? ` by tenant ${maskTenantName(repair.reportedByTenant.name, piiVisible)}` : ""}
+          {repair.reportedByTenant ? ` by tenant ${repair.reportedByTenant.name}` : ""}
         </p>
         {repair.description && <p className="mt-2 text-sm">{repair.description}</p>}
       </div>

@@ -12,8 +12,6 @@ import { MpesaPayPanel } from "@/app/components/mpesa-pay-panel";
 import { waLink } from "@/app/lib/phone";
 import { displayBalance, balanceTone } from "@/app/lib/balance-display";
 import { requireModule } from "@/app/lib/permissions";
-import { canViewTenantPII } from "@/app/lib/roles";
-import { maskTenantName, maskTenantValue } from "@/app/lib/tenant-privacy";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -47,7 +45,6 @@ export default async function TenantDetailPage({
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
   const firstName = tenant.name.split(" ")[0];
   const mpesaReady = Boolean(payOptions && (payOptions.stkReady || payOptions.directReady));
-  const piiVisible = canViewTenantPII(s.role);
 
   return (
     <div className="flex flex-col gap-8">
@@ -58,10 +55,9 @@ export default async function TenantDetailPage({
         </Link>
         <div className="mt-1 flex items-start justify-between">
           <div>
-            <h1 className="text-lg font-semibold">{maskTenantName(tenant.name, piiVisible)}</h1>
+            <h1 className="text-lg font-semibold">{tenant.name}</h1>
             <p className="text-sm text-silver-dark">
-              {[maskTenantValue(tenant.phone, piiVisible), maskTenantValue(tenant.email, piiVisible)].filter(Boolean).join(" · ") ||
-                "No contact details on file"}
+              {[tenant.phone, tenant.email].filter(Boolean).join(" · ") || "No contact details on file"}
             </p>
           </div>
           {!caretaker && (
@@ -230,7 +226,7 @@ export default async function TenantDetailPage({
                   </ul>
                 )}
                 <p className="mt-1 text-xs text-silver-dark">
-                  {m.fromTenant ? maskTenantName(tenant.name, piiVisible) : m.authorName} · {new Date(m.createdAt).toLocaleString()}
+                  {m.fromTenant ? tenant.name : m.authorName} · {new Date(m.createdAt).toLocaleString()}
                 </p>
               </li>
             ))}
@@ -249,10 +245,10 @@ export default async function TenantDetailPage({
         <div className="max-w-sm border-t pt-6">
           <h2 className="font-semibold text-red-600">Delete tenant</h2>
           <p className="mt-1 text-xs text-silver-dark">
-            {maskTenantName(tenant.name, piiVisible)} has no leases and no portal login, so this is safe to delete.
+            {tenant.name} has no leases and no portal login, so this is safe to delete.
           </p>
           <form action={deleteTenant.bind(null, tenant.id)} className="mt-2">
-            <DeleteButton confirmText={`Delete ${maskTenantName(tenant.name, piiVisible)}? This cannot be undone.`} />
+            <DeleteButton confirmText={`Delete ${tenant.name}? This cannot be undone.`} />
           </form>
         </div>
       )}

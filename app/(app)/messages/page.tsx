@@ -1,17 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
+import { getSession, requireStaff } from "@/app/lib/auth";
 import { getMessageThreads } from "@/app/lib/data";
 import { replyToTenant } from "@/app/lib/actions";
 import { RichTextEditor } from "@/app/components/rich-text-editor";
 import { requireModule } from "@/app/lib/permissions";
-import { maskTenantName } from "@/app/lib/tenant-privacy";
 
 export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   requireModule(s, "messages");
-  const piiVisible = canViewTenantPII(s.role);
   const { error } = await searchParams;
 
   const threads = await getMessageThreads(s.organizationId);
@@ -47,8 +45,8 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
           <div key={tenant.id} className={`rounded border p-4 ${owed ? "border-orange-300 bg-orange-50" : ""}`}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="font-semibold">
-                <Link href={piiVisible ? `/tenants/${tenant.id}/edit` : `/tenants/${tenant.id}`} className="underline">
-                  {maskTenantName(tenant.name, piiVisible)}
+                <Link href={`/tenants/${tenant.id}/edit`} className="underline">
+                  {tenant.name}
                 </Link>
                 {lease && (
                   <span className="ml-2 text-xs font-normal text-silver-dark">
@@ -82,7 +80,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
                     </ul>
                   )}
                   <p className="mt-1 text-xs text-silver-dark">
-                    {msg.fromTenant ? maskTenantName(tenant.name, piiVisible) : msg.authorName} · {new Date(msg.createdAt).toLocaleString()}
+                    {msg.fromTenant ? tenant.name : msg.authorName} · {new Date(msg.createdAt).toLocaleString()}
                   </p>
                 </li>
               ))}

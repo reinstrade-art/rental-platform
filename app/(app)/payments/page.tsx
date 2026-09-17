@@ -1,10 +1,9 @@
 import { redirect } from "next/navigation";
-import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
+import { getSession, requireStaff } from "@/app/lib/auth";
 import { getTransactions, getLeases } from "@/app/lib/data";
 import { addManualTransaction, importTransactionsCsv, matchTransactionAction, ignoreTransactionAction } from "@/app/lib/actions";
 import { PAYMENT_METHODS } from "@/app/lib/constants";
 import { requireModule } from "@/app/lib/permissions";
-import { maskTenantName } from "@/app/lib/tenant-privacy";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -20,7 +19,6 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   requireModule(s, "payments");
-  const piiVisible = canViewTenantPII(s.role);
   const { error } = await searchParams;
 
   const [transactions, leases] = await Promise.all([getTransactions(s.organizationId), getLeases(s.organizationId)]);
@@ -100,7 +98,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                       <option value="">Select lease</option>
                       {leases.map((l) => (
                         <option key={l.id} value={l.id}>
-                          {maskTenantName(l.tenant.name, piiVisible)} — {l.unit.property.name}/{l.unit.label}
+                          {l.tenant.name} — {l.unit.property.name}/{l.unit.label}
                         </option>
                       ))}
                     </select>

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
-import { maskTenantName } from "@/app/lib/tenant-privacy";
+import { getSession, requireStaff } from "@/app/lib/auth";
 import { getProperty, monthRange } from "@/app/lib/data";
 import { createUnit, updateUnit, deleteProperty, inviteCaretaker, disableStaff, enableStaff } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
@@ -27,7 +26,6 @@ export default async function PropertyDetailPage({
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   requireModule(s, "properties");
-  const piiVisible = canViewTenantPII(s.role);
   const { id } = await params;
   const { saved, error, period: periodParam } = await searchParams;
   const property = await getProperty(s.organizationId, id);
@@ -174,7 +172,7 @@ export default async function PropertyDetailPage({
                   <td className="py-2">
                     {active ? (
                       <Link href={`/leases/${active.id}`} className="underline">
-                        {maskTenantName(active.tenant.name, piiVisible)}
+                        {active.tenant.name}
                       </Link>
                     ) : (
                       <div className="flex items-center gap-2">

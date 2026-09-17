@@ -424,7 +424,7 @@ export async function needsPlatformSetup() {
   return (await prisma.user.count({ where: { role: "PLATFORM_ADMIN" } })) === 0;
 }
 
-export { isPlatformAdmin, isStaff, isCaretaker, isTenant, isTradesman, canViewTenantPII } from "./roles";
+export { isPlatformAdmin, isStaff, isCaretaker, isTenant, isTradesman } from "./roles";
 
 /** Refuses anyone who isn't signed in as staff (ADMIN/MANAGER/VIEWER) of an organization. */
 export function requireStaff(s: Session | null): s is Session & { organizationId: string } {
