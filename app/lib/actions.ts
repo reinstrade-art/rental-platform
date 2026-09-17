@@ -29,6 +29,7 @@ import {
   revokeSession,
   revokeOtherSessions,
   revokeAllSessions,
+  canViewTenantPII,
 } from "./auth";
 import { checkLock, recordFailure, clearFailures } from "./throttle";
 import { raiseApproval, signApproval } from "./approvals";
@@ -893,6 +894,7 @@ export async function updateTenant(tenantId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
   requireModule(s, "tenants");
+  if (!canViewTenantPII(s.role)) throw new Error("Only a manager, director or admin can change a tenant's personal details.");
 
   const tenant = await prisma.tenant.findFirst({ where: { id: tenantId, organizationId: s.organizationId } });
   if (!tenant) errorRedirect("/tenants", "Tenant not found.");

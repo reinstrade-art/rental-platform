@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
 import { requireModule } from "@/app/lib/permissions";
 import { prisma } from "@/app/lib/prisma";
 import { createLease } from "@/app/lib/actions";
 import { LeaseUnitSelect } from "@/app/components/lease-unit-select";
+import { maskTenantName } from "@/app/lib/tenant-privacy";
 
 export default async function NewLeasePage({
   searchParams,
@@ -14,6 +15,7 @@ export default async function NewLeasePage({
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   requireModule(s, "leases");
+  const piiVisible = canViewTenantPII(s.role);
   const { tenantId, unitId, error } = await searchParams;
 
   const [units, tenants] = await Promise.all([
@@ -46,7 +48,7 @@ export default async function NewLeasePage({
           <option value="">Select an existing tenant…</option>
           {tenants.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.name}
+              {maskTenantName(t.name, piiVisible)}
             </option>
           ))}
         </select>

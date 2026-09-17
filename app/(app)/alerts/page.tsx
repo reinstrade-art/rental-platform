@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
 import { getArrearsAlerts } from "@/app/lib/alerts";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { waLink } from "@/app/lib/phone";
 import { requireModule } from "@/app/lib/permissions";
+import { maskTenantName } from "@/app/lib/tenant-privacy";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -19,6 +20,7 @@ export default async function AlertsPage() {
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "ARREARS_ALERTS")) redirect("/home");
   requireModule(s, "alerts");
+  const piiVisible = canViewTenantPII(s.role);
 
   const alerts = await getArrearsAlerts(s.organizationId);
   const serious = alerts.filter((a) => a.severity === "serious");
@@ -72,7 +74,7 @@ export default async function AlertsPage() {
             <tr key={a.leaseId} className="border-b">
               <td className="py-2">
                 <Link href={`/leases/${a.leaseId}`} className="underline">
-                  {a.tenant}
+                  {maskTenantName(a.tenant, piiVisible)}
                 </Link>
                 {a.severity === "serious" && <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">serious</span>}
               </td>

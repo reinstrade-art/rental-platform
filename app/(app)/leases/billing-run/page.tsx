@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
 import { requireModule } from "@/app/lib/permissions";
 import { previewBilling } from "@/app/lib/billing";
 import { runMonthlyBilling } from "@/app/lib/actions";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
+import { maskTenantName } from "@/app/lib/tenant-privacy";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -24,6 +25,7 @@ export default async function BillingRunPage({
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "BILLING_RUN")) redirect("/home");
   requireModule(s, "leases");
+  const piiVisible = canViewTenantPII(s.role);
 
   const sp = await searchParams;
   const period = /^\d{4}-\d{2}$/.test(sp.period ?? "") ? sp.period! : new Date().toISOString().slice(0, 7);
@@ -78,7 +80,7 @@ export default async function BillingRunPage({
                 <tr key={r.leaseId} className="border-b">
                   <td className="py-2">
                     <Link href={`/leases/${r.leaseId}`} className="underline">
-                      {r.tenant}
+                      {maskTenantName(r.tenant, piiVisible)}
                     </Link>
                   </td>
                   <td className="py-2">
@@ -105,7 +107,7 @@ export default async function BillingRunPage({
           <ul className="mt-2 flex flex-col gap-1">
             {draft.skipped.map((sk, i) => (
               <li key={i}>
-                {sk.tenant} · {sk.unit} — {sk.reason}
+                {maskTenantName(sk.tenant, piiVisible)} · {sk.unit} — {sk.reason}
               </li>
             ))}
           </ul>

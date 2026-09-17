@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { prisma } from "@/app/lib/prisma";
 import { getReportData } from "@/app/lib/reports";
 import { buildReportPdf } from "@/app/lib/report-doc";
+import { maskReportData } from "@/app/lib/tenant-privacy";
 
 export async function GET(req: NextRequest) {
   const s = await getSession();
@@ -25,10 +26,11 @@ export async function GET(req: NextRequest) {
     if (!property) return NextResponse.json({ error: "Property not found." }, { status: 404 });
   }
 
-  const [org, data] = await Promise.all([
+  const [org, rawData] = await Promise.all([
     prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } }),
     getReportData(s.organizationId, year, through, propertyId),
   ]);
+  const data = maskReportData(rawData, canViewTenantPII(s.role));
 
   const pdf = await buildReportPdf(org, data);
 

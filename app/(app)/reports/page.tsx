@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { prisma } from "@/app/lib/prisma";
 import { getReportData, monthName } from "@/app/lib/reports";
 import { requireModule } from "@/app/lib/permissions";
+import { maskReportData } from "@/app/lib/tenant-privacy";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -27,10 +28,11 @@ export default async function ReportsPage({
   const year = Number(period.slice(0, 4));
   const through = Number(period.slice(5)) - 1;
 
-  const [data, properties] = await Promise.all([
+  const [rawData, properties] = await Promise.all([
     getReportData(s.organizationId, year, through, propertyId),
     prisma.property.findMany({ where: { organizationId: s.organizationId }, orderBy: { name: "asc" } }),
   ]);
+  const data = maskReportData(rawData, canViewTenantPII(s.role));
 
   const pdfHref = `/api/report?period=${period}${propertyId ? `&property=${propertyId}` : ""}`;
   const qs = (p: string, prop?: string) => `/reports?period=${p}${prop ? `&property=${prop}` : ""}`;

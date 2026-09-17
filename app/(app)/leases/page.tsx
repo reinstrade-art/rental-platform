@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
+import { maskTenantName } from "@/app/lib/tenant-privacy";
 import { leaseBalance } from "@/app/lib/data";
 import { prisma } from "@/app/lib/prisma";
 import { deleteLease, importRentRoll } from "@/app/lib/actions";
@@ -27,6 +28,7 @@ export default async function LeasesPage({
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   requireModule(s, "leases");
+  const piiVisible = canViewTenantPII(s.role);
   const tier = await getOrgTier(s.organizationId);
   const canImport = hasFeature(tier, "CSV_IMPORT");
   const canBillingRun = hasFeature(tier, "BILLING_RUN");
@@ -200,7 +202,7 @@ export default async function LeasesPage({
                     <td className="py-2">{r.unit.label}</td>
                     <td className="py-2">
                       <Link href={`/leases/${r.lease.id}`} className="underline">
-                        {r.lease.tenant.name}
+                        {maskTenantName(r.lease.tenant.name, piiVisible)}
                       </Link>
                     </td>
                     <td className="py-2">{money(r.lease.monthlyRent)}</td>
@@ -214,7 +216,7 @@ export default async function LeasesPage({
                         </Link>
                         <form action={deleteLease.bind(null, r.lease.id)}>
                           <DeleteButton
-                            confirmText={`Delete the lease for ${r.lease.tenant.name} (${property.name} / ${r.unit.label})? This cannot be undone.`}
+                            confirmText={`Delete the lease for ${maskTenantName(r.lease.tenant.name, piiVisible)} (${property.name} / ${r.unit.label})? This cannot be undone.`}
                           />
                         </form>
                       </div>

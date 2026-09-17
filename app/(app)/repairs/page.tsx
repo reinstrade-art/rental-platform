@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
+import { maskTenantName } from "@/app/lib/tenant-privacy";
 import { getRepairs, getRepairSummary, getProperties } from "@/app/lib/data";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { getOpenApprovals } from "@/app/lib/approvals";
@@ -38,6 +39,7 @@ export default async function RepairsPage({ searchParams }: { searchParams: Prom
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   requireModule(s, "repairs");
+  const piiVisible = canViewTenantPII(s.role);
 
   const tier = await getOrgTier(s.organizationId);
   if (!hasFeature(tier, "REPAIRS")) redirect("/home");
@@ -85,7 +87,7 @@ export default async function RepairsPage({ searchParams }: { searchParams: Prom
           <div className="text-xs text-silver-dark">
             {r.property.name}
             {r.unit ? ` · ${r.unit.label}` : " · common area"} · {new Date(r.reportedAt).toLocaleDateString()}
-            {r.reportedByTenant ? ` · tenant ${r.reportedByTenant.name}` : ""}
+            {r.reportedByTenant ? ` · tenant ${maskTenantName(r.reportedByTenant.name, piiVisible)}` : ""}
           </div>
         </td>
         <td className="py-2">

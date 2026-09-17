@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { getDashboard, getBilledVsCollected } from "@/app/lib/data";
 import { getOpenApprovals } from "@/app/lib/approvals";
 import { HomeTabs } from "./home-tabs";
+import { maskTenantName } from "@/app/lib/tenant-privacy";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -21,6 +22,7 @@ export default async function HomePage() {
   const s = await getSession();
   if (!s) redirect("/login");
   if (!requireStaff(s)) redirect("/login");
+  const piiVisible = canViewTenantPII(s.role);
 
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -90,7 +92,7 @@ export default async function HomePage() {
     items.push({
       href: `/tenants/${mostOverdue.lease.tenantId}`,
       icon: "clock",
-      title: `${mostOverdue.lease.tenant.name} owes KES ${money(mostOverdue.balance)}`,
+      title: `${maskTenantName(mostOverdue.lease.tenant.name, piiVisible)} owes KES ${money(mostOverdue.balance)}`,
       subtitle: `${mostOverdue.lease.unit.property.name} · ${mostOverdue.lease.unit.label} — a gentle reminder queued`,
     });
   }

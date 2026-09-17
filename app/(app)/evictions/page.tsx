@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession, requireStaff } from "@/app/lib/auth";
+import { getSession, requireStaff, canViewTenantPII } from "@/app/lib/auth";
 import { getEvictions } from "@/app/lib/data";
 import { GROUNDS, STATUS_LABEL, OPEN_STATUSES, splitGrounds } from "@/app/lib/eviction";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { requireModule } from "@/app/lib/permissions";
+import { maskTenantName } from "@/app/lib/tenant-privacy";
 
 export default async function EvictionsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "EVICTIONS")) redirect("/home");
   requireModule(s, "evictions");
+  const piiVisible = canViewTenantPII(s.role);
   const { error } = await searchParams;
   const evictions = await getEvictions(s.organizationId);
 
@@ -53,7 +55,7 @@ export default async function EvictionsPage({ searchParams }: { searchParams: Pr
                   }`}
                 >
                   <span>
-                    <span className="block font-medium">{e.lease.tenant.name}</span>
+                    <span className="block font-medium">{maskTenantName(e.lease.tenant.name, piiVisible)}</span>
                     <span className="block text-xs text-silver-dark">
                       {e.lease.unit.property.name} · Unit {e.lease.unit.label} · {codes.map((c) => GROUNDS[c].label).join("; ")}
                     </span>
@@ -80,7 +82,7 @@ export default async function EvictionsPage({ searchParams }: { searchParams: Pr
                 className="flex flex-wrap items-center justify-between gap-2 rounded border px-4 py-3 text-sm opacity-70 transition-opacity hover:opacity-100 hover:bg-silver-light"
               >
                 <span>
-                  <span className="block font-medium">{e.lease.tenant.name}</span>
+                  <span className="block font-medium">{maskTenantName(e.lease.tenant.name, piiVisible)}</span>
                   <span className="block text-xs text-silver-dark">
                     {e.lease.unit.property.name} · Unit {e.lease.unit.label}
                   </span>

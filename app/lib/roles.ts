@@ -38,3 +38,15 @@ export function isTenant(role: string | null | undefined): boolean {
 export function isTradesman(role: string | null | undefined): boolean {
   return Boolean(role) && (TRADE_ROLES as readonly string[]).includes(role!);
 }
+
+/**
+ * ADMIN, MANAGER and the cross-org PLATFORM_ADMIN see a tenant's real name,
+ * phone and email; everyone else (VIEWER, CARETAKER, and every outside/trade
+ * role) sees them masked — see app/lib/tenant-privacy.ts for the masking
+ * itself. Deliberately a role check, not a grantable module permission like
+ * MODULE_LIST: this is about who an org trusts with a tenant's personal
+ * details, not which parts of the app someone's day-to-day job touches.
+ */
+export function canViewTenantPII(role: string | null | undefined): boolean {
+  return role === "ADMIN" || role === "MANAGER" || role === "PLATFORM_ADMIN";
+}

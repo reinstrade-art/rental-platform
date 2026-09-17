@@ -6,6 +6,8 @@ import { inviteTenant, inviteNewTenant, deleteTenant, importTenantsCsv } from "@
 import { DeleteButton } from "@/app/components/delete-button";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { requireModule } from "@/app/lib/permissions";
+import { canViewTenantPII } from "@/app/lib/roles";
+import { maskTenantName, maskTenantValue } from "@/app/lib/tenant-privacy";
 
 export default async function TenantsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
@@ -15,6 +17,7 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
   // above), never subject to the ordinary staff permission set below.
   if (!caretaker) requireModule(s, "tenants");
   const tenants = await getTenants(s.organizationId, caretaker ? (s.propertyId ?? undefined) : undefined);
+  const piiVisible = canViewTenantPII(s.role);
   const canImport = !caretaker && hasFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
   const { error } = await searchParams;
 
@@ -66,11 +69,11 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
             <tr key={t.id} className="border-b">
               <td className="py-2">
                 <Link href={`/tenants/${t.id}`} className="underline">
-                  {t.name}
+                  {maskTenantName(t.name, piiVisible)}
                 </Link>
               </td>
-              <td className="py-2">{t.phone ?? "—"}</td>
-              <td className="py-2">{t.email ?? "—"}</td>
+              <td className="py-2">{maskTenantValue(t.phone, piiVisible) ?? "—"}</td>
+              <td className="py-2">{maskTenantValue(t.email, piiVisible) ?? "—"}</td>
               <td className="py-2">
                 <span
                   className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
@@ -127,7 +130,7 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
                       Edit
                     </Link>
                     <form action={deleteTenant.bind(null, t.id)}>
-                      <DeleteButton confirmText={`Delete ${t.name}? This cannot be undone.`} />
+                      <DeleteButton confirmText={`Delete ${maskTenantName(t.name, piiVisible)}? This cannot be undone.`} />
                     </form>
                   </div>
                 )}
