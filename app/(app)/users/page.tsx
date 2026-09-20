@@ -10,6 +10,7 @@ import {
   enableStaff,
   deleteStaffAction,
   revokeInvitationAction,
+  deleteExpiredInvitationsAction,
   impersonateAction,
   resetStaffPasswordAction,
 } from "@/app/lib/actions";
@@ -17,11 +18,11 @@ import { DeleteButton } from "@/app/components/delete-button";
 import { ResetPasswordForm } from "@/app/components/reset-password-form";
 import { MODULE_LIST, MODULE_LABEL, parsePermissions } from "@/app/lib/constants";
 
-export default async function UsersPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function UsersPage({ searchParams }: { searchParams: Promise<{ error?: string; expiredCleared?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   const isAdmin = s.role === "ADMIN";
-  const { error } = await searchParams;
+  const { error, expiredCleared } = await searchParams;
 
   const [staff, properties, pendingInvitations, sessionCounts] = await Promise.all([
     getStaff(s.organizationId),
@@ -30,10 +31,16 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     isAdmin ? getActiveSessionCounts(s.organizationId) : Promise.resolve({} as Record<string, number>),
   ]);
   const propertyName = (id: string | null) => properties.find((p) => p.id === id)?.name ?? "—";
+  const expiredCount = pendingInvitations.filter((inv) => inv.expiresAt < new Date()).length;
 
   return (
     <div className="flex flex-col gap-8">
       {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {expiredCleared !== undefined && (
+        <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">
+          Deleted {expiredCleared} expired invitation{expiredCleared === "1" ? "" : "s"}.
+        </div>
+      )}
       <div>
         <h1 className="text-lg font-semibold">Team</h1>
         <table className="mt-3 w-full border-collapse text-sm">
@@ -142,7 +149,17 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
 
       {isAdmin && pendingInvitations.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold">Pending invitations</h2>
+          <div className="flex max-w-2xl items-center justify-between">
+            <h2 className="text-lg font-semibold">Pending invitations</h2>
+            {expiredCount > 0 && (
+              <form action={deleteExpiredInvitationsAction}>
+                <DeleteButton
+                  label={`Delete ${expiredCount} expired`}
+                  confirmText={`Delete ${expiredCount} expired invitation${expiredCount === 1 ? "" : "s"}? They can no longer be used, so this only clears them from the list.`}
+                />
+              </form>
+            )}
+          </div>
           <table className="mt-3 w-full max-w-2xl border-collapse text-sm">
             <thead>
               <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
@@ -167,7 +184,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     </td>
                     <td className="py-2">
                       <form action={revokeInvitationAction.bind(null, inv.id)}>
-                        <button className="text-xs text-red-700 underline">Revoke</button>
+                        <button className="text-xs text-red-700 underline">{expired ? "Delete" : "Revoke"}</button>
                       </form>
                     </td>
                   </tr>

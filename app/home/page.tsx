@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
+import { tenantView } from "@/app/lib/pii";
 import { prisma } from "@/app/lib/prisma";
 import { getDashboard, getBilledVsCollected } from "@/app/lib/data";
 import { getOpenApprovals } from "@/app/lib/approvals";
@@ -90,7 +91,7 @@ export default async function HomePage() {
     items.push({
       href: `/tenants/${mostOverdue.lease.tenantId}`,
       icon: "clock",
-      title: `${mostOverdue.lease.tenant.name} owes KES ${money(mostOverdue.balance)}`,
+      title: `${tenantView(s).name(mostOverdue.lease.tenant.name)} owes KES ${money(mostOverdue.balance)}`,
       subtitle: `${mostOverdue.lease.unit.property.name} · ${mostOverdue.lease.unit.label} — a gentle reminder queued`,
     });
   }

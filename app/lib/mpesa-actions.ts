@@ -5,6 +5,7 @@ import { prisma } from "./prisma";
 import { getSession, requireStaff, requireTenant } from "./auth";
 import { stkPush } from "./mpesa";
 import { platformMpesaCredentials } from "./licensing";
+import { canViewTenantDetails } from "./pii";
 
 export type MpesaState = { error?: string; requestId?: string } | undefined;
 
@@ -90,9 +91,18 @@ export async function sendMpesaPrompt(_prev: MpesaState, fd: FormData): Promise<
   if (!requireStaff(s)) return { error: "Not allowed." };
 
   const leaseId = String(fd.get("leaseId") ?? "");
-  const phone = String(fd.get("phone") ?? "").trim();
+  let phone = String(fd.get("phone") ?? "").trim();
   const amount = Number(fd.get("amount") ?? 0);
   if (!leaseId) return { error: "No lease." };
+  // Staff who only see the masked tenant details never see (or type) the
+  // number — the prompt goes to the phone on file, looked up here.
+  if (!canViewTenantDetails(s)) {
+    const lease = await prisma.lease.findFirst({
+      where: { id: leaseId, organizationId: s.organizationId },
+      select: { tenant: { select: { phone: true } } },
+    });
+    phone = lease?.tenant.phone ?? "";
+  }
   if (!phone) return { error: "No phone number to send the prompt to." };
 
   return raise(s.organizationId, leaseId, phone, amount, "STAFF");

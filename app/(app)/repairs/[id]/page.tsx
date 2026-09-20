@@ -14,6 +14,7 @@ import {
 } from "@/app/lib/actions";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { requireModule } from "@/app/lib/permissions";
+import { tenantView } from "@/app/lib/pii";
 
 function money(n: number | null | undefined) {
   return n == null ? "—" : n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -44,6 +45,7 @@ export default async function RepairDetailPage({
   const tier = await getOrgTier(s.organizationId);
   if (!hasFeature(tier, "REPAIRS")) redirect("/home");
   requireModule(s, "repairs");
+  const v = tenantView(s); // surnames masked below manager/director/admin
   const canSuppliers = hasFeature(tier, "SUPPLIERS");
   const { id } = await params;
   const { error } = await searchParams;
@@ -76,7 +78,7 @@ export default async function RepairDetailPage({
           </Link>
           {repair.unit ? ` / ${repair.unit.label}` : " (common area)"} · reported{" "}
           {new Date(repair.reportedAt).toLocaleDateString()}
-          {repair.reportedByTenant ? ` by tenant ${repair.reportedByTenant.name}` : ""}
+          {repair.reportedByTenant ? ` by tenant ${v.name(repair.reportedByTenant.name)}` : ""}
         </p>
         {repair.description && <p className="mt-2 text-sm">{repair.description}</p>}
       </div>

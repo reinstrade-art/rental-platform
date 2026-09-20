@@ -24,6 +24,7 @@ import { CHARGE_TYPES, CHARGE_TYPE_LABEL, PAYMENT_METHODS } from "@/app/lib/cons
 import { MpesaPayPanel } from "@/app/components/mpesa-pay-panel";
 import { GROUNDS, GROUNDS_LIST, STATUS_LABEL, OPEN_STATUSES } from "@/app/lib/eviction";
 import { waLink } from "@/app/lib/phone";
+import { tenantView } from "@/app/lib/pii";
 import { displayBalance, balanceTone } from "@/app/lib/balance-display";
 import { requireModule } from "@/app/lib/permissions";
 
@@ -69,9 +70,13 @@ export default async function LeaseDetailPage({
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
+  // Surname/phone are masked for anyone below manager/director/admin — and the
+  // WhatsApp links below are withheld for them, since a link embeds the number.
+  const v = tenantView(s);
+  const phoneForLinks = v.visible ? lease.tenant.phone : null;
   const firstName = lease.tenant.name.split(" ")[0];
-  const statementWa = waLink(lease.tenant.phone, `Dear ${firstName}, here is your account statement: ${origin}/api/statement/${lease.id}`);
-  const agreementWa = waLink(lease.tenant.phone, `Dear ${firstName}, here is your tenancy agreement: ${origin}/api/agreement/${lease.id}`);
+  const statementWa = waLink(phoneForLinks, `Dear ${firstName}, here is your account statement: ${origin}/api/statement/${lease.id}`);
+  const agreementWa = waLink(phoneForLinks, `Dear ${firstName}, here is your tenancy agreement: ${origin}/api/agreement/${lease.id}`);
   const invoicePeriods = [...new Set(lease.charges.map((c) => periodParam(c.periodMonth)))].sort().reverse();
   const currentPeriod = periodParam(new Date());
 
@@ -84,7 +89,7 @@ export default async function LeaseDetailPage({
         </Link>
         <div className="mt-1 flex items-start justify-between">
           <h1 className="text-lg font-semibold">
-            {lease.tenant.name} — {lease.unit.property.name} / {lease.unit.label}
+            {v.name(lease.tenant.name)} — {lease.unit.property.name} / {lease.unit.label}
           </h1>
           <Link href={`/leases/${lease.id}/edit`} className="text-xs underline text-silver-dark">
             Edit lease
@@ -115,6 +120,7 @@ export default async function LeaseDetailPage({
         </div>
       </div>
 
+      {v.visible ? (
       <div>
         <h2 className="font-semibold">Documents</h2>
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
@@ -130,7 +136,7 @@ export default async function LeaseDetailPage({
                   Send on WhatsApp
                 </a>
               ) : (
-                <span className="text-xs text-silver-dark">No phone on file</span>
+                <span className="text-xs text-silver-dark">{v.visible ? "No phone on file" : "Contact details hidden"}</span>
               )}
             </div>
           </div>
@@ -149,7 +155,7 @@ export default async function LeaseDetailPage({
                   Send on WhatsApp
                 </a>
               ) : (
-                <span className="text-xs text-silver-dark">No phone on file</span>
+                <span className="text-xs text-silver-dark">{v.visible ? "No phone on file" : "Contact details hidden"}</span>
               )}
             </div>
           </div>
@@ -169,7 +175,7 @@ export default async function LeaseDetailPage({
           {invoicePeriods.length > 0 && (
             <div className="mt-3 flex flex-col gap-1.5 border-t pt-3">
               {invoicePeriods.map((p) => {
-                const wa = waLink(lease.tenant.phone, `Dear ${firstName}, here is your invoice for ${p}: ${origin}/api/invoice/${lease.id}?period=${p}`);
+                const wa = waLink(phoneForLinks, `Dear ${firstName}, here is your invoice for ${p}: ${origin}/api/invoice/${lease.id}?period=${p}`);
                 return (
                   <div key={p} className="flex items-center gap-3 text-xs">
                     <span className="w-16 text-silver-dark">{p}</span>
@@ -188,6 +194,14 @@ export default async function LeaseDetailPage({
           )}
         </div>
       </div>
+      ) : (
+        <div>
+          <h2 className="font-semibold">Documents</h2>
+          <p className="mt-1 text-xs text-silver-dark">
+            Statements, invoices and the tenancy agreement print the tenant&apos;s full details, so they are only available to a manager, director or admin.
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-8 md:grid-cols-2">
         <div>
@@ -343,12 +357,14 @@ export default async function LeaseDetailPage({
                       <button form={formId} className="text-xs underline">
                         Save
                       </button>
-                      <a href={`/api/receipt/${p.id}`} target="_blank" rel="noreferrer" className="text-xs underline text-silver-dark">
-                        Receipt
-                      </a>
+                      {v.visible && (
+                        <a href={`/api/receipt/${p.id}`} target="_blank" rel="noreferrer" className="text-xs underline text-silver-dark">
+                          Receipt
+                        </a>
+                      )}
                       {(() => {
                         const wa = waLink(
-                          lease.tenant.phone,
+                          phoneForLinks,
                           `Dear ${firstName}, here is your payment receipt: ${origin}/api/receipt/${p.id}`,
                         );
                         return wa ? (
@@ -450,8 +466,8 @@ export default async function LeaseDetailPage({
                   action={sendMpesaPrompt}
                   leaseId={lease.id}
                   defaultAmount={balance > 0 ? balance : lease.monthlyRent}
-                  phone={lease.tenant.phone}
-                  editablePhone
+                  phone={v.visible ? lease.tenant.phone : undefined}
+                  editablePhone={v.visible}
                   stkReady={payOptions.stkReady}
                   direct={{
                     ready: payOptions.directReady,
@@ -524,7 +540,7 @@ export default async function LeaseDetailPage({
             : "No charges or payments recorded yet, so this is safe to delete."}
         </p>
         <form action={deleteLease.bind(null, lease.id)} className="mt-2">
-          <DeleteButton confirmText={`Delete this lease for ${lease.tenant.name}? This cannot be undone.`} />
+          <DeleteButton confirmText={`Delete this lease for ${v.name(lease.tenant.name)}? This cannot be undone.`} />
         </form>
 
         {(lease.charges.length > 0 || lease.payments.length > 0) && s.role === "ADMIN" && (
@@ -536,7 +552,7 @@ export default async function LeaseDetailPage({
             </p>
             <form action={forceDeleteLease.bind(null, lease.id)} className="mt-2">
               <DeleteButton
-                confirmText={`This permanently deletes ${lease.charges.length} charge(s) and ${lease.payments.length} payment(s) for ${lease.tenant.name}, along with the lease itself. This cannot be undone. Continue?`}
+                confirmText={`This permanently deletes ${lease.charges.length} charge(s) and ${lease.payments.length} payment(s) for ${v.name(lease.tenant.name)}, along with the lease itself. This cannot be undone. Continue?`}
                 label="Force delete (removes financial history)"
               />
             </form>

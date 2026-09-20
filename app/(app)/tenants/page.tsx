@@ -6,6 +6,7 @@ import { inviteTenant, inviteNewTenant, deleteTenant, importTenantsCsv } from "@
 import { DeleteButton } from "@/app/components/delete-button";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { requireModule } from "@/app/lib/permissions";
+import { tenantView } from "@/app/lib/pii";
 
 export default async function TenantsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const s = await getSession();
@@ -17,6 +18,8 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
   const tenants = await getTenants(s.organizationId, caretaker ? (s.propertyId ?? undefined) : undefined);
   const canImport = !caretaker && hasFeature(await getOrgTier(s.organizationId), "CSV_IMPORT");
   const { error } = await searchParams;
+  // Surnames, phones and emails are masked for anyone below manager/director/admin.
+  const v = tenantView(s);
 
   return (
     <div className="flex flex-col gap-8">
@@ -66,11 +69,11 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
             <tr key={t.id} className="border-b">
               <td className="py-2">
                 <Link href={`/tenants/${t.id}`} className="underline">
-                  {t.name}
+                  {v.name(t.name)}
                 </Link>
               </td>
-              <td className="py-2">{t.phone ?? "—"}</td>
-              <td className="py-2">{t.email ?? "—"}</td>
+              <td className="py-2">{v.phone(t.phone) ?? "—"}</td>
+              <td className="py-2">{v.email(t.email) ?? "—"}</td>
               <td className="py-2">
                 <span
                   className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
@@ -123,11 +126,13 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
                     <Link href={`/leases/new?tenantId=${t.id}`} className="text-xs underline">
                       Add lease
                     </Link>
-                    <Link href={`/tenants/${t.id}/edit`} className="text-xs underline text-silver-dark">
-                      Edit
-                    </Link>
+                    {v.visible && (
+                      <Link href={`/tenants/${t.id}/edit`} className="text-xs underline text-silver-dark">
+                        Edit
+                      </Link>
+                    )}
                     <form action={deleteTenant.bind(null, t.id)}>
-                      <DeleteButton confirmText={`Delete ${t.name}? This cannot be undone.`} />
+                      <DeleteButton confirmText={`Delete ${v.name(t.name)}? This cannot be undone.`} />
                     </form>
                   </div>
                 )}

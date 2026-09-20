@@ -6,6 +6,7 @@ import { createUnit, updateUnit, deleteProperty, inviteCaretaker, disableStaff, 
 import { DeleteButton } from "@/app/components/delete-button";
 import { MonthNav } from "@/app/components/month-nav";
 import { requireModule } from "@/app/lib/permissions";
+import { tenantView } from "@/app/lib/pii";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -26,6 +27,7 @@ export default async function PropertyDetailPage({
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   requireModule(s, "properties");
+  const v = tenantView(s); // surnames masked below manager/director/admin
   const { id } = await params;
   const { saved, error, period: periodParam } = await searchParams;
   const property = await getProperty(s.organizationId, id);
@@ -172,7 +174,7 @@ export default async function PropertyDetailPage({
                   <td className="py-2">
                     {active ? (
                       <Link href={`/leases/${active.id}`} className="underline">
-                        {active.tenant.name}
+                        {v.name(active.tenant.name)}
                       </Link>
                     ) : (
                       <div className="flex items-center gap-2">

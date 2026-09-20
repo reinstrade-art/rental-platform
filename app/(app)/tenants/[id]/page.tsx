@@ -12,6 +12,7 @@ import { MpesaPayPanel } from "@/app/components/mpesa-pay-panel";
 import { waLink } from "@/app/lib/phone";
 import { displayBalance, balanceTone } from "@/app/lib/balance-display";
 import { requireModule } from "@/app/lib/permissions";
+import { tenantView } from "@/app/lib/pii";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -30,6 +31,8 @@ export default async function TenantDetailPage({
   if (!caretaker) requireModule(s, "tenants");
   const { id } = await params;
   const { error } = await searchParams;
+  // Surname, phone and email are masked for anyone below manager/director/admin.
+  const v = tenantView(s);
   const tenant = await getTenant(s.organizationId, id, caretaker ? (s.propertyId ?? undefined) : undefined);
   if (!tenant) notFound();
 
@@ -55,9 +58,9 @@ export default async function TenantDetailPage({
         </Link>
         <div className="mt-1 flex items-start justify-between">
           <div>
-            <h1 className="text-lg font-semibold">{tenant.name}</h1>
+            <h1 className="text-lg font-semibold">{v.name(tenant.name)}</h1>
             <p className="text-sm text-silver-dark">
-              {[tenant.phone, tenant.email].filter(Boolean).join(" · ") || "No contact details on file"}
+              {[v.phone(tenant.phone), v.email(tenant.email)].filter(Boolean).join(" · ") || "No contact details on file"}
             </p>
           </div>
           {!caretaker && (
@@ -65,9 +68,11 @@ export default async function TenantDetailPage({
               <Link href={`/leases/new?tenantId=${tenant.id}`} className="text-xs underline text-silver-dark">
                 Add lease
               </Link>
-              <Link href={`/tenants/${tenant.id}/edit`} className="text-xs underline text-silver-dark">
-                Edit
-              </Link>
+              {v.visible && (
+                <Link href={`/tenants/${tenant.id}/edit`} className="text-xs underline text-silver-dark">
+                  Edit
+                </Link>
+              )}
             </div>
           )}
         </div>
@@ -122,8 +127,8 @@ export default async function TenantDetailPage({
               action={sendMpesaPrompt}
               leaseId={activeLease.id}
               defaultAmount={leaseBalance(activeLease) > 0 ? leaseBalance(activeLease) : activeLease.monthlyRent}
-              phone={tenant.phone}
-              editablePhone
+              phone={v.visible ? tenant.phone : undefined}
+              editablePhone={v.visible}
               stkReady={payOptions.stkReady}
               direct={{
                 ready: payOptions.directReady,
@@ -166,7 +171,7 @@ export default async function TenantDetailPage({
             <tbody>
               {tenant.leases.map((l) => {
                 const balance = leaseBalance(l);
-                const agreementWa = waLink(tenant.phone, `Dear ${firstName}, here is your tenancy agreement: ${origin}/api/agreement/${l.id}`);
+                const agreementWa = v.visible && waLink(tenant.phone, `Dear ${firstName}, here is your tenancy agreement: ${origin}/api/agreement/${l.id}`);
                 return (
                   <tr key={l.id} className="border-b">
                     <td className="py-2">
@@ -183,9 +188,13 @@ export default async function TenantDetailPage({
                           {l.signedAt ? `Signed ${new Date(l.signedAt).toLocaleDateString()}` : "Not yet signed"}
                         </span>
                         <div className="flex items-center gap-2">
-                          <a href={`/api/agreement/${l.id}`} target="_blank" rel="noreferrer" className="text-xs underline">
-                            View / print
-                          </a>
+                          {v.visible ? (
+                            <a href={`/api/agreement/${l.id}`} target="_blank" rel="noreferrer" className="text-xs underline">
+                              View / print
+                            </a>
+                          ) : (
+                            <span className="text-xs text-silver-dark">Hidden</span>
+                          )}
                           {agreementWa && (
                             <a href={agreementWa} target="_blank" rel="noreferrer" className="text-xs underline text-silver-dark">
                               WhatsApp
@@ -226,7 +235,7 @@ export default async function TenantDetailPage({
                   </ul>
                 )}
                 <p className="mt-1 text-xs text-silver-dark">
-                  {m.fromTenant ? tenant.name : m.authorName} · {new Date(m.createdAt).toLocaleString()}
+                  {m.fromTenant ? v.name(tenant.name) : m.authorName} · {new Date(m.createdAt).toLocaleString()}
                 </p>
               </li>
             ))}
@@ -245,10 +254,10 @@ export default async function TenantDetailPage({
         <div className="max-w-sm border-t pt-6">
           <h2 className="font-semibold text-red-600">Delete tenant</h2>
           <p className="mt-1 text-xs text-silver-dark">
-            {tenant.name} has no leases and no portal login, so this is safe to delete.
+            {v.name(tenant.name)} has no leases and no portal login, so this is safe to delete.
           </p>
           <form action={deleteTenant.bind(null, tenant.id)} className="mt-2">
-            <DeleteButton confirmText={`Delete ${tenant.name}? This cannot be undone.`} />
+            <DeleteButton confirmText={`Delete ${v.name(tenant.name)}? This cannot be undone.`} />
           </form>
         </div>
       )}

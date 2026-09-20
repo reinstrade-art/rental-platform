@@ -34,6 +34,7 @@ import { checkLock, recordFailure, clearFailures } from "./throttle";
 import { raiseApproval, signApproval } from "./approvals";
 import { createInvitation, redeemInvitation, inviteRedirectUrl } from "./invites";
 import { ingestTransaction, matchTransaction, ignoreTransaction, parseTransactionsCsv } from "./payments";
+import { canViewTenantDetails } from "./pii";
 import { logPlatformAccess } from "./audit";
 import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll } from "./import";
 import { GROUNDS_LIST, joinGrounds, validNoticeDeadline, sendAndServeNotice } from "./eviction";
@@ -893,6 +894,8 @@ export async function updateTenant(tenantId: string, formData: FormData) {
   const s = await getSession();
   if (!requireStaff(s)) throw new Error("Not authorized.");
   requireModule(s, "tenants");
+  // Editing means reading the real details first — same gate as the edit page.
+  if (!canViewTenantDetails(s)) throw new Error("Only a manager, director or admin can edit tenant details.");
 
   const tenant = await prisma.tenant.findFirst({ where: { id: tenantId, organizationId: s.organizationId } });
   if (!tenant) errorRedirect("/tenants", "Tenant not found.");
@@ -2513,6 +2516,29 @@ export async function revokeInvitationAction(invitationId: string) {
 
   await prisma.invitation.deleteMany({ where: { id: invitationId, organizationId: s.organizationId, usedAt: null } });
   redirect("/users");
+}
+
+/**
+ * Clears every expired, never-used invitation the Team page lists (staff and
+ * caretaker invites) in one go. An expired invite can't be redeemed anyway —
+ * redeemInvitation refuses it — so this only tidies the list; it never
+ * touches a live invite or a redeemed one (that's a record of what
+ * happened), and tenant/tradesman invites, which live on their own pages,
+ * are left alone.
+ */
+export async function deleteExpiredInvitationsAction() {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can delete invitations.");
+
+  const { count } = await prisma.invitation.deleteMany({
+    where: {
+      organizationId: s.organizationId,
+      role: { in: ["MANAGER", "VIEWER", "CARETAKER"] },
+      usedAt: null,
+      expiresAt: { lt: new Date() },
+    },
+  });
+  redirect(`/users?expiredCleared=${count}`);
 }
 
 // --- staff: impersonation ------------------------------------------------

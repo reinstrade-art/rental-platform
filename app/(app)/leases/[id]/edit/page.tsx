@@ -5,6 +5,7 @@ import { requireModule } from "@/app/lib/permissions";
 import { prisma } from "@/app/lib/prisma";
 import { updateLease } from "@/app/lib/actions";
 import { LEASE_STATUSES } from "@/app/lib/constants";
+import { tenantView } from "@/app/lib/pii";
 
 export default async function EditLeasePage({
   params,
@@ -18,6 +19,7 @@ export default async function EditLeasePage({
   requireModule(s, "leases");
   const { id } = await params;
   const { error } = await searchParams;
+  const v = tenantView(s); // surnames masked below manager/director/admin
   const lease = await prisma.lease.findFirst({
     where: { id, organizationId: s.organizationId },
     include: { tenant: true, unit: { include: { property: true } } },
@@ -36,7 +38,7 @@ export default async function EditLeasePage({
       </Link>
       <h1 className="mt-1 text-lg font-semibold">Edit lease</h1>
       <p className="text-sm text-silver-dark">
-        {lease.tenant.name} — {lease.unit.property.name} / {lease.unit.label}
+        {v.name(lease.tenant.name)} — {lease.unit.property.name} / {lease.unit.label}
       </p>
       {error && <div className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
       <form action={updateLease.bind(null, lease.id)} className="mt-4 flex flex-col gap-3">
@@ -45,7 +47,7 @@ export default async function EditLeasePage({
           <select name="tenantId" defaultValue={lease.tenantId} className="mt-1 block w-full rounded border px-3 py-2">
             {tenants.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.name}
+                {v.name(t.name)}
               </option>
             ))}
           </select>

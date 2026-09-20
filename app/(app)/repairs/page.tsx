@@ -8,6 +8,7 @@ import { prisma } from "@/app/lib/prisma";
 import { createRecurringJob, setRecurringJobActive, deleteRecurringJob, createRepair, acceptQuote } from "@/app/lib/actions";
 import { DeleteButton } from "@/app/components/delete-button";
 import { requireModule } from "@/app/lib/permissions";
+import { tenantView } from "@/app/lib/pii";
 import { REPAIR_PRIORITIES } from "@/app/lib/constants";
 
 const OPEN_STATUSES = ["REPORTED", "QUOTING", "APPROVED", "IN_PROGRESS"];
@@ -38,6 +39,7 @@ export default async function RepairsPage({ searchParams }: { searchParams: Prom
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   requireModule(s, "repairs");
+  const v = tenantView(s); // surnames masked below manager/director/admin
 
   const tier = await getOrgTier(s.organizationId);
   if (!hasFeature(tier, "REPAIRS")) redirect("/home");
@@ -85,7 +87,7 @@ export default async function RepairsPage({ searchParams }: { searchParams: Prom
           <div className="text-xs text-silver-dark">
             {r.property.name}
             {r.unit ? ` · ${r.unit.label}` : " · common area"} · {new Date(r.reportedAt).toLocaleDateString()}
-            {r.reportedByTenant ? ` · tenant ${r.reportedByTenant.name}` : ""}
+            {r.reportedByTenant ? ` · tenant ${v.name(r.reportedByTenant.name)}` : ""}
           </div>
         </td>
         <td className="py-2">

@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { toCsv, csvResponseHeaders } from "@/app/lib/csv-export";
+import { tenantView } from "@/app/lib/pii";
 
 /** A row per billed charge (rent, deposit, water, ...) — the income side of the ledger before payment, for accrual-basis bookkeeping. */
 export async function GET(req: NextRequest) {
   const s = await getSession();
   if (!requireStaff(s)) return NextResponse.json({ error: "Not authorized." }, { status: 403 });
 
+  const v = tenantView(s); // surnames masked below manager/director/admin
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");
 
@@ -28,7 +30,7 @@ export async function GET(req: NextRequest) {
       c.periodMonth.toISOString().slice(0, 7),
       c.lease.unit.property.name,
       c.lease.unit.label,
-      c.lease.tenant.name,
+      v.name(c.lease.tenant.name),
       c.type,
       c.description ?? "",
       c.amount,

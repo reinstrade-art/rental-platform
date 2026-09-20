@@ -9,6 +9,7 @@ import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { MonthNav } from "@/app/components/month-nav";
 import { displayBalance, balanceTone } from "@/app/lib/balance-display";
 import { requireModule } from "@/app/lib/permissions";
+import { tenantView } from "@/app/lib/pii";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -27,6 +28,7 @@ export default async function LeasesPage({
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
   requireModule(s, "leases");
+  const v = tenantView(s); // surnames masked below manager/director/admin
   const tier = await getOrgTier(s.organizationId);
   const canImport = hasFeature(tier, "CSV_IMPORT");
   const canBillingRun = hasFeature(tier, "BILLING_RUN");
@@ -200,7 +202,7 @@ export default async function LeasesPage({
                     <td className="py-2">{r.unit.label}</td>
                     <td className="py-2">
                       <Link href={`/leases/${r.lease.id}`} className="underline">
-                        {r.lease.tenant.name}
+                        {v.name(r.lease.tenant.name)}
                       </Link>
                     </td>
                     <td className="py-2">{money(r.lease.monthlyRent)}</td>
@@ -214,7 +216,7 @@ export default async function LeasesPage({
                         </Link>
                         <form action={deleteLease.bind(null, r.lease.id)}>
                           <DeleteButton
-                            confirmText={`Delete the lease for ${r.lease.tenant.name} (${property.name} / ${r.unit.label})? This cannot be undone.`}
+                            confirmText={`Delete the lease for ${v.name(r.lease.tenant.name)} (${property.name} / ${r.unit.label})? This cannot be undone.`}
                           />
                         </form>
                       </div>

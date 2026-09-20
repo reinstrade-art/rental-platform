@@ -8,6 +8,7 @@ import { prisma } from "./prisma";
 import { isPlatformAdmin, isStaff, isCaretaker, isTenant, isTradesman } from "./roles";
 import { isLicenseActive } from "./licensing";
 import { parsePermissions, type ModuleKey } from "./constants";
+import { canViewTenantDetails } from "./pii";
 
 const COOKIE = "rp_session";
 // Holds the staff member's own token while they are signed in as somebody
@@ -76,6 +77,8 @@ export type Session = {
   propertyId: string | null;
   /** Set when a staff member is signed in as this account rather than the account itself. */
   impersonatedBy: { id: string; email: string | null } | null;
+  /** Signing authority (REQUESTER | MANAGER | DIRECTOR), separate from `role` — also decides who may see tenants' full contact details (see app/lib/pii.ts). */
+  approvalLevel: string | null;
   /** True right after an admin hands this account a temporary password — every page but /change-password refuses until a real one is chosen. */
   mustChangePassword: boolean;
   /** Parsed module allow-list for a MANAGER/VIEWER (see app/lib/permissions.ts) — null means full access, and is ALWAYS null for ADMIN regardless of what's on file. */
@@ -356,7 +359,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
     // is run (see app/api/internal/migrate-caretaker-role), and until that
     // runs, selecting a column the live table doesn't have yet would fail
     // this query for every signed-in user, not just caretakers.
-    const baseSelect = { id: true, organizationId: true, email: true, phone: true, role: true, tenantId: true, vendorId: true, disabledAt: true } as const;
+    const baseSelect = { id: true, organizationId: true, email: true, phone: true, role: true, tenantId: true, vendorId: true, disabledAt: true, approvalLevel: true } as const;
     let user: {
       id: string;
       organizationId: string | null;
@@ -366,6 +369,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
       tenantId: string | null;
       vendorId: string | null;
       disabledAt: Date | null;
+      approvalLevel: string | null;
       propertyId: string | null;
       mustChangePassword: boolean;
       permissions: string | null;
@@ -412,6 +416,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
       propertyId: user.propertyId,
       impersonatedBy,
       mustChangePassword: user.mustChangePassword,
+      approvalLevel: user.approvalLevel,
       permissions: user.role === "ADMIN" ? null : parsePermissions(user.permissions),
     };
   } catch {
@@ -474,7 +479,12 @@ export function requireTradesman(s: Session | null): s is Session & { organizati
 // against the database (including organizationId), never assumed from the
 // session's role alone.
 
-/** Staff of the payment's organization, or the tenant whose payment this is. Null means refuse. */
+/**
+ * Staff of the payment's organization, or the tenant whose payment this is.
+ * Null means refuse. These documents print the tenant's full name, so staff
+ * below manager/director/admin — who only ever see tenants masked — are
+ * refused here too; hiding the link alone would leave the URL working.
+ */
 export async function allowPaymentDoc(paymentId: string): Promise<Session | null> {
   const s = await getSession();
   if (!s) return null;
@@ -483,12 +493,12 @@ export async function allowPaymentDoc(paymentId: string): Promise<Session | null
     select: { organizationId: true, lease: { select: { tenantId: true } } },
   });
   if (!payment) return null;
-  if (requireStaff(s) && s.organizationId === payment.organizationId) return s;
+  if (requireStaff(s) && s.organizationId === payment.organizationId) return canViewTenantDetails(s) ? s : null;
   if (requireTenant(s) && s.organizationId === payment.organizationId && s.tenantId === payment.lease.tenantId) return s;
   return null;
 }
 
-/** Staff of the lease's organization, or the tenant whose lease this is. Null means refuse. */
+/** Staff of the lease's organization (manager/director/admin only — see allowPaymentDoc), or the tenant whose lease this is. Null means refuse. */
 export async function allowLeaseDoc(leaseId: string): Promise<Session | null> {
   const s = await getSession();
   if (!s) return null;
@@ -497,7 +507,7 @@ export async function allowLeaseDoc(leaseId: string): Promise<Session | null> {
     select: { organizationId: true, tenantId: true },
   });
   if (!lease) return null;
-  if (requireStaff(s) && s.organizationId === lease.organizationId) return s;
+  if (requireStaff(s) && s.organizationId === lease.organizationId) return canViewTenantDetails(s) ? s : null;
   if (requireTenant(s) && s.organizationId === lease.organizationId && s.tenantId === lease.tenantId) return s;
   return null;
 }

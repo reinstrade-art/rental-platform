@@ -16,6 +16,7 @@ import {
   resendNoticeAction,
 } from "@/app/lib/actions";
 import { requireModule } from "@/app/lib/permissions";
+import { tenantView } from "@/app/lib/pii";
 
 const DELIVERY_LABEL: Record<string, string> = {
   HAND_DELIVERED: "hand-delivered",
@@ -54,6 +55,8 @@ export default async function EvictionDetailPage({
 
   const { lease } = ev;
   const { tenant, unit } = lease;
+  // Surname/phone masked below manager/director/admin; the WhatsApp link embeds the number, so it is withheld too.
+  const v = tenantView(s);
   const codes = splitGrounds(ev.grounds);
   const closed = ["ENFORCED", "WITHDRAWN", "VACATED"].includes(ev.status);
   const isAdmin = s.role === "ADMIN";
@@ -63,7 +66,7 @@ export default async function EvictionDetailPage({
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
   const noticeUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`}/api/eviction-notice/${ev.id}`;
-  const waHref = waLink(
+  const waHref = !v.visible ? null : waLink(
     tenant.phone,
     `Dear ${tenant.name.split(" ")[0]}, please find your Notice to Vacate for ${where} attached here: ${noticeUrl}`,
   );
@@ -78,7 +81,7 @@ export default async function EvictionDetailPage({
         </Link>
         <div className="mt-1 flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold">Eviction — {tenant.name}</h1>
+            <h1 className="text-lg font-semibold">Eviction — {v.name(tenant.name)}</h1>
             <p className="text-sm text-silver-dark">
               {unit.property.name} · Unit {unit.label} · opened {fmt(ev.createdAt)}
             </p>
@@ -187,14 +190,18 @@ export default async function EvictionDetailPage({
             <h2 className="font-semibold">Notice to Vacate</h2>
             <p className="mt-1 text-xs text-silver-dark">Lists only the grounds recorded above — never the full statutory list.</p>
             <div className="mt-3 flex flex-wrap gap-3">
-              <a
-                href={`/api/eviction-notice/${ev.id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded bg-ink px-4 py-2 text-sm text-lily transition-colors hover:bg-ink-soft"
-              >
-                Preview / print ↗
-              </a>
+              {v.visible ? (
+                <a
+                  href={`/api/eviction-notice/${ev.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded bg-ink px-4 py-2 text-sm text-lily transition-colors hover:bg-ink-soft"
+                >
+                  Preview / print ↗
+                </a>
+              ) : (
+                <span className="text-xs text-silver-dark">The notice prints the tenant&apos;s full details — available to a manager, director or admin.</span>
+              )}
               {!closed &&
                 (waHref ? (
                   <a
@@ -206,8 +213,8 @@ export default async function EvictionDetailPage({
                     Send on WhatsApp
                   </a>
                 ) : (
-                  <span className="cursor-not-allowed rounded border px-4 py-2 text-sm text-silver-dark" title="This tenant has no phone number on file">
-                    No phone on file
+                  <span className="cursor-not-allowed rounded border px-4 py-2 text-sm text-silver-dark" title={v.visible ? "This tenant has no phone number on file" : "Contact details are hidden for your role"}>
+                    {v.visible ? "No phone on file" : "Contact hidden"}
                   </span>
                 ))}
             </div>

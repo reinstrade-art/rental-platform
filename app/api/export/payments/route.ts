@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, requireStaff } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { toCsv, csvResponseHeaders } from "@/app/lib/csv-export";
+import { tenantView } from "@/app/lib/pii";
 
 /**
  * A row per recorded payment, in a shape any bookkeeping import (QuickBooks,
@@ -13,6 +14,7 @@ export async function GET(req: NextRequest) {
   const s = await getSession();
   if (!requireStaff(s)) return NextResponse.json({ error: "Not authorized." }, { status: 403 });
 
+  const v = tenantView(s); // surnames masked below manager/director/admin
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");
 
@@ -33,7 +35,7 @@ export async function GET(req: NextRequest) {
       p.paidAt.toISOString().slice(0, 10),
       p.lease.unit.property.name,
       p.lease.unit.label,
-      p.lease.tenant.name,
+      v.name(p.lease.tenant.name),
       p.amount,
       p.method ?? "",
       p.reference ?? "",

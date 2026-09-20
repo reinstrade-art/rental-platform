@@ -5,6 +5,7 @@ import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { prisma } from "@/app/lib/prisma";
 import { getReportData, monthName } from "@/app/lib/reports";
 import { requireModule } from "@/app/lib/permissions";
+import { tenantView } from "@/app/lib/pii";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -19,6 +20,7 @@ export default async function ReportsPage({
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "REPORTS")) redirect("/home");
   requireModule(s, "reports");
+  const v = tenantView(s); // surnames masked below manager/director/admin
 
   const sp = await searchParams;
   const now = new Date();
@@ -165,7 +167,7 @@ export default async function ReportsPage({
             <tbody>
               {data.worstPayers.map((r) => (
                 <tr key={`${r.tenant}-${r.unit}`} className="border-b">
-                  <td className="py-1">{r.tenant}</td>
+                  <td className="py-1">{v.name(r.tenant)}</td>
                   <td className="py-1">{r.property} / {r.unit}</td>
                   <td className="py-1 text-red-600">{money(r.arrears)}</td>
                 </tr>
@@ -191,7 +193,7 @@ export default async function ReportsPage({
             <tbody>
               {data.bestPayers.map((r) => (
                 <tr key={`${r.tenant}-${r.unit}`} className="border-b">
-                  <td className="py-1">{r.tenant}</td>
+                  <td className="py-1">{v.name(r.tenant)}</td>
                   <td className="py-1">{r.property} / {r.unit}</td>
                   <td className="py-1">{r.consistency}%</td>
                 </tr>

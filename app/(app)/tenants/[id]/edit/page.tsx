@@ -4,6 +4,7 @@ import { getSession, requireStaff } from "@/app/lib/auth";
 import { requireModule } from "@/app/lib/permissions";
 import { prisma } from "@/app/lib/prisma";
 import { updateTenant } from "@/app/lib/actions";
+import { canViewTenantDetails } from "@/app/lib/pii";
 
 export default async function EditTenantPage({
   params,
@@ -16,6 +17,10 @@ export default async function EditTenantPage({
   if (!requireStaff(s)) redirect("/login");
   requireModule(s, "tenants");
   const { id } = await params;
+  // The form prefills the tenant's real surname/phone/email, so it is only
+  // reachable by those allowed to see them — everyone else is sent back to
+  // the masked detail page.
+  if (!canViewTenantDetails(s)) redirect(`/tenants/${id}`);
   const { error } = await searchParams;
   const tenant = await prisma.tenant.findFirst({ where: { id, organizationId: s.organizationId } });
   if (!tenant) notFound();

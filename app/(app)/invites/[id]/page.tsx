@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { getSession, requireTenantsAccess } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { waLink } from "@/app/lib/phone";
+import { canViewTenantDetails, MASK } from "@/app/lib/pii";
 
 export default async function InviteConfirmationPage({
   params,
@@ -26,7 +27,13 @@ export default async function InviteConfirmationPage({
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
-  const wa = waLink(
+  // A tenant invite carries that tenant's own phone/email — masked (and the
+  // WhatsApp link, which embeds the number, withheld) for staff below
+  // manager/director/admin. Staff invites are not tenant details.
+  const hideAddress = Boolean(invite.tenantId) && !canViewTenantDetails(s);
+  const shownEmail = invite.email ? (hideAddress ? MASK : invite.email) : null;
+  const shownPhone = invite.phone ? (hideAddress ? MASK : invite.phone) : null;
+  const wa = hideAddress ? null : waLink(
     invite.phone,
     `Hi, please register your account here: ${origin}/register — your invitation code is ${invite.code}. It expires ${new Date(invite.expiresAt).toLocaleDateString()}.`,
   );
@@ -42,8 +49,8 @@ export default async function InviteConfirmationPage({
           }`}
         >
           {emailSent
-            ? `Emailed to ${invite.email}.`
-            : `Could not email ${invite.email} — check that email sending is configured in Settings, or share the code below directly.`}
+            ? `Emailed to ${shownEmail}.`
+            : `Could not email ${shownEmail} — check that email sending is configured in Settings, or share the code below directly.`}
         </div>
       )}
       {invite.phone && (
@@ -53,13 +60,13 @@ export default async function InviteConfirmationPage({
           }`}
         >
           {whatsappSent
-            ? `Sent to ${invite.phone} on WhatsApp.`
-            : `Didn't send automatically to ${invite.phone} — use the "Send on WhatsApp" button below, or share the code directly.`}
+            ? `Sent to ${shownPhone} on WhatsApp.`
+            : `Didn't send automatically to ${shownPhone} — use the "Send on WhatsApp" button below, or share the code directly.`}
         </div>
       )}
 
       <p className="mt-2 text-sm text-silver-dark">
-        Give this code to {invite.email ?? invite.phone}, along with the address/number it was issued to — they&apos;ll
+        Give this code to {shownEmail ?? shownPhone}, along with the address/number it was issued to — they&apos;ll
         need both to register at <span className="font-mono">/register</span>.
       </p>
       <div className="mt-4 rounded border bg-silver-light p-4 text-center font-mono text-2xl tracking-widest">

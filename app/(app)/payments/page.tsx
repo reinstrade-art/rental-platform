@@ -4,6 +4,7 @@ import { getTransactions, getLeases } from "@/app/lib/data";
 import { addManualTransaction, importTransactionsCsv, matchTransactionAction, ignoreTransactionAction } from "@/app/lib/actions";
 import { PAYMENT_METHODS } from "@/app/lib/constants";
 import { requireModule } from "@/app/lib/permissions";
+import { tenantView } from "@/app/lib/pii";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -20,6 +21,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   if (!requireStaff(s)) redirect("/login");
   requireModule(s, "payments");
   const { error } = await searchParams;
+  const v = tenantView(s); // surnames masked below manager/director/admin
 
   const [transactions, leases] = await Promise.all([getTransactions(s.organizationId), getLeases(s.organizationId)]);
   const unmatched = transactions.filter((t) => t.status === "UNMATCHED");
@@ -90,7 +92,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                 <td className="py-1">{new Date(t.occurredAt).toLocaleDateString()}</td>
                 <td className="py-1">{money(t.amount)}</td>
                 <td className="py-1">{t.reference ?? "—"}</td>
-                <td className="py-1">{t.payerName ?? "—"}</td>
+                <td className="py-1">{t.payerName ? v.name(t.payerName) : "—"}</td>
                 <td className="py-1">{t.source}</td>
                 <td className="py-1">
                   <form action={matchTransactionAction.bind(null, t.id)} className="flex gap-2">
@@ -98,7 +100,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                       <option value="">Select lease</option>
                       {leases.map((l) => (
                         <option key={l.id} value={l.id}>
-                          {l.tenant.name} — {l.unit.property.name}/{l.unit.label}
+                          {v.name(l.tenant.name)} — {l.unit.property.name}/{l.unit.label}
                         </option>
                       ))}
                     </select>

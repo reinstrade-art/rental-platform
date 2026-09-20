@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession, requireStaff, requireTenant } from "@/app/lib/auth";
 import { buildNoticeDoc, noticeDocName } from "@/app/lib/eviction";
 import { prisma } from "@/app/lib/prisma";
+import { canViewTenantDetails } from "@/app/lib/pii";
 
 // Staff of the case's organization, or the tenant it was raised against —
 // same allow-list shape as allowLeaseDoc in app/lib/auth.ts, so a tenant
@@ -17,7 +18,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!ev) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   const allowed =
-    (requireStaff(s) && s.organizationId === ev.organizationId) ||
+    (requireStaff(s) && s.organizationId === ev.organizationId && canViewTenantDetails(s)) ||
     (requireTenant(s) && s.organizationId === ev.organizationId && s.tenantId === ev.lease.tenantId);
   if (!allowed) return NextResponse.json({ error: "Not found." }, { status: 404 });
 

@@ -5,6 +5,7 @@ import { getArrearsAlerts } from "@/app/lib/alerts";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { waLink } from "@/app/lib/phone";
 import { requireModule } from "@/app/lib/permissions";
+import { tenantView } from "@/app/lib/pii";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -19,6 +20,7 @@ export default async function AlertsPage() {
   if (!requireStaff(s)) redirect("/login");
   if (!hasFeature(await getOrgTier(s.organizationId), "ARREARS_ALERTS")) redirect("/home");
   requireModule(s, "alerts");
+  const v = tenantView(s); // surnames + phone numbers hidden below manager/director/admin
 
   const alerts = await getArrearsAlerts(s.organizationId);
   const serious = alerts.filter((a) => a.severity === "serious");
@@ -72,7 +74,7 @@ export default async function AlertsPage() {
             <tr key={a.leaseId} className="border-b">
               <td className="py-2">
                 <Link href={`/leases/${a.leaseId}`} className="underline">
-                  {a.tenant}
+                  {v.name(a.tenant)}
                 </Link>
                 {a.severity === "serious" && <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">serious</span>}
               </td>
@@ -83,7 +85,9 @@ export default async function AlertsPage() {
               <td className="py-2 text-xs text-silver-dark">{a.reasons.join("; ")}</td>
               <td className="py-2">{a.oldestUnpaidPeriod ? monthLabel(a.oldestUnpaidPeriod) : "—"}</td>
               <td className="py-2">
-                {a.phone ? (
+                {a.phone && !v.visible ? (
+                  <span className="text-xs text-silver-dark">Hidden</span>
+                ) : a.phone ? (
                   <a
                     href={
                       waLink(
