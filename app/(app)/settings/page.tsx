@@ -22,6 +22,7 @@ import {
   generateUnitPaymentCodesAction,
   updateCollectionsSettings,
   runCollectionsNowAction,
+  updateWarningSettings,
 } from "@/app/lib/actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 import { quickbooksAppConfigured } from "@/app/lib/quickbooks";
@@ -36,11 +37,11 @@ import { getRecentCollectionEvents, collectionKindLabel } from "@/app/lib/collec
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; qbConnected?: string; qbSynced?: string; c2bRegistered?: string; codesAssigned?: string; collectionsSaved?: string; collectionsRan?: string }>;
+  searchParams: Promise<{ error?: string; qbConnected?: string; qbSynced?: string; c2bRegistered?: string; codesAssigned?: string; collectionsSaved?: string; collectionsRan?: string; warningSaved?: string }>;
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  const { error, qbConnected, qbSynced, c2bRegistered, codesAssigned, collectionsSaved, collectionsRan } = await searchParams;
+  const { error, qbConnected, qbSynced, c2bRegistered, codesAssigned, collectionsSaved, collectionsRan, warningSaved } = await searchParams;
 
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } });
   const sessions = await getOwnOtherSessions(s.userId);
@@ -61,6 +62,7 @@ export default async function SettingsPage({
     {qbConnected && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">QuickBooks settings saved.</div>}
     {qbSynced && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Synced {qbSynced} payment(s) to QuickBooks.</div>}
     {c2bRegistered && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Registered with Safaricom — payments to your paybill will now auto-match by unit payment code.</div>}
+    {warningSaved && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Warning policy saved.</div>}
     {collectionsSaved && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Reminder and late fee settings saved.</div>}
     {collectionsRan !== undefined && (
       <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">
@@ -348,6 +350,38 @@ export default async function SettingsPage({
           </tbody>
         </table>
       )}
+    </div>
+    )}
+
+    {s.role === "ADMIN" && (
+    <div className="max-w-xl">
+      <h2 className="text-lg font-semibold">Automatic final arrears warning</h2>
+      <p className="mt-1 text-sm text-silver-dark">
+        On the day of the month you choose (the 11th by default), every tenant who is a full month or more behind on rent
+        is sent one formal <strong>first and final warning</strong> — a PDF letter with a payment deadline, delivered by
+        email, SMS/WhatsApp and app notification, and recorded with proof of delivery on the Evictions page. A tenant
+        already warned in the last six months isn&apos;t warned again; the next step is yours to decide. It never serves a
+        Notice to Vacate or starts an eviction by itself. Off until you switch it on.
+      </p>
+      <form action={updateWarningSettings} className="mt-3 flex flex-col gap-3 rounded border p-4">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input type="checkbox" name="arrearsWarningAuto" defaultChecked={org.arrearsWarningAuto} />
+          Send the final warning automatically
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs text-silver-dark">
+            Send on day of the month
+            <input name="arrearsWarningDay" type="number" min={1} max={25} defaultValue={org.arrearsWarningDay} className="mt-1 w-full rounded border px-3 py-2 text-sm text-ink" />
+          </label>
+          <label className="text-xs text-silver-dark">
+            Days the tenant is given to pay
+            <input name="warningCureDays" type="number" min={1} max={30} defaultValue={org.warningCureDays} className="mt-1 w-full rounded border px-3 py-2 text-sm text-ink" />
+          </label>
+        </div>
+        <button type="submit" className="self-start rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
+          Save
+        </button>
+      </form>
     </div>
     )}
 

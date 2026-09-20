@@ -314,6 +314,7 @@ export async function getTenantPortal(tenantId: string) {
           unit: { include: { property: true } },
           charges: { orderBy: { periodMonth: "asc" } },
           payments: { orderBy: { paidAt: "asc" } },
+          tenantWarnings: { orderBy: { createdAt: "desc" } },
         },
         orderBy: { createdAt: "desc" },
       },

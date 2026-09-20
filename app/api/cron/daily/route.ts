@@ -4,6 +4,7 @@ import { postRepairExpense } from "@/app/lib/expenses";
 import { applyBilling } from "@/app/lib/billing";
 import { hasFeature } from "@/app/lib/tier";
 import { runCollections } from "@/app/lib/collections";
+import { runArrearsWarnings } from "@/app/lib/warnings";
 
 /**
  * The platform's daily job: recurring vendor work (cleaning and the like)
@@ -105,10 +106,24 @@ export async function GET(req: NextRequest) {
     collectionsError = e instanceof Error ? e.message : "collections failed";
   }
 
+  // The "first and final" arrears warning, on each org's chosen day of the
+  // month (the 11th by default). Isolated like collections: a failure is
+  // reported, never allowed to undo the work above.
+  let warnings: Awaited<ReturnType<typeof runArrearsWarnings>> | undefined;
+  let warningsError: string | undefined;
+  try {
+    const r = await runArrearsWarnings(now);
+    if (r.length) warnings = r;
+  } catch (e) {
+    warningsError = e instanceof Error ? e.message : "warnings failed";
+  }
+
   return NextResponse.json({
     recurringJobsRaised: raised.length,
     billing: billing.length ? billing : undefined,
     collections,
     collectionsError,
+    warnings,
+    warningsError,
   });
 }

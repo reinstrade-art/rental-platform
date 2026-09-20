@@ -11,6 +11,7 @@ import { RichTextEditor } from "@/app/components/rich-text-editor";
 import { displayBalance, balanceTone } from "@/app/lib/balance-display";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { REPAIR_PRIORITIES } from "@/app/lib/constants";
+import { KIND_LABEL, WARNING_GROUNDS } from "@/app/lib/warnings";
 
 function money(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -42,6 +43,37 @@ export default async function TenantPortalPage({ searchParams }: { searchParams:
     <div className="flex flex-col gap-8">
       {error && <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       <h1 className="text-lg font-semibold">Hello, {tenant.name}</h1>
+
+      {(() => {
+        // Formal letters the office has sent about this tenancy. Opening one
+        // here is recorded as read — the tenant's own proof, and the office's.
+        const notices = tenant.leases.flatMap((l) => l.tenantWarnings);
+        if (notices.length === 0) return null;
+        return (
+          <div className="rounded border border-orange-300 bg-orange-50 p-4">
+            <h2 className="text-sm font-semibold text-orange-800">Notices about your tenancy</h2>
+            <ul className="mt-2 flex flex-col gap-2">
+              {notices.map((n) => (
+                <li key={n.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span>
+                    <span className="font-medium">{KIND_LABEL[n.kind] ?? n.kind}</span>
+                    <span className="ml-1 text-xs text-silver-dark">
+                      {n.grounds
+                        .split(",")
+                        .map((g) => WARNING_GROUNDS[g as keyof typeof WARNING_GROUNDS]?.title ?? g)
+                        .join("; ")}{" "}
+                      · sent {new Date(n.createdAt).toLocaleDateString()} · act by {new Date(n.complyBy).toLocaleDateString()}
+                    </span>
+                  </span>
+                  <Link href={`/api/warning/${n.id}`} target="_blank" className="text-xs underline">
+                    Read the letter
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
 
       {tenant.leases.map((lease) => {
         const balance = leaseBalance(lease);

@@ -136,10 +136,20 @@ model Organization {
   // by the Monthly Rental Income tax report.
   kraPin String?
 
+  // Automatic "one and final" arrears warning (app/lib/warnings.ts): on this
+  // day of the month (default the 11th), every active tenant who is a full
+  // month or more behind gets a Final Warning letter, once. Off until the
+  // org's ADMIN switches it on. warningCureDays is how long the letter gives
+  // them to pay before the office may move to a Notice to Vacate.
+  arrearsWarningAuto Boolean @default(false)
+  arrearsWarningDay  Int     @default(11)
+  warningCureDays    Int     @default(7)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   collectionEvents CollectionEvent[]
+  tenantWarnings   TenantWarning[]
 
   users            User[]
   properties       Property[]
@@ -195,6 +205,56 @@ model CollectionEvent {
   createdAt DateTime @default(now())
 
   @@unique([leaseId, period, kind])
+  @@index([organizationId, createdAt])
+}
+
+// A formal letter to a tenant BEFORE any eviction case — the documented
+// "first and final warning" (or, for no-fault grounds, an advance notice)
+// that Kenyan practice expects ahead of a Notice to Vacate: demand or warn
+// in writing, give a fair chance to remedy, keep proof of delivery, and only
+// then escalate. Issued by a manager choosing grounds (source MANUAL), or by
+// the daily job on the org's chosen day for arrears of a month or more
+// (source AUTO). Never starts an Eviction by itself.
+//
+// The unique key (lease, source, period) is what lets the AUTO run be
+// repeated or caught up safely; MANUAL rows carry no period, so any number
+// of them can exist (SQLite treats each NULL as distinct).
+model TenantWarning {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  leaseId String
+  lease   Lease  @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  // Comma-separated ground codes, same vocabulary as Eviction.grounds.
+  grounds String
+  // FINAL_WARNING (a fault ground: put it right by the date) or
+  // ADVANCE_NOTICE (a no-fault ground: the tenancy will end on the date).
+  kind    String
+  source  String // AUTO | MANUAL
+  period  String? // "YYYY-MM" the AUTO run belongs to
+  details String?
+
+  // What was owed when the letter went out (arrears warnings only).
+  arrearsAmount Float?
+  // The date to comply by (FINAL_WARNING) or the intended end date (ADVANCE_NOTICE).
+  complyBy DateTime
+
+  // Where it actually reached the tenant, comma-separated (email, sms,
+  // whatsapp, push). deliveredAt stays null when nothing reached them — the
+  // office must then serve by hand, and the page says so, rather than the
+  // system pretending a letter was received. viewedAt is set when the tenant
+  // opens it from their own portal: the closest thing to a read receipt.
+  channels    String    @default("")
+  deliveredAt DateTime?
+  viewedAt    DateTime?
+
+  issuedById String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([leaseId, source, period])
   @@index([organizationId, createdAt])
 }
 
@@ -685,6 +745,7 @@ model Lease {
   mpesaRequests MpesaRequest[]
   evictions     Eviction[]
   collectionEvents CollectionEvent[]
+  tenantWarnings   TenantWarning[]
 
   createdAt DateTime @default(now())
 }

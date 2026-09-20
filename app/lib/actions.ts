@@ -36,6 +36,7 @@ import { createInvitation, redeemInvitation, inviteRedirectUrl } from "./invites
 import { ingestTransaction, matchTransaction, ignoreTransaction, parseTransactionsCsv } from "./payments";
 import { canViewTenantDetails } from "./pii";
 import { runCollectionsForOrg } from "./collections";
+import { issueWarning } from "./warnings";
 import { logPlatformAccess } from "./audit";
 import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll } from "./import";
 import { GROUNDS_LIST, joinGrounds, validNoticeDeadline, sendAndServeNotice } from "./eviction";
@@ -1505,6 +1506,62 @@ export async function resendNoticeAction(evictionId: string) {
 
   if (!result.sent) errorRedirect(`/evictions/${evictionId}`, result.reason);
   redirect(`/evictions/${evictionId}`);
+}
+
+/**
+ * A manager picks the grounds and the system writes, builds and delivers the
+ * warning letter (a final warning for fault grounds, an advance notice for
+ * no-fault ones) in one go — see app/lib/warnings.ts. This is the step
+ * BEFORE an eviction case and never opens one. Restricted to managers,
+ * directors and admins: the letter carries the tenant's full details and is a
+ * formal step against them.
+ */
+export async function issueWarningAction(formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "evictions");
+  requireFeature(await getOrgTier(s.organizationId), "EVICTIONS");
+  if (!canViewTenantDetails(s)) throw new Error("Only a manager, director or admin can issue a warning.");
+
+  const leaseId = str(formData, "leaseId");
+  if (!leaseId) errorRedirect("/evictions", "Choose the tenant to warn.");
+  const grounds = GROUNDS_LIST.filter((g) => formData.get(`ground_${g}`) === "on");
+  if (grounds.length === 0) errorRedirect("/evictions", "Select at least one ground.");
+  const days = Number(formData.get("days"));
+  if (!Number.isFinite(days)) errorRedirect("/evictions", "Enter the number of days.");
+
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${h.get("host")}`;
+
+  const result = await issueWarning({
+    organizationId: s.organizationId,
+    leaseId,
+    grounds,
+    details: optStr(formData, "details"),
+    days: Math.round(days),
+    issuedById: s.userId,
+    origin,
+  });
+  if (!result.ok) errorRedirect("/evictions", result.reason);
+  redirect(`/evictions?warned=${result.delivered ? "sent" : "undelivered"}`);
+}
+
+/** The org's automatic arrears-warning policy (the 11th-of-the-month run). Admin only. */
+export async function updateWarningSettings(formData: FormData) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can change the warning policy.");
+
+  const day = Number(formData.get("arrearsWarningDay"));
+  const cure = Number(formData.get("warningCureDays"));
+  if (!Number.isInteger(day) || day < 1 || day > 25) errorRedirect("/settings", "The warning day must be a whole number from 1 to 25.");
+  if (!Number.isInteger(cure) || cure < 1 || cure > 30) errorRedirect("/settings", "Days to pay must be a whole number from 1 to 30.");
+
+  await prisma.organization.update({
+    where: { id: s.organizationId },
+    data: { arrearsWarningAuto: formData.get("arrearsWarningAuto") === "on", arrearsWarningDay: day, warningCureDays: cure },
+  });
+  redirect("/settings?warningSaved=1");
 }
 
 /**
