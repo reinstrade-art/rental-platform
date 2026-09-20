@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/app/components/app-shell";
 import { getSession, requireTenantsAccess } from "@/app/lib/auth";
-import { isTenant, isTradesman, isCaretaker } from "@/app/lib/roles";
+import { isTenant, isTradesman, isCaretaker, canAccessTeam } from "@/app/lib/roles";
 import { logout, endImpersonationAction } from "@/app/lib/actions";
 import { prisma } from "@/app/lib/prisma";
 import { licenseState } from "@/app/lib/licensing";
@@ -25,6 +25,7 @@ const NAV: { href: string; label: string; feature?: Feature }[] = [
   { href: "/vendors", label: "Vendors", feature: "REPAIRS" },
   { href: "/suppliers", label: "Suppliers", feature: "SUPPLIERS" },
   { href: "/reports", label: "Reports", feature: "REPORTS" },
+  { href: "/tax", label: "Tax (KRA)" },
   { href: "/approvals", label: "Approvals" },
   { href: "/users", label: "Team" },
   { href: "/settings", label: "Settings" },
@@ -61,7 +62,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     (MODULE_LIST as readonly string[]).includes(href.slice(1)) ? (href.slice(1) as ModuleKey) : undefined;
   const nav = isCaretaker(s.role)
     ? NAV.filter((item) => item.href === "/tenants")
-    : NAV.filter((item) => !item.feature || hasFeature(tier, item.feature)).filter((item) => {
+    : NAV.filter((item) => !item.feature || hasFeature(tier, item.feature))
+        .filter((item) => item.href !== "/users" || canAccessTeam(s.role))
+        .filter((item) => {
         const mod = moduleForHref(item.href);
         return !mod || hasModuleAccess(s, mod);
       });

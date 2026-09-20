@@ -56,6 +56,8 @@ export type OrgBranding = {
   letterheadPhone: string | null;
   letterheadEmail: string | null;
   brandColor: string | null;
+  /** The landlord's KRA PIN — Kenyan rent receipts/invoices are expected to carry it (eTIMS). Optional so older callers without it still work. */
+  kraPin?: string | null;
 };
 
 export async function newDocument() {
@@ -116,6 +118,11 @@ export function drawHeader(page: PDFPage, font: PDFFont, bold: PDFFont, org: Org
     font,
     color: p.bandText,
   });
+  // On its own line: address, phone and email already fill the one above,
+  // and a longer line would run into the document title on the right.
+  if (org.kraPin) {
+    page.drawText(`KRA PIN: ${org.kraPin}`, { x: MARGIN, y: PAGE_HEIGHT - 72, size: 8.5, font: bold, color: p.bandText });
+  }
 
   page.drawText(title.toUpperCase(), {
     x: PAGE_WIDTH - MARGIN - bold.widthOfTextAtSize(title.toUpperCase(), 20),
@@ -141,7 +148,7 @@ export function drawRail(page: PDFPage, font: PDFFont, bold: PDFFont, org: OrgBr
   let y = PAGE_HEIGHT - 60;
   page.drawText(lines[0] ?? org.name, { x: 16, y, size: 13, font: bold, color: p.bandText, maxWidth: railWidth - 24 });
   y -= 22;
-  for (const line of lines.slice(1)) {
+  for (const line of [...lines.slice(1), ...(org.kraPin ? [`KRA PIN: ${org.kraPin}`] : [])]) {
     page.drawText(line, { x: 16, y, size: 8, font, color: p.bandText, maxWidth: railWidth - 24 });
     y -= 14;
   }

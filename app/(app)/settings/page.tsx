@@ -20,6 +20,8 @@ import {
   syncQuickbooksNowAction,
   registerMpesaC2bAction,
   generateUnitPaymentCodesAction,
+  updateCollectionsSettings,
+  runCollectionsNowAction,
 } from "@/app/lib/actions";
 import { mpesaConfigured } from "@/app/lib/mpesa";
 import { quickbooksAppConfigured } from "@/app/lib/quickbooks";
@@ -29,18 +31,21 @@ import { listWebhooks } from "@/app/lib/webhooks";
 import { CreateApiKeyForm } from "@/app/components/create-api-key-form";
 import { CreateWebhookForm } from "@/app/components/create-webhook-form";
 import { DesktopVersion } from "@/app/components/desktop-version";
+import { getRecentCollectionEvents, collectionKindLabel } from "@/app/lib/collections";
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; qbConnected?: string; qbSynced?: string; c2bRegistered?: string; codesAssigned?: string }>;
+  searchParams: Promise<{ error?: string; qbConnected?: string; qbSynced?: string; c2bRegistered?: string; codesAssigned?: string; collectionsSaved?: string; collectionsRan?: string }>;
 }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
-  const { error, qbConnected, qbSynced, c2bRegistered, codesAssigned } = await searchParams;
+  const { error, qbConnected, qbSynced, c2bRegistered, codesAssigned, collectionsSaved, collectionsRan } = await searchParams;
 
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId } });
   const sessions = await getOwnOtherSessions(s.userId);
+  const collectionEvents = s.role === "ADMIN" ? await getRecentCollectionEvents(s.organizationId) : [];
+  const [ranReminders, ranFees, ranUnreachable] = (collectionsRan ?? "").split("-").map(Number);
   const apiKeys = s.role === "ADMIN" ? await listApiKeys(s.organizationId) : [];
   const webhooks = s.role === "ADMIN" ? await listWebhooks(s.organizationId) : [];
   const qbConnection =
@@ -56,6 +61,13 @@ export default async function SettingsPage({
     {qbConnected && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">QuickBooks settings saved.</div>}
     {qbSynced && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Synced {qbSynced} payment(s) to QuickBooks.</div>}
     {c2bRegistered && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Registered with Safaricom — payments to your paybill will now auto-match by unit payment code.</div>}
+    {collectionsSaved && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Reminder and late fee settings saved.</div>}
+    {collectionsRan !== undefined && (
+      <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">
+        Ran today&apos;s steps: {ranReminders} reminder(s) sent, {ranFees} late fee(s) raised
+        {ranUnreachable > 0 ? `, ${ranUnreachable} reminder(s) had no channel that could reach the tenant` : ""}.
+      </div>
+    )}
     {codesAssigned !== undefined && <div className="rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">Assigned payment codes to {codesAssigned} unit(s) that had none.</div>}
     <div className="max-w-sm rounded border p-4">
       <h2 className="font-semibold">Plan</h2>
@@ -96,6 +108,13 @@ export default async function SettingsPage({
           name="letterheadEmail"
           defaultValue={org.letterheadEmail ?? ""}
           placeholder="Email"
+          className="rounded border px-3 py-2"
+        />
+
+        <input
+          name="kraPin"
+          defaultValue={org.kraPin ?? ""}
+          placeholder="KRA PIN (e.g. A012345678Z) — printed on receipts and invoices"
           className="rounded border px-3 py-2"
         />
 
@@ -243,6 +262,91 @@ export default async function SettingsPage({
         </>
       ) : (
         <p className="mt-2 text-xs text-silver-dark">Set up M-Pesa (STK Push) above first — C2B uses the same paybill and credentials.</p>
+      )}
+    </div>
+    )}
+
+    {s.role === "ADMIN" && (
+    <div className="max-w-xl">
+      <h2 className="text-lg font-semibold">Automatic rent reminders &amp; late fees</h2>
+      <p className="mt-1 text-sm text-silver-dark">
+        Nudges tenants before and after rent is due, and can add a late fee once the grace period passes — the routine
+        that gets rent in on time without anyone chasing by hand. Off until you switch it on. Reminders go out by app
+        notification and email, and by SMS or WhatsApp once those are set up on the platform.
+      </p>
+      <form action={updateCollectionsSettings} className="mt-3 flex flex-col gap-3 rounded border p-4">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input type="checkbox" name="collectionsEnabled" defaultChecked={org.collectionsEnabled} />
+          Send reminders and apply late fees automatically
+        </label>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="text-xs text-silver-dark">
+            Rent is due on day
+            <input name="rentDueDay" type="number" min={1} max={28} defaultValue={org.rentDueDay} className="mt-1 w-full rounded border px-3 py-2 text-sm text-ink" />
+          </label>
+          <label className="text-xs text-silver-dark">
+            Remind this many days before
+            <input name="reminderDaysBefore" type="number" min={0} max={14} defaultValue={org.reminderDaysBefore} className="mt-1 w-full rounded border px-3 py-2 text-sm text-ink" />
+          </label>
+          <label className="text-xs text-silver-dark">
+            Grace days after due date
+            <input name="graceDays" type="number" min={0} max={28} defaultValue={org.graceDays} className="mt-1 w-full rounded border px-3 py-2 text-sm text-ink" />
+          </label>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs text-silver-dark">
+            Late fee
+            <select name="lateFeeMode" defaultValue={org.lateFeeMode} className="mt-1 w-full rounded border px-3 py-2 text-sm text-ink">
+              <option value="NONE">No late fee — reminders only</option>
+              <option value="FLAT">Flat amount (KES)</option>
+              <option value="PERCENT">Percent of the month&apos;s rent</option>
+            </select>
+          </label>
+          <label className="text-xs text-silver-dark">
+            Amount (KES, or % of rent)
+            <input name="lateFeeValue" type="number" min={0} step="0.5" defaultValue={org.lateFeeValue} className="mt-1 w-full rounded border px-3 py-2 text-sm text-ink" />
+          </label>
+        </div>
+        <p className="text-xs text-silver-dark">
+          A late fee is added once per month, as its own charge, only if that month&apos;s rent is still unpaid after the
+          grace days — and never for a month that was already due when you switched this on.
+        </p>
+        <button type="submit" className="self-start rounded bg-ink px-3 py-2 text-sm text-lily transition-colors hover:bg-ink-soft">
+          Save
+        </button>
+      </form>
+      {org.collectionsEnabled && (
+        <form action={runCollectionsNowAction} className="mt-2">
+          <button className="rounded border px-3 py-2 text-sm transition-colors hover:bg-silver-light">Run today&apos;s steps now</button>
+        </form>
+      )}
+      {collectionEvents.length > 0 && (
+        <table className="mt-4 w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-ink-soft bg-metal text-left text-xs font-semibold uppercase tracking-wide text-ink">
+              <th className="py-2">When</th>
+              <th className="py-2">Tenant</th>
+              <th className="py-2">Step</th>
+              <th className="py-2">Sent via</th>
+            </tr>
+          </thead>
+          <tbody>
+            {collectionEvents.map((e) => (
+              <tr key={e.id} className="border-b">
+                <td className="py-1.5 text-xs text-silver-dark">{new Date(e.createdAt).toLocaleDateString()}</td>
+                <td className="py-1.5">
+                  {e.lease.tenant.name}
+                  <span className="ml-1 text-xs text-silver-dark">{e.lease.unit.property.name} / {e.lease.unit.label}</span>
+                </td>
+                <td className="py-1.5">
+                  {collectionKindLabel(e.kind)}
+                  {e.amount ? ` · KES ${Math.round(e.amount).toLocaleString()}` : ""}
+                </td>
+                <td className={`py-1.5 text-xs ${e.channels ? "" : "text-orange-600"}`}>{e.channels ? e.channels.split(",").join(", ") : "no channel reached them"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
     )}

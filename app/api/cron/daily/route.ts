@@ -3,6 +3,7 @@ import { prisma } from "@/app/lib/prisma";
 import { postRepairExpense } from "@/app/lib/expenses";
 import { applyBilling } from "@/app/lib/billing";
 import { hasFeature } from "@/app/lib/tier";
+import { runCollections } from "@/app/lib/collections";
 
 /**
  * The platform's daily job: recurring vendor work (cleaning and the like)
@@ -92,8 +93,22 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Rent reminders and late fees for orgs that switched them on. Kept out of
+  // the billing block's way: a failure here is reported in the response but
+  // never undoes the rent charges or recurring jobs already raised above.
+  let collections: Awaited<ReturnType<typeof runCollections>> | undefined;
+  let collectionsError: string | undefined;
+  try {
+    const r = await runCollections(now);
+    if (r.length) collections = r;
+  } catch (e) {
+    collectionsError = e instanceof Error ? e.message : "collections failed";
+  }
+
   return NextResponse.json({
     recurringJobsRaised: raised.length,
     billing: billing.length ? billing : undefined,
+    collections,
+    collectionsError,
   });
 }

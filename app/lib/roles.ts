@@ -27,6 +27,17 @@ export function isStaff(role: string | null | undefined): boolean {
   return Boolean(role) && (STAFF_ROLES as readonly string[]).includes(role!);
 }
 
+/**
+ * Who may open the Team page. Viewers and caretakers may not: the page lists
+ * every teammate's email, role and session count, which is the office's own
+ * business, not something a read-only account or a single-property
+ * caretaker has a reason to see. (Every change on the page is separately
+ * ADMIN-only; this is about who may look at all.)
+ */
+export function canAccessTeam(role: string | null | undefined): boolean {
+  return role === "ADMIN" || role === "MANAGER";
+}
+
 export function isCaretaker(role: string | null | undefined): boolean {
   return role === "CARETAKER";
 }

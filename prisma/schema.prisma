@@ -116,8 +116,30 @@ model Organization {
   // exactly as before; nothing about adding this field changes that.
   commissionRouted Boolean @default(false)
 
+  // Automatic rent reminders and late fees (app/lib/collections.ts), run by
+  // the daily cron. Off by default and only ever switched on by the org's
+  // own ADMIN: this raises real charges against real tenants, so nothing
+  // happens until someone has read the settings and said yes.
+  // collectionsEnabledAt records when it was switched on -- late fees only
+  // apply to months whose due date falls after it, so turning this on
+  // mid-month never retroactively fines anyone for a month that started
+  // before the policy existed.
+  collectionsEnabled   Boolean   @default(false)
+  collectionsEnabledAt DateTime?
+  rentDueDay           Int       @default(5) // day of the month rent is due (1-28)
+  reminderDaysBefore   Int       @default(3) // 0 = no heads-up reminder
+  graceDays            Int       @default(3) // days after the due day before a late fee applies
+  lateFeeMode          String    @default("NONE") // NONE | FLAT | PERCENT
+  lateFeeValue         Float     @default(0) // KES for FLAT, percent of monthly rent for PERCENT
+
+  // The landlord's/agency's KRA PIN -- printed on invoices/receipts and used
+  // by the Monthly Rental Income tax report.
+  kraPin String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  collectionEvents CollectionEvent[]
 
   users            User[]
   properties       Property[]
@@ -148,6 +170,32 @@ model Organization {
   accountingConnections AccountingConnection[]
   accountingSyncLogs    AccountingSyncLog[]
   messageAttachments    MessageAttachment[]
+}
+
+// One row per automatic collections step taken on a lease for a month --
+// a reminder sent, or a late fee raised. The unique key is what makes the
+// daily job safe to run any number of times (and to catch up after a missed
+// day): before acting, it tries to insert the row, and only the run that
+// wins the insert acts. `channels` records where a reminder actually went
+// (push, email, whatsapp, sms) -- empty means nobody had a channel that
+// works, which is worth showing rather than pretending it was delivered.
+model CollectionEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  leaseId String
+  lease   Lease  @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  period String // "YYYY-MM" -- the rent month this concerns
+  kind   String // REMINDER_BEFORE | REMINDER_DUE | REMINDER_OVERDUE | REMINDER_GRACE_END | LATE_FEE
+  channels String @default("")
+  amount   Float? // the late fee raised, for LATE_FEE
+
+  createdAt DateTime @default(now())
+
+  @@unique([leaseId, period, kind])
+  @@index([organizationId, createdAt])
 }
 
 // A landlord's own credential for pulling their org's data out through the
@@ -636,6 +684,7 @@ model Lease {
   payments Payment[]
   mpesaRequests MpesaRequest[]
   evictions     Eviction[]
+  collectionEvents CollectionEvent[]
 
   createdAt DateTime @default(now())
 }

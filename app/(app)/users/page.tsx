@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
+import { canAccessTeam } from "@/app/lib/roles";
 import { getStaff, getProperties, getPendingInvitations, getActiveSessionCounts } from "@/app/lib/data";
 import {
   inviteStaff,
@@ -21,6 +22,8 @@ import { MODULE_LIST, MODULE_LABEL, parsePermissions } from "@/app/lib/constants
 export default async function UsersPage({ searchParams }: { searchParams: Promise<{ error?: string; expiredCleared?: string }> }) {
   const s = await getSession();
   if (!requireStaff(s)) redirect("/login");
+  // Viewers (and caretakers, already refused by requireStaff) have no business on Team.
+  if (!canAccessTeam(s.role)) redirect("/home");
   const isAdmin = s.role === "ADMIN";
   const { error, expiredCleared } = await searchParams;
 

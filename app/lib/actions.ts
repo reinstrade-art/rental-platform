@@ -35,6 +35,7 @@ import { raiseApproval, signApproval } from "./approvals";
 import { createInvitation, redeemInvitation, inviteRedirectUrl } from "./invites";
 import { ingestTransaction, matchTransaction, ignoreTransaction, parseTransactionsCsv } from "./payments";
 import { canViewTenantDetails } from "./pii";
+import { runCollectionsForOrg } from "./collections";
 import { logPlatformAccess } from "./audit";
 import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll } from "./import";
 import { GROUNDS_LIST, joinGrounds, validNoticeDeadline, sendAndServeNotice } from "./eviction";
@@ -540,6 +541,12 @@ export async function updateBranding(formData: FormData) {
     errorRedirect("/settings", "Brand color must be a hex value like #1E3350.");
   }
 
+  // A KRA PIN is one letter, nine digits, one letter (e.g. A012345678Z).
+  const kraPin = String(formData.get("kraPin") ?? "").trim().toUpperCase();
+  if (kraPin && !/^[AP]\d{9}[A-Z]$/.test(kraPin)) {
+    errorRedirect("/settings", "A KRA PIN looks like A012345678Z — a letter, nine digits, then a letter.");
+  }
+
   await prisma.organization.update({
     where: { id: s.organizationId },
     data: {
@@ -547,6 +554,7 @@ export async function updateBranding(formData: FormData) {
       letterheadAddress: String(formData.get("letterheadAddress") ?? "").trim() || null,
       letterheadPhone: String(formData.get("letterheadPhone") ?? "").trim() || null,
       letterheadEmail: String(formData.get("letterheadEmail") ?? "").trim() || null,
+      kraPin: kraPin || null,
       brandColor: brandColor || null,
     },
   });
@@ -625,6 +633,67 @@ export async function registerMpesaC2bAction() {
 
   if (!result.ok) errorRedirect("/settings", result.reason);
   redirect("/settings?c2bRegistered=1");
+}
+
+/**
+ * The org's automatic rent-reminder and late-fee policy — see
+ * app/lib/collections.ts. Admin only, and every number is bounded here so a
+ * typo (a 500% late fee, a due day of 45) can't be saved by accident.
+ */
+export async function updateCollectionsSettings(formData: FormData) {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can change rent reminders and late fees.");
+
+  const int = (name: string, min: number, max: number, label: string) => {
+    const n = Number(formData.get(name));
+    if (!Number.isInteger(n) || n < min || n > max) errorRedirect("/settings", `${label} must be a whole number from ${min} to ${max}.`);
+    return n;
+  };
+  const enabled = formData.get("collectionsEnabled") === "on";
+  const rentDueDay = int("rentDueDay", 1, 28, "Rent due day");
+  const reminderDaysBefore = int("reminderDaysBefore", 0, 14, "Days before due to remind");
+  const graceDays = int("graceDays", 0, 28, "Grace days");
+
+  const lateFeeMode = String(formData.get("lateFeeMode") ?? "NONE");
+  if (!["NONE", "FLAT", "PERCENT"].includes(lateFeeMode)) errorRedirect("/settings", "Invalid late fee type.");
+  const lateFeeValue = lateFeeMode === "NONE" ? 0 : Number(formData.get("lateFeeValue") ?? 0);
+  if (!Number.isFinite(lateFeeValue) || lateFeeValue < 0) errorRedirect("/settings", "Late fee must be zero or more.");
+  if (lateFeeMode === "PERCENT" && lateFeeValue > 25) errorRedirect("/settings", "A percentage late fee above 25% of the rent isn't allowed here.");
+  if (lateFeeMode === "FLAT" && lateFeeValue > 100_000) errorRedirect("/settings", "A flat late fee above KES 100,000 isn't allowed here.");
+
+  const org = await prisma.organization.findUniqueOrThrow({ where: { id: s.organizationId }, select: { collectionsEnabled: true } });
+  await prisma.organization.update({
+    where: { id: s.organizationId },
+    data: {
+      collectionsEnabled: enabled,
+      // Stamped only on the off-to-on switch: late fees never apply to a
+      // month whose due date came before the policy existed.
+      ...(enabled && !org.collectionsEnabled ? { collectionsEnabledAt: new Date() } : {}),
+      rentDueDay,
+      reminderDaysBefore,
+      graceDays,
+      lateFeeMode,
+      lateFeeValue,
+    },
+  });
+  redirect("/settings?collectionsSaved=1");
+}
+
+/** Runs today's collections steps for this org right now — the same rules the daily job applies, for checking the policy does what you expect. */
+export async function runCollectionsNowAction() {
+  const s = await getSession();
+  if (!requireOrgAdmin(s)) throw new Error("Only an organization admin can run collections.");
+
+  const org = await prisma.organization.findUniqueOrThrow({
+    where: { id: s.organizationId },
+    select: {
+      id: true, name: true, collectionsEnabled: true, collectionsEnabledAt: true, rentDueDay: true,
+      reminderDaysBefore: true, graceDays: true, lateFeeMode: true, lateFeeValue: true, mpesaShortcode: true,
+    },
+  });
+  if (!org.collectionsEnabled) errorRedirect("/settings", "Switch automatic reminders on and save first.");
+  const r = await runCollectionsForOrg(org);
+  redirect(`/settings?collectionsRan=${r.reminders}-${r.lateFees}-${r.unreachable}`);
 }
 
 /**

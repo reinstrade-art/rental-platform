@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, requireStaff } from "@/app/lib/auth";
-import { getArrearsAlerts } from "@/app/lib/alerts";
+import { getArrearsAlerts, getArrearsAgeing } from "@/app/lib/alerts";
 import { getOrgTier, hasFeature } from "@/app/lib/tier";
 import { waLink } from "@/app/lib/phone";
 import { requireModule } from "@/app/lib/permissions";
@@ -22,7 +22,7 @@ export default async function AlertsPage() {
   requireModule(s, "alerts");
   const v = tenantView(s); // surnames + phone numbers hidden below manager/director/admin
 
-  const alerts = await getArrearsAlerts(s.organizationId);
+  const [alerts, ageing] = await Promise.all([getArrearsAlerts(s.organizationId), getArrearsAgeing(s.organizationId)]);
   const serious = alerts.filter((a) => a.severity === "serious");
   const owed = alerts.reduce((s, a) => s + a.balance, 0);
   const reachable = alerts.filter((a) => a.phone).length;
@@ -32,6 +32,30 @@ export default async function AlertsPage() {
       <div>
         <h1 className="text-lg font-semibold">Arrears alerts</h1>
         <p className="text-sm text-silver-dark">Tenants owing 2× the rent, or whose oldest unpaid charge is more than two months old.</p>
+      </div>
+
+      <div>
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-semibold">Everything owed, by age</h2>
+          <span className="text-sm text-silver-dark">KES {money(ageing.total)} in total</span>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4">
+          {ageing.buckets.map((b, i) => (
+            <div key={b.key} className="rounded border p-4">
+              <div className="text-xs text-silver-dark">{b.label}</div>
+              <div className={`mt-1 text-xl font-semibold ${i >= 2 && b.amount > 0 ? "text-red-600" : i === 1 && b.amount > 0 ? "text-orange-600" : ""}`}>
+                {money(b.amount)}
+              </div>
+              <div className="text-xs text-silver-dark">
+                {b.leases} tenant{b.leases === 1 ? "" : "s"}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-silver-dark">
+          Every unpaid charge, counting payments against the oldest first. Fresh debt usually clears on its own; the
+          older the bucket, the harder it is to collect.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

@@ -2,7 +2,7 @@
 // charges already on file (older manual entries, and older CSV imports —
 // see ingestRentRoll, which now writes HYGIENE instead) keep displaying
 // correctly rather than falling back to a raw, unlabeled type string.
-export const CHARGE_TYPES = ["RENT", "DEPOSIT", "WATER", "HYGIENE"] as const;
+export const CHARGE_TYPES = ["RENT", "DEPOSIT", "WATER", "HYGIENE", "LATE_FEE"] as const;
 export type ChargeType = (typeof CHARGE_TYPES)[number];
 
 export const CHARGE_TYPE_LABEL: Record<string, string> = {
@@ -10,6 +10,7 @@ export const CHARGE_TYPE_LABEL: Record<string, string> = {
   DEPOSIT: "Deposit",
   WATER: "Water Services",
   HYGIENE: "Hygiene Services",
+  LATE_FEE: "Late fee", // raised automatically by app/lib/collections.ts, or by hand
   UTILITY: "Utilities", // legacy — see comment above
 };
 
@@ -125,6 +126,7 @@ export const MODULE_LIST = [
   "vendors",
   "suppliers",
   "reports",
+  "tax",
   "approvals",
 ] as const;
 export type ModuleKey = (typeof MODULE_LIST)[number];
@@ -154,5 +156,6 @@ export const MODULE_LABEL: Record<ModuleKey, string> = {
   vendors: "Vendors",
   suppliers: "Suppliers",
   reports: "Reports",
+  tax: "Tax (KRA)",
   approvals: "Approvals",
 };
