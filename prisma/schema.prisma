@@ -150,6 +150,7 @@ model Organization {
 
   collectionEvents CollectionEvent[]
   tenantWarnings   TenantWarning[]
+  meterReadings    MeterReading[]
 
   users            User[]
   properties       Property[]
@@ -256,6 +257,49 @@ model TenantWarning {
 
   @@unique([leaseId, source, period])
   @@index([organizationId, createdAt])
+}
+
+// One water-meter reading for one unit in one month, and the charge it
+// produced. The reading is the fact; consumption, rate and amount are stored
+// alongside it as they were when it was taken, so a later change to the
+// property's tariff never rewrites what a tenant was already billed.
+//
+// The first reading ever taken for a unit is a baseline (nothing to subtract
+// it from), so it creates no charge; billing starts with the next one. When a
+// meter is replaced, `opening` is the new meter's starting figure and
+// consumption is measured from it instead of the previous reading.
+//
+// chargeId links the WATER charge this reading raised, so correcting a
+// reading updates that same charge instead of raising a second one. If the
+// charge is deleted by hand, SetNull leaves the reading intact and saving it
+// again raises a fresh charge.
+model MeterReading {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  period      String // "YYYY-MM" the reading is billed to
+  reading     Float // the meter's figure
+  previous    Float // the figure it is measured from
+  opening     Float? // set only when the meter was replaced
+  consumption Float
+  rate        Float
+  amount      Float // what was billed (0 for a baseline or an empty unit)
+
+  chargeId String?  @unique
+  charge   Charge?  @relation(fields: [chargeId], references: [id], onDelete: SetNull)
+
+  readAt       DateTime @default(now())
+  recordedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([unitId, period])
+  @@index([organizationId, period])
 }
 
 // A landlord's own credential for pulling their org's data out through the
@@ -625,6 +669,15 @@ model Property {
   name    String
   address String?
 
+  // What a unit of water costs here (KES per meter unit, usually a cubic
+  // metre) and the least a unit is billed in a month, however little it
+  // used. Per property because water is bought from a different supplier,
+  // at a different tariff, building by building. Null means "no water
+  // billing set up yet" — readings for this property are refused rather
+  // than billed at a guessed rate.
+  waterRate      Float?
+  waterMinCharge Float  @default(0)
+
   units         Unit[]
   repairs       Repair[]
   expenses      Expense[]
@@ -654,6 +707,7 @@ model Unit {
 
   leases  Lease[]
   repairs Repair[]
+  meterReadings MeterReading[]
 
   createdAt DateTime @default(now())
 
@@ -832,7 +886,8 @@ model Charge {
 
   createdAt DateTime @default(now())
 
-  allocations PaymentAllocation[]
+  allocations  PaymentAllocation[]
+  meterReading MeterReading?
 }
 
 model Payment {

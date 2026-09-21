@@ -37,6 +37,8 @@ import { ingestTransaction, matchTransaction, ignoreTransaction, parseTransactio
 import { canViewTenantDetails } from "./pii";
 import { runCollectionsForOrg } from "./collections";
 import { issueWarning } from "./warnings";
+import { recordReadings, notifyWaterBills, isPeriod, type ReadingInput } from "./water";
+import { canAccessTeam } from "./roles";
 import { logPlatformAccess } from "./audit";
 import { parsePropertiesCsv, parseTenantsCsv, parseRentRollCsv, ingestRentRoll } from "./import";
 import { GROUNDS_LIST, joinGrounds, validNoticeDeadline, sendAndServeNotice } from "./eviction";
@@ -1545,6 +1547,70 @@ export async function issueWarningAction(formData: FormData) {
   });
   if (!result.ok) errorRedirect("/evictions", result.reason);
   redirect(`/evictions?warned=${result.delivered ? "sent" : "undelivered"}`);
+}
+
+/**
+ * Saves a month's water meter readings from the reading sheet in one go and
+ * raises the WATER charges they produce (see app/lib/water.ts for the rules).
+ * A caretaker — who is the person actually walking the building with the
+ * meter book — may do this, but only for their own property, and can never
+ * set the tariff. Everyone else needs the Water module.
+ */
+export async function saveWaterReadings(formData: FormData) {
+  const s = await getSession();
+  if (!requireTenantsAccess(s)) throw new Error("Not authorized.");
+  const caretaker = isCaretaker(s.role);
+  if (!caretaker) requireModule(s, "water");
+
+  const period = String(formData.get("period") ?? "");
+  if (!isPeriod(period)) errorRedirect("/water", "Pick a month.");
+
+  const num = (v: FormDataEntryValue | null) => {
+    const t = String(v ?? "").trim();
+    if (t === "") return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  const inputs: ReadingInput[] = [];
+  for (const key of formData.keys()) {
+    if (!key.startsWith("r_")) continue;
+    const reading = num(formData.get(key));
+    if (reading === null) continue; // left blank — nothing read for this unit
+    const unitId = key.slice(2);
+    inputs.push({ unitId, reading, opening: num(formData.get(`o_${unitId}`)), seed: num(formData.get(`s_${unitId}`)) });
+  }
+  if (inputs.length === 0) errorRedirect(`/water?period=${period}`, "Enter at least one reading.");
+
+  const result = await recordReadings(s.organizationId, period, inputs, {
+    userId: s.userId,
+    propertyId: caretaker ? s.propertyId : null,
+  });
+  after(() => notifyWaterBills(result.notices));
+
+  const q = new URLSearchParams({ period, saved: String(result.saved), billed: String(result.billed), total: String(Math.round(result.billedTotal)) });
+  if (result.baselines.length) q.set("base", String(result.baselines.length));
+  if (result.flagged.length) q.set("flag", result.flagged.join("; ").slice(0, 400));
+  if (result.errors.length) q.set("err", result.errors.join(" ").slice(0, 700));
+  redirect(`/water?${q.toString()}`);
+}
+
+/** The water tariff for one property. Managers and admins only — it decides what every tenant there is billed. */
+export async function setWaterRates(propertyId: string, formData: FormData) {
+  const s = await getSession();
+  if (!requireStaff(s)) throw new Error("Not authorized.");
+  requireModule(s, "water");
+  if (!canAccessTeam(s.role)) throw new Error("Only a manager or admin can set the water rate.");
+
+  const rate = Number(formData.get("waterRate"));
+  const min = Number(formData.get("waterMinCharge") || 0);
+  if (!Number.isFinite(rate) || rate <= 0 || rate > 10_000) errorRedirect("/water", "Enter the rate per unit as a positive amount.");
+  if (!Number.isFinite(min) || min < 0 || min > 100_000) errorRedirect("/water", "The minimum charge must be zero or more.");
+
+  const property = await prisma.property.findFirst({ where: { id: propertyId, organizationId: s.organizationId } });
+  if (!property) errorRedirect("/water", "Property not found.");
+  await prisma.property.update({ where: { id: propertyId }, data: { waterRate: rate, waterMinCharge: min } });
+  redirect("/water?rates=1");
 }
 
 /** The org's automatic arrears-warning policy (the 11th-of-the-month run). Admin only. */

@@ -20,6 +20,7 @@ const NAV: { href: string; label: string; feature?: Feature }[] = [
   { href: "/alerts", label: "Alerts", feature: "ARREARS_ALERTS" },
   { href: "/evictions", label: "Evictions", feature: "EVICTIONS" },
   { href: "/payments", label: "Payments" },
+  { href: "/water", label: "Water" },
   { href: "/expenses", label: "Expenses", feature: "EXPENSES" },
   { href: "/repairs", label: "Repairs", feature: "REPAIRS" },
   { href: "/vendors", label: "Vendors", feature: "REPAIRS" },
@@ -61,7 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const moduleForHref = (href: string): ModuleKey | undefined =>
     (MODULE_LIST as readonly string[]).includes(href.slice(1)) ? (href.slice(1) as ModuleKey) : undefined;
   const nav = isCaretaker(s.role)
-    ? NAV.filter((item) => item.href === "/tenants")
+    ? NAV.filter((item) => item.href === "/tenants" || item.href === "/water")
     : NAV.filter((item) => !item.feature || hasFeature(tier, item.feature))
         .filter((item) => item.href !== "/users" || canAccessTeam(s.role))
         .filter((item) => {
